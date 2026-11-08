@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"sort"
@@ -14,9 +15,48 @@ import (
 )
 
 type elicitField struct {
-	Name  string
-	Label string
-	Type  string // text | password | number | checkbox
+	Name     string
+	Label    string
+	Type     string // text | password | number | checkbox
+	Required bool
+	Default  string // the schema's default, as the input's value; "true" checks a checkbox
+}
+
+// elicitVM is the card that takes the composer's place while a tool waits
+// for the user.
+type elicitVM struct {
+	ID      string
+	Message string
+	Fields  []elicitField
+	// Source and Tool name who asked, when the stream knows; the chunk
+	// payload carries neither today, so the card falls back to a generic
+	// title.
+	Source string
+	Tool   string
+}
+
+// elicitTitle is the card's heading.
+func elicitTitle(e *elicitVM) string {
+	if e.Source != "" {
+		return e.Source + " needs input"
+	}
+	return "A tool needs input"
+}
+
+// elicitEvent renders a stream's elicit chunk payload as the slot card, ready
+// to send as the `elicit` SSE event. The card swaps itself out of band into
+// the composer's place; tool names the call that asked, when known.
+func elicitEvent(ctx context.Context, convID string, payload []byte, tool string) string {
+	var p struct {
+		ElicitationID   string          `json:"elicitation_id"`
+		Message         string          `json:"message"`
+		RequestedSchema json.RawMessage `json:"requested_schema"`
+	}
+	if json.Unmarshal(payload, &p) != nil {
+		return ""
+	}
+	e := &elicitVM{ID: p.ElicitationID, Message: p.Message, Fields: parseElicitFields(p.RequestedSchema), Tool: tool}
+	return renderComp(ctx, elicitSlot(slotVM{Kind: "elicit", ConvID: convID, Elicit: e}))
 }
 
 // parseElicitFields turns an MCP elicitation JSON Schema fragment into form
@@ -26,10 +66,12 @@ type elicitField struct {
 func parseElicitFields(raw json.RawMessage) []elicitField {
 	var schema struct {
 		Properties map[string]struct {
-			Type   string `json:"type"`
-			Title  string `json:"title"`
-			Format string `json:"format"`
+			Type    string          `json:"type"`
+			Title   string          `json:"title"`
+			Format  string          `json:"format"`
+			Default json.RawMessage `json:"default"`
 		} `json:"properties"`
+		Required []string `json:"required"`
 	}
 	if err := json.Unmarshal(raw, &schema); err != nil {
 		return nil
@@ -58,7 +100,21 @@ func parseElicitFields(raw json.RawMessage) []elicitField {
 		if label == "" {
 			label = n
 		}
-		fields = append(fields, elicitField{Name: n, Label: label, Type: typ})
+		f := elicitField{Name: n, Label: label, Type: typ}
+		for _, req := range schema.Required {
+			if req == n {
+				f.Required = true
+			}
+		}
+		if len(p.Default) > 0 {
+			var str string
+			if json.Unmarshal(p.Default, &str) == nil {
+				f.Default = str
+			} else {
+				f.Default = string(p.Default)
+			}
+		}
+		fields = append(fields, f)
 	}
 	return fields
 }
@@ -119,9 +175,15 @@ func (h *Handler) handleElicitRespond(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if enhanced {
-		// Empty body + outerHTML swap on the form removes the prompt; the
-		// waiting tool unblocks and the turn resumes on the open SSE stream.
-		w.WriteHeader(http.StatusOK)
+		// The composer comes back in the card's place; the waiting tool
+		// unblocks and the turn resumes on the open SSE stream.
+		vm, err := h.loadConversation(r.Context(), r, convID)
+		if err != nil {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		vm.RunID = h.activeRunID(r, convID)
+		h.render(w, r, http.StatusOK, composerSlot(vm))
 		return
 	}
 	http.Redirect(w, r, "/c/"+convID, http.StatusSeeOther)

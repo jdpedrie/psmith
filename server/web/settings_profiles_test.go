@@ -119,18 +119,17 @@ func TestProfileAdvancedConfig(t *testing.T) {
 
 	// Update with advanced config.
 	uf := url.Values{
-		"name":              {"Adv"},
-		"default_model":     {modelVal},
+		"reply_model":       {modelVal},
 		"compression_model": {modelVal},
 		"compression_guide": {"summarize please"},
 		"compression_mode":  {"REPLACE"},
 		"title_model":       {modelVal},
 		"title_guide":       {"short title"},
 	}
-	upReq := httptest.NewRequest("POST", "/settings/profiles/"+id, strings.NewReader(uf.Encode())).WithContext(userCtx)
+	upReq := httptest.NewRequest("POST", "/settings/profiles/"+id+"/models", strings.NewReader(uf.Encode())).WithContext(userCtx)
 	upReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	upReq.SetPathValue("id", id)
-	if rec := do(h.handleProfileUpdate, upReq); rec.Code != http.StatusSeeOther {
+	if rec := do(h.handleProfileModelsSave, upReq); rec.Code != http.StatusSeeOther {
 		t.Fatalf("update status=%d; body:\n%s", rec.Code, rec.Body.String())
 	}
 

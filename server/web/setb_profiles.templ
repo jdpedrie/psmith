@@ -1,0 +1,580 @@
+package web
+
+import "strconv"
+
+// --- list ---
+
+templ profilesScreen(n snavVM, vm profileListVM) {
+	@settingsScreen("Profiles", n) {
+		<div class="spage-scroll">
+			<div class="spage-inner">
+				<div>
+					@sbCrumbs("Settings", "/settings", "Profiles")
+					<div class="page-title">
+						<h2>Profiles</h2>
+						<a class="btn raised" href="/settings/profiles/import">Import</a>
+						<a class="btn primary sb-g7" href="/settings/profiles/new">
+							@icon("plus")
+							New profile
+						</a>
+					</div>
+					<p class="sb-lede">A profile is a system prompt, models and plugins. New conversations start with the default.</p>
+					if vm.Error != "" {
+						<p role="alert" class="result bad"><span class="dot"></span>{ vm.Error }</p>
+					}
+				</div>
+				<section aria-labelledby="plist">
+					<h3 id="plist" class="sec-title">{ sbPlural(len(vm.Rows), "profile") }</h3>
+					<div class="group sb-g sb-rows">
+						for _, row := range vm.Rows {
+							@profileListRow(vm, row)
+						}
+						if len(vm.Rows) == 0 {
+							<div class="grow"><span class="lbl fill">No profiles yet. Create one to start a conversation with it.</span></div>
+						}
+					</div>
+					<p class="foot-note">A child profile inherits every field it leaves blank from its parent. A profile with children can't be deleted until they are.</p>
+				</section>
+			</div>
+		</div>
+	}
+}
+
+templ profileListRow(vm profileListVM, row profileListRowVM) {
+	if vm.Confirm == row.ID {
+		<form class={ "sb-prow sb-pconfirm", "d" + strconv.Itoa(row.Depth) } id={ "prow-" + row.ID } method="post" action={ templ.SafeURL("/settings/profiles/" + row.ID + "/delete") }>
+			<input type="hidden" name="from" value="list"/>
+			<span role="alert" class="sb-ask"><strong>{ "Delete " + row.Name + "?" }</strong><span class="sb-sub">This can't be undone. Its prompt, models and plugins go with it.</span></span>
+			<a class="btn h32 sb-n" href="/settings/profiles" hx-get={ "/settings/profiles?fragment=prow-" + row.ID } hx-target={ "#prow-" + row.ID } hx-swap="outerHTML">Cancel</a>
+			<button class="btn h32 destructive sb-p14" type="submit">Delete</button>
+		</form>
+	} else {
+		<div class={ "sb-prow", "d" + strconv.Itoa(row.Depth) } id={ "prow-" + row.ID }>
+			if row.Depth > 0 {
+				@sbIcon("elbow")
+			}
+			<span class={ "dot sb-d10", pc(row.Color) }></span>
+			<a class="sb-pname" href={ templ.SafeURL("/settings/profiles/" + row.ID) }>
+				<span class="t">
+					{ row.Name }
+					if row.IsDefault {
+						<span class="sb-badge">Default</span>
+					}
+				</span>
+				if row.Sub != "" {
+					<span class="sub">{ row.Sub }</span>
+				}
+			</a>
+			if row.Model != "" {
+				<span class="sb-pmodel">{ row.Model }</span>
+			}
+			<details class="sb-more" data-menu open?={ vm.MenuOpen == row.ID }>
+				<summary class="icon-btn" aria-label={ "More actions for " + row.Name }>
+					@sbIcon("more16")
+				</summary>
+				<div class="menu sb-rowmenu" role="menu" aria-label={ row.Name }>
+					if !row.IsDefault {
+						<form method="post" action={ templ.SafeURL("/settings/profiles/" + row.ID + "/default") }>
+							<button role="menuitem" type="submit" class={ templ.KV("on", vm.MenuOpen == row.ID) }>Make default</button>
+						</form>
+					}
+					<a role="menuitem" href={ templ.SafeURL("/settings/profiles/" + row.ID + "/export") } download>Export</a>
+					<hr/>
+					<a role="menuitem" class="danger" href={ templ.SafeURL("/settings/profiles?confirm=" + row.ID) } hx-get={ "/settings/profiles?confirm=" + row.ID + "&fragment=prow-" + row.ID } hx-target={ "#prow-" + row.ID } hx-swap="outerHTML">Delete</a>
+				</div>
+			</details>
+		</div>
+	}
+}
+
+// --- the editor's shared head ---
+
+templ profileHead(hd profileHeadVM) {
+	<div>
+		@sbCrumbs("Profiles", "/settings/profiles", hd.Name)
+		<div class="page-title">
+			<h2 class="sb-ph">
+				if hd.ID != "" {
+					<span class={ "dot sb-d12", pc(hd.Color) }></span>
+				}
+				{ hd.Name }
+			</h2>
+		</div>
+		if hd.ParentName != "" {
+			<p class="sb-lede">Inherits from <a href={ templ.SafeURL("/settings/profiles/" + hd.ParentID) }>{ hd.ParentName }</a>. Blank fields use its values.</p>
+		}
+		if hd.ID != "" {
+			<nav class="sb-tabs" aria-label="Profile sections">
+				@profileTab(hd, "general", "General", "")
+				@profileTab(hd, "models", "Models", "/models")
+				@profileTab(hd, "plugins", "Plugins", "/plugins")
+				@profileTab(hd, "share", "Share", "/share")
+			</nav>
+		}
+	</div>
+}
+
+templ profileTab(hd profileHeadVM, key, label, suffix string) {
+	if hd.Tab == key {
+		<a href={ templ.SafeURL("/settings/profiles/" + hd.ID + suffix) } aria-current="page">{ label }</a>
+	} else {
+		<a href={ templ.SafeURL("/settings/profiles/" + hd.ID + suffix) }>{ label }</a>
+	}
+}
+
+templ sbError(msg string) {
+	if msg != "" {
+		<p role="alert" class="result bad"><span class="dot"></span>{ msg }</p>
+	}
+}
+
+// sbSwitchRow is a labelled switch with its hidden form value.
+templ sbSwitchRow(id, name, label, detail string, on bool) {
+	<div class="grow">
+		<span id={ id } class="lbl fill">
+			{ label }
+			if detail != "" {
+				<span class="sb-sub">{ detail }</span>
+			}
+		</span>
+		<button class="switch" type="button" role="switch" aria-checked={ strconv.FormatBool(on) } aria-labelledby={ id } data-switch={ name }></button>
+		<input type="hidden" name={ name } value={ strconv.FormatBool(on) }/>
+	</div>
+}
+
+// --- General ---
+
+templ profileGeneralScreen(n snavVM, vm profileGeneralVM) {
+	@settingsScreen(vm.Head.Name, n) {
+		<form class="spage-form" method="post" action={ templ.SafeURL(generalAction(vm)) }>
+			<div class="spage-scroll">
+				<div class="spage-inner">
+					@profileHead(vm.Head)
+					@sbError(vm.Error)
+					<section aria-labelledby="ident">
+						<h3 id="ident" class="sec-title">Profile</h3>
+						<div class="group sb-g">
+							<div class="grow">
+								<label for="prname" class="lbl">Name</label>
+								<input id="prname" name="name" class="field wide" value={ vm.Name } required/>
+							</div>
+							<div class="grow">
+								<label for="prdesc" class="lbl">Description</label>
+								<input id="prdesc" name="description" class="field wide" value={ vm.Description } placeholder="When to reach for this profile"/>
+							</div>
+							<div class="grow">
+								<label for="prparent" class="lbl">Inherits from</label>
+								@sbSelect("prparent", "parent", false, false, vm.ParentOpts)
+							</div>
+							@sbSwitchRow("prdefault", "default", "Default profile", defaultDetail(vm), vm.IsDefault)
+							@sbSwitchRow("prfav", "favorite", "Favorite", "Sorts first in every profile picker.", vm.Favorite)
+							@sbSwitchRow("prponly", "parent_only", "Parent only", "A template other profiles build on. Never offered for a new conversation.", vm.ParentOnly)
+						</div>
+					</section>
+					<section aria-labelledby="prsys">
+						<h3 class="sec-title"><label id="prsys" for="prsystem">System prompt</label></h3>
+						<div class="group sb-pad">
+							<textarea id="prsystem" name="system_message" class="sb-prompt" rows="7" data-count="prcount">{ vm.System }</textarea>
+							<div class="sb-meta">
+								<span>{ systemNote(vm) }</span>
+								<span id="prcount" class="tnum">{ sbPlural(len([]rune(vm.System)), "character") }</span>
+							</div>
+						</div>
+					</section>
+					<section aria-labelledby="prmsgs">
+						<h3 id="prmsgs" class="sec-title">Messages</h3>
+						<div class="group sb-g">
+							<div class="grow">
+								<label for="prfirst" class="lbl">First message</label>
+								<input id="prfirst" name="first_message" class="field wide" value={ vm.FirstMsg } placeholder="Pre-filled in the composer of a new conversation"/>
+							</div>
+							<div class="grow">
+								<label for="prwelcome" class="lbl">Welcome message</label>
+								<input id="prwelcome" name="welcome_message" class="field wide" value={ vm.Welcome } placeholder="Shown as the first reply in a new conversation"/>
+							</div>
+						</div>
+					</section>
+				</div>
+			</div>
+			if vm.New {
+				@sbSubmitBar("Nothing is saved until you create it.", "/settings/profiles", "Create profile")
+			} else {
+				@saveBar(vm.Dirty)
+			}
+		</form>
+	}
+}
+
+// --- Models ---
+
+templ profileModelsScreen(n snavVM, vm profileModelsVM) {
+	@settingsScreen(vm.Head.Name, n) {
+		<form class="spage-form" method="post" action={ templ.SafeURL("/settings/profiles/" + vm.Head.ID + "/models") }>
+			<div class="spage-scroll">
+				<div class="spage-inner">
+					@profileHead(vm.Head)
+					@sbError(vm.Error)
+					<section aria-labelledby="pmmodels">
+						<h3 id="pmmodels" class="sec-title">Models</h3>
+						<div class="group sb-g">
+							<div class="grow">
+								<label for="pmreply" class="lbl">Replies</label>
+								@sbSelect("pmreply", "reply_model", false, false, vm.ReplyOpts)
+							</div>
+							<div class="grow">
+								<label for="pmcmodel" class="lbl">Compression model</label>
+								@sbSelect("pmcmodel", "compression_model", false, false, vm.CompOpts)
+							</div>
+							<div class="grow">
+								<span id="pmcmode" class="lbl">Compression mode</span>
+								<div role="radiogroup" aria-labelledby="pmcmode" class="sb-seg">
+									@sbSegOpt("compression_mode", "", "Inherit", vm.Mode == "")
+									@sbSegOpt("compression_mode", "REPLACE", "Replace", vm.Mode == "REPLACE")
+									@sbSegOpt("compression_mode", "APPEND", "Append", vm.Mode == "APPEND")
+								</div>
+								<span class="sb-hint">Replace swaps older turns for the summary. Append keeps both.</span>
+							</div>
+							<div class="grow sb-tarow">
+								<label for="pmcguide" class="lbl">Compression guide</label>
+								<textarea id="pmcguide" name="compression_guide" class="sb-ta" rows="2">{ vm.CompGuide }</textarea>
+							</div>
+							<div class="grow">
+								<label for="pmtmodel" class="lbl">Title model</label>
+								@sbSelect("pmtmodel", "title_model", false, false, vm.TitleOpts)
+							</div>
+							<div class="grow">
+								<label for="pmtguide" class="lbl">Title guide</label>
+								<input id="pmtguide" name="title_guide" class="field wide" value={ vm.TitleGuide }/>
+							</div>
+						</div>
+						<p class="foot-note">{ vm.SlotNote }</p>
+					</section>
+					<section aria-labelledby="pmcalls">
+						<h3 id="pmcalls" class="sec-title">Call settings</h3>
+						<div class="group sb-g">
+							<div class="grow">
+								<label for="pmtemp" class="lbl">Temperature</label>
+								<input id="pmtemp" name="temperature" class="field num" value={ vm.Temp } inputmode="decimal" placeholder={ orDefault(vm.TempInherited, "Model default") }/>
+								if vm.Temp != "" && vm.TempInherited != "" {
+									<button class="btn h32 ghost sb-reset" type="button" data-setb-clear="pmtemp" aria-label={ "Reset temperature to inherited " + vm.TempInherited }>
+										@icon("regen")
+										{ "Inherited " + vm.TempInherited }
+									</button>
+								}
+							</div>
+							<div class="grow">
+								<label for="pmmax" class="lbl">Max output tokens</label>
+								<input id="pmmax" name="max_output_tokens" class="field sb-w240 tnum" value={ vm.MaxTokens } inputmode="numeric" placeholder={ vm.MaxPlaceholder }/>
+							</div>
+							<div class="grow">
+								<label for="pmeffort" class="lbl">Thinking effort</label>
+								@sbSelect("pmeffort", "thinking_effort", true, vm.EffortChanged != "", vm.EffortOpts)
+								<span class="changed" data-changed-for="pmeffort" hidden?={ vm.EffortChanged == "" }>{ "Changed from " + orDefault(vm.EffortChanged, sbSelectedLabel(vm.EffortOpts)) }</span>
+							</div>
+							<div class="grow">
+								<label for="pmcache" class="lbl">Prompt caching</label>
+								@sbSelect("pmcache", "prompt_caching", true, false, vm.CacheOpts)
+							</div>
+						</div>
+						<p class="foot-note">{ vm.CallNote }</p>
+					</section>
+				</div>
+			</div>
+			@saveBar(vm.Dirty)
+		</form>
+	}
+}
+
+templ sbSegOpt(name, value, label string, on bool) {
+	<label><input class="sr-only" type="radio" name={ name } value={ value } checked?={ on }/>{ label }</label>
+}
+
+// --- Plugins ---
+
+templ profilePluginsScreen(n snavVM, vm profilePluginsVM) {
+	@settingsScreen(vm.Head.Name, n) {
+		<form class="spage-form" method="post" action={ templ.SafeURL("/settings/profiles/" + vm.Head.ID + "/plugins") }>
+			<div class="spage-scroll">
+				<div class="spage-inner">
+					@profileHead(vm.Head)
+					@sbError(vm.Error)
+					if vm.Head.ParentName != "" {
+						<section aria-labelledby="ppinh">
+							<h3 id="ppinh" class="sec-title">{ "From " + vm.Head.ParentName }</h3>
+							<div class="group sb-g">
+								for k, p := range vm.Inherited {
+									<div class={ "sb-plrow", templ.KV("off", !p.On) }>
+										<span class="sb-plbody">
+											<span class="t">{ p.Display }</span>
+											if p.Desc != "" {
+												<span class="d">{ p.Desc }</span>
+											}
+											@sbTags(p.Tags)
+										</span>
+										<button class="switch" type="button" role="switch" aria-checked={ strconv.FormatBool(p.On) } aria-label={ p.Display + " on for " + vm.Head.Name } data-switch={ "inh_on_" + strconv.Itoa(k) }></button>
+										<input type="hidden" name={ "inh_on_" + strconv.Itoa(k) } value={ strconv.FormatBool(p.On) }/>
+										<input type="hidden" name={ "inh_name_" + strconv.Itoa(k) } value={ p.Name }/>
+									</div>
+								}
+								if len(vm.Inherited) == 0 {
+									<div class="grow"><span class="lbl fill">{ vm.Head.ParentName + " attaches no plugins." }</span></div>
+								}
+							</div>
+							<p class="foot-note">Inherited plugins run unless you turn them off here. Their settings live on <a href={ templ.SafeURL("/settings/profiles/" + vm.Head.ParentID + "/plugins") }>{ vm.Head.ParentName }</a>.</p>
+						</section>
+					}
+					<section aria-labelledby="ppown">
+						<div class="sec-bar">
+							<h3 id="ppown" class="sec-title">{ "Attached to " + vm.Head.Name + " · run in this order" }</h3>
+							if len(vm.Add) + len(vm.AddMCP) > 0 {
+								<details class="sb-addwrap" data-menu open?={ vm.AddOpen }>
+									<summary class="btn h32 primary sb-g6">
+										@icon("plus")
+										Add plugin
+									</summary>
+									<div class="menu sb-addmenu" role="menu" aria-label="Add plugin">
+										for _, a := range vm.Add {
+											@addPluginItem(vm.Head.ID, a)
+										}
+										if len(vm.Add) > 0 && len(vm.AddMCP) > 0 {
+											<hr/>
+										}
+										for _, a := range vm.AddMCP {
+											@addPluginItem(vm.Head.ID, a)
+										}
+									</div>
+								</details>
+							}
+						</div>
+						<div class="group sb-g">
+							for _, p := range vm.Attached {
+								@attachedPluginRow(vm.Head.ID, p)
+							}
+							if len(vm.Attached) == 0 {
+								<div class="grow"><span class="lbl fill">{ "Nothing attached to " + vm.Head.Name + " yet." }</span></div>
+							}
+						</div>
+						<p class="foot-note">{ attachedNote(vm) }</p>
+					</section>
+				</div>
+			</div>
+			@saveBar(vm.Dirty)
+		</form>
+	}
+}
+
+templ addPluginItem(profileID string, a addPluginVM) {
+	<button role="menuitem" type="submit" name="plugin_name" value={ a.Name } formaction={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins/add") } formnovalidate>
+		{ a.Display }
+		if a.Desc != "" {
+			<span>{ a.Desc }</span>
+		}
+	</button>
+}
+
+templ sbTags(tags []sbTagVM) {
+	if len(tags) > 0 {
+		<span class="tags sb-mt6">
+			for _, t := range tags {
+				<span class={ templ.KV("warn", t.Warn) }>{ t.Label }</span>
+			}
+		</span>
+	}
+}
+
+templ attachedPluginRow(profileID string, p attPluginVM) {
+	<div class="sb-plgroup" data-setb-row>
+		<div class="sb-plrow">
+			<span class="sb-num tnum">{ strconv.Itoa(p.Index + 1) }</span>
+			<span class="sb-plbody">
+				<span class="t">{ p.Display }</span>
+				if p.Desc != "" {
+					<span class="d">{ p.Desc }</span>
+				}
+				@sbTags(p.Tags)
+			</span>
+			<a class="btn h32 sb-n" href={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins?open=" + p.Name) } data-setb-disclose aria-controls={ "pcfg-" + strconv.Itoa(p.Index) } aria-expanded={ strconv.FormatBool(p.Open) } aria-label={ "Configure " + p.Display }>Configure</a>
+			<button class="icon-btn sb-ic" type="submit" name="remove" value={ p.Name } formaction={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins/remove") } formnovalidate data-setb-remove={ "premoved_" + strconv.Itoa(p.Index) } aria-label={ "Remove " + p.Display }>
+				@icon("trash")
+			</button>
+			<input type="hidden" name={ "pname_" + strconv.Itoa(p.Index) } value={ p.Name }/>
+			<input type="hidden" name={ "premoved_" + strconv.Itoa(p.Index) } value=""/>
+		</div>
+		<div class="sb-plcfg" id={ "pcfg-" + strconv.Itoa(p.Index) } hidden?={ !p.Open }>
+			if p.Form.HasForm {
+				for _, f := range p.Form.Fields {
+					@sbField(f, "p"+strconv.Itoa(p.Index)+"_cfg_")
+				}
+			} else {
+				<div class="grow sb-top">
+					<label class="lbl" for={ "pconfig-" + strconv.Itoa(p.Index) }>Config</label>
+					<span class="sb-ctl">
+						<textarea id={ "pconfig-" + strconv.Itoa(p.Index) } name={ "pconfig_" + strconv.Itoa(p.Index) } class="sb-ta mono" rows="6">{ p.Form.RawJSON }</textarea>
+						<span class="sb-hint">JSON. This plugin has no form on the web.</span>
+					</span>
+				</div>
+			}
+		</div>
+	</div>
+}
+
+// sbField is one plugin config field as a settings row.
+templ sbField(f configFieldVM, prefix string) {
+	<div class="grow sb-top">
+		<label class="lbl" for={ prefix + f.Name }>
+			{ f.Display }
+			if f.Required {
+				<span class="sb-req" aria-hidden="true">*</span>
+			}
+		</label>
+		<span class="sb-ctl">
+			switch f.Type {
+				case "boolean":
+					<span class="sb-boolrow">
+						<button id={ prefix + f.Name } class="switch" type="button" role="switch" aria-checked={ strconv.FormatBool(f.Checked) } aria-label={ f.Display } data-switch={ prefix + f.Name }></button>
+						<input type="hidden" name={ prefix + f.Name } value={ strconv.FormatBool(f.Checked) }/>
+					</span>
+				case "textarea":
+					<textarea id={ prefix + f.Name } name={ prefix + f.Name } class="sb-ta" rows="3" required?={ f.Required }>{ f.Value }</textarea>
+				case "select", "model":
+					<span class="sb-select">
+						<select id={ prefix + f.Name } name={ prefix + f.Name }>
+							for _, o := range f.Options {
+								<option value={ o.Value } selected?={ o.Value == f.Value }>{ o.Label }</option>
+							}
+						</select>
+						@icon("caret")
+					</span>
+				case "number":
+					<input id={ prefix + f.Name } name={ prefix + f.Name } class="field num" value={ f.Value } inputmode="decimal"/>
+				default:
+					if f.Secret {
+						<span class="sb-secret">
+							<input id={ prefix + f.Name } name={ prefix + f.Name } type="password" class="field wide mono" value={ f.Value } required?={ f.Required } autocomplete="off" aria-describedby={ prefix + f.Name + "-d" }/>
+							<button class="btn h32 sb-n sb-h34" type="button" data-setb-reveal={ prefix + f.Name }>Show</button>
+						</span>
+					} else {
+						<input id={ prefix + f.Name } name={ prefix + f.Name } class="field wide sb-block" value={ f.Value } required?={ f.Required } aria-describedby={ prefix + f.Name + "-d" }/>
+					}
+			}
+			if f.Description != "" {
+				<span id={ prefix + f.Name + "-d" } class="sb-hint">{ f.Description }</span>
+			}
+		</span>
+	</div>
+}
+
+// --- Share ---
+
+templ profileShareScreen(n snavVM, vm profileShareVM) {
+	@settingsScreen(vm.Head.Name, n) {
+		<div class="spage-scroll">
+			<div class="spage-inner">
+				@profileHead(vm.Head)
+				@sbError(vm.Error)
+				<section aria-labelledby="psexport">
+					<h3 id="psexport" class="sec-title">Export</h3>
+					<form class="group sb-g" method="get" action={ templ.SafeURL("/settings/profiles/" + vm.Head.ID + "/export") }>
+						if vm.Head.ParentName != "" {
+							<div class="grow">
+								<span class="lbl">What to export</span>
+								<span role="radiogroup" class="sb-radios">
+									<label for="psflat"><input type="radio" name="chain" value="0" id="psflat" checked?={ !vm.Chain }/>{ vm.Head.Name + " on its own, with " + vm.Head.ParentName + " folded in" }</label>
+									<label for="pschain"><input type="radio" name="chain" value="1" id="pschain" checked?={ vm.Chain }/>{ chainLabel(vm) }</label>
+								</span>
+							</div>
+						}
+						if len(vm.Notices) > 0 {
+							<div class="sb-block-row">
+								<span class="sb-lockhead">
+									@sbIcon("lock")
+									Not included
+								</span>
+								<ul class="sb-ul">
+									for _, nt := range vm.Notices {
+										<li>{ nt }</li>
+									}
+								</ul>
+							</div>
+						}
+						<div class="grow">
+							<span class="lbl fill sb-note">Anyone with this file can recreate the profile. Secrets stay on this server.</span>
+							<button class="btn h32 primary" type="submit">{ "Download " + orDefault(vm.Filename, "profile") }</button>
+						</div>
+					</form>
+				</section>
+				<section aria-labelledby="psimport">
+					<h3 id="psimport" class="sec-title">Import a profile</h3>
+					@importCard(vm.Head.ID, vm.Import)
+				</section>
+				<section aria-labelledby="psdelete">
+					<h3 id="psdelete" class="sec-title">Delete</h3>
+					@sbConfirm(vm.Delete)
+					<p class="foot-note">Psmith won't delete a profile that conversations or child profiles still use.</p>
+				</section>
+			</div>
+		</div>
+	}
+}
+
+// importCard picks a file, or reviews the one picked. from is the profile
+// whose Share tab hosts it, "" on the import page.
+templ importCard(from string, rv *importReviewVM) {
+	if rv != nil && rv.Payload != "" {
+		<form class="group sb-g" method="post" action="/settings/profiles/import">
+			<input type="hidden" name="payload" value={ rv.Payload }/>
+			<input type="hidden" name="from" value={ from }/>
+			<div class="grow">
+				<span class="sb-file"><span class="mono">{ rv.FileName }</span><span class="sb-sub">{ rv.Summary }</span></span>
+				<a class="btn h32 sb-n" href={ templ.SafeURL(importHome(from)) }>Choose another file</a>
+			</div>
+			for _, wn := range rv.Warnings {
+				<div class="sb-warn">
+					<span class={ "dot s7", templ.KV("warn", !wn.Neutral) }></span>
+					if wn.Renamed != "" {
+						<span>Renamed to <strong>{ wn.Renamed }</strong>. { "A profile called " + wn.Original + " already exists." }</span>
+					} else {
+						<span>{ wn.Text }</span>
+					}
+				</div>
+			}
+			<div class="grow">
+				<span class="lbl fill sb-note">Nothing is created until you import.</span>
+				<a class="btn h32 ghost sb-n" href={ templ.SafeURL(importHome(from)) }>Cancel</a>
+				<button class="btn h32 primary sb-p14" type="submit">Import</button>
+			</div>
+		</form>
+	} else {
+		<form class="group sb-g" method="post" action="/settings/profiles/import" enctype="multipart/form-data">
+			<input type="hidden" name="from" value={ from }/>
+			<div class="grow">
+				<span class="lbl fill sb-note">A .psmithprofile file. You review what it brings before anything is created.</span>
+				<label class="btn h32 sb-n sb-filepick">
+					Choose file
+					<input type="file" name="file" accept=".psmithprofile" data-setb-autosubmit/>
+				</label>
+				<button class="btn h32 primary sb-p14" type="submit">Review</button>
+			</div>
+			if rv != nil && rv.Error != "" {
+				<div class="sb-warn"><span class="dot s7 bad"></span><span>{ rv.Error }</span></div>
+			}
+		</form>
+	}
+}
+
+templ profileImportScreen(n snavVM, rv *importReviewVM) {
+	@settingsScreen("Import a profile", n) {
+		<div class="spage-scroll">
+			<div class="spage-inner">
+				<div>
+					@sbCrumbs("Profiles", "/settings/profiles", "Import")
+					<div class="page-title"><h2>Import a profile</h2></div>
+					<p class="sb-lede">A .psmithprofile file holds one profile, or one with its parents. Keys and MCP server credentials never travel in it.</p>
+				</div>
+				<section aria-label="Import">
+					@importCard("", rv)
+				</section>
+			</div>
+		</div>
+	}
+}

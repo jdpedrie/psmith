@@ -1,0 +1,42 @@
+package web
+
+import "strconv"
+
+// page is the document for every rebuilt screen. Theme and mode come from the
+// browser's cookies (prefs.go) so the first paint has the right colors.
+templ page(title string) {
+	<!DOCTYPE html>
+	<html lang="en" data-theme={ prefsOf(ctx).Theme } data-mode={ prefsOf(ctx).Mode } data-turn-details?={ prefsOf(ctx).TurnDetails } style={ zoomStyle(prefsOf(ctx)) }>
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title }</title>
+			<link rel="stylesheet" href="/web-assets/tokens.css"/>
+			<link rel="stylesheet" href="/web-assets/app.css"/>
+			for _, a := range areaAssets {
+				<link rel="stylesheet" href={ "/web-assets/" + a + ".css" }/>
+			}
+			<script src="/web-assets/htmx.min.js"></script>
+			<script src="/web-assets/sse.js"></script>
+			<script src="/web-assets/app.js" defer></script>
+			for _, a := range areaAssets {
+				<script src={ "/web-assets/" + a + ".js" } defer></script>
+			}
+		</head>
+		<body>
+			{ children... }
+		</body>
+	</html>
+}
+
+// areaAssets are the per-area stylesheet and script pairs every page loads
+// after app.css and app.js.
+var areaAssets = []string{"list", "conv", "inspector", "settings-a", "settings-b"}
+
+func pc(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return "pc" + strconv.Itoa(n)
+}
+

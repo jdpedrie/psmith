@@ -1,0 +1,389 @@
+package web
+
+import "strconv"
+
+// --- Plugins ---
+
+templ globalPluginsScreen(n snavVM, vm pluginsPageVM) {
+	@settingsScreen("Plugins", n) {
+		<div class="spage-scroll">
+			<div class="spage-inner">
+				<div>
+					@sbCrumbs("Settings", "/settings", "Plugins")
+					<div class="page-title"><h2>Plugins</h2></div>
+					<p class="sb-lede">Plugins add tools and prompt steps to a profile. Shared settings, like an API key, are set here once and apply to every profile that attaches the plugin.</p>
+				</div>
+				<section aria-labelledby="plbuilt">
+					<h3 id="plbuilt" class="sec-title">{ "Built in · " + strconv.Itoa(len(vm.Builtin)) }</h3>
+					<div class="group tbl-wrap">
+						<table class="tbl sb-t560">
+							<thead>
+								<tr><th scope="col">Plugin</th><th scope="col">Adds</th><th scope="col">Shared settings</th></tr>
+							</thead>
+							<tbody>
+								for _, p := range vm.Builtin {
+									<tr>
+										<td><a class="name" href={ templ.SafeURL("/settings/plugins/" + p.Name) }>{ p.Display }</a></td>
+										<td>@sbPlainTags(p.Tags)</td>
+										<td class="sb-nowrap">
+											switch p.Kind {
+												case "warn":
+													<span class="sb-stat warn"><span class="dot s7"></span>{ p.Status }</span>
+												case "embedder":
+													<span class="sb-t2">Uses the <a class="sb-link" href="/settings/embedder">embedder</a></span>
+												case "set":
+													<span class="sb-stat ok"><span class="dot s7"></span>{ p.Status }</span>
+												default:
+													<span class="sb-t3">{ p.Status }</span>
+											}
+										</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				</section>
+				<section aria-labelledby="plmcp">
+					<h3 id="plmcp" class="sec-title">{ "From MCP servers · " + strconv.Itoa(len(vm.MCP)) }</h3>
+					<div class="group tbl-wrap">
+						<table class="tbl sb-t560">
+							<thead>
+								<tr><th scope="col">Plugin</th><th scope="col">Adds</th><th scope="col">Server</th></tr>
+							</thead>
+							<tbody>
+								for _, s := range vm.MCP {
+									<tr>
+										<td><a class="name" href={ templ.SafeURL("/settings/mcp-servers/" + s.ID) }>{ s.Name }</a></td>
+										<td>@sbPlainTags(s.Tags)</td>
+										<td class="sb-nowrap">
+											<a class="sb-plain" href={ templ.SafeURL("/settings/mcp-servers/" + s.ID) }><span class={ "sb-stat", templ.KV("ok", s.OK), templ.KV("bad", !s.OK) }><span class="dot s7"></span>{ s.Status }</span></a>
+										</td>
+									</tr>
+								}
+								if len(vm.MCP) == 0 {
+									<tr><td colspan="3"><span class="sb-t3">No servers registered.</span></td></tr>
+								}
+							</tbody>
+						</table>
+					</div>
+					<p class="foot-note">Each registered server shows up as a plugin. Its URL and credentials live in <a class="sb-link" href="/settings/mcp-servers">MCP servers</a>.</p>
+				</section>
+			</div>
+		</div>
+	}
+}
+
+templ sbPlainTags(tags []string) {
+	<span class="tags">
+		for _, t := range tags {
+			<span>{ t }</span>
+		}
+	</span>
+}
+
+templ pluginConfigScreen(n snavVM, vm pluginConfigPageVM) {
+	@settingsScreen(vm.Display, n) {
+		<form class="spage-form" method="post" action={ templ.SafeURL("/settings/plugins/" + vm.Name) }>
+			<div class="spage-scroll">
+				<div class="spage-inner">
+					<div>
+						@sbCrumbs("Plugins", "/settings/plugins", vm.Display)
+						<div class="page-title"><h2>{ vm.Display }</h2></div>
+						<p class="sb-mono-sub">{ vm.Name }</p>
+						if vm.Desc != "" {
+							<p class="sb-lede">{ vm.Desc }</p>
+						}
+						@sbError(vm.Error)
+					</div>
+					<section aria-labelledby="pcshared">
+						<h3 id="pcshared" class="sec-title">Shared settings</h3>
+						<div class="group sb-g">
+							for _, f := range vm.Shared {
+								@sbField(f, "cfg_")
+							}
+							if len(vm.Shared) == 0 {
+								<div class="grow"><span class="lbl fill">{ vm.Display + " has no shared settings." }</span></div>
+							}
+						</div>
+						if len(vm.Shared) > 0 {
+							<p class="foot-note">{ "Applies to every profile that attaches " + vm.Display + ". Until it is set, " + vm.Display + " shows as needing setup wherever it is attached." }</p>
+						}
+					</section>
+					<section aria-labelledby="pcper">
+						<h3 id="pcper" class="sec-title">Per-profile settings</h3>
+						<div class="group sb-g">
+							for _, f := range vm.PerProfile {
+								<div class="grow">
+									<span class="lbl">{ f.Display }</span>
+									<span class="sb-val sb-t3">{ f.Summary }</span>
+								</div>
+							}
+							if len(vm.PerProfile) == 0 {
+								<div class="grow"><span class="lbl fill">Nothing to set per profile.</span></div>
+							}
+						</div>
+						<p class="foot-note">{ "These live on each profile that attaches " + vm.Display + ". Change them from the profile's Plugins tab." }</p>
+					</section>
+				</div>
+			</div>
+			if len(vm.Shared) > 0 {
+				@saveBar(vm.Dirty)
+			}
+		</form>
+	}
+}
+
+// --- MCP servers ---
+
+templ mcpServersScreen(n snavVM, rows []mcpRowVM) {
+	@settingsScreen("MCP servers", n) {
+		<div class="spage-scroll">
+			<div class="spage-inner">
+				<div>
+					@sbCrumbs("Settings", "/settings", "MCP servers")
+					<div class="page-title">
+						<h2>MCP servers</h2>
+						<a class="btn primary sb-g7" href="/settings/mcp-servers/new">
+							@icon("plus")
+							Add server
+						</a>
+					</div>
+					<p class="sb-lede">Registered servers appear as plugins you can attach to any profile or conversation. Their URLs, headers and environment stay on this server, encrypted.</p>
+				</div>
+				<section aria-labelledby="svlist">
+					<h3 id="svlist" class="sec-title">{ sbPlural(len(rows), "server") }</h3>
+					<div class="group tbl-wrap">
+						<table class="tbl sb-t560 sb-top">
+							<thead>
+								<tr><th scope="col">Server</th><th scope="col">Tools</th><th scope="col">Status</th></tr>
+							</thead>
+							<tbody>
+								for _, s := range rows {
+									<tr>
+										<td>
+											<a class="name" href={ templ.SafeURL("/settings/mcp-servers/" + s.ID) }>{ s.Name }</a>
+											<span class="id">{ s.Summary }</span>
+											if s.Error != "" {
+												<span class="sb-err">{ s.Error }</span>
+											}
+										</td>
+										<td class="tnum">
+											if s.OK {
+												{ strconv.Itoa(s.Tools) }
+											} else {
+												<span class="sb-t3">None</span>
+											}
+										</td>
+										<td class="sb-nowrap">
+											if s.OK {
+												<span class="sb-stat ok"><span class="dot s7"></span>Connected</span>
+											} else {
+												<span class="sb-stat bad"><span class="dot s7"></span>Failing</span>
+											}
+										</td>
+									</tr>
+								}
+								if len(rows) == 0 {
+									<tr><td colspan="3"><span class="sb-t3">No servers yet. Add one to give your profiles its tools.</span></td></tr>
+								}
+							</tbody>
+						</table>
+					</div>
+					<p class="foot-note">Status comes from testing each server when this page loads: Psmith dials it, runs the MCP handshake and lists its tools.</p>
+				</section>
+			</div>
+		</div>
+	}
+}
+
+templ mcpDetailScreen(n snavVM, vm mcpDetailVM) {
+	@settingsScreen(vm.Server.Name, n) {
+		<div class="spage-scroll">
+			<div class="spage-inner">
+				<form method="post" action={ templ.SafeURL("/settings/mcp-servers/" + vm.Server.ID + "/test") }>
+					@sbCrumbs("MCP servers", "/settings/mcp-servers", vm.Server.Name)
+					<div class="page-title">
+						<h2>{ vm.Server.Name }</h2>
+						<button class="btn raised" type="submit">Test connection</button>
+						<a class="btn raised" href={ templ.SafeURL("/settings/mcp-servers/" + vm.Server.ID + "/edit") }>Edit</a>
+					</div>
+					@sbStatus(vm.Status)
+				</form>
+				<section aria-labelledby="sdconn">
+					<h3 id="sdconn" class="sec-title">Connection</h3>
+					<div class="group sb-g">
+						<div class="grow"><span class="lbl">Transport</span><span class="sb-val">{ transportLabel(vm.Server.Transport) }</span></div>
+						switch vm.Server.Transport {
+							case "http":
+								<div class="grow"><span class="lbl">URL</span><span class="sb-val mono">{ vm.Server.URL }</span></div>
+								@secretRow("HTTP headers", vm.Server.HasHeaders)
+							case "inproc":
+								<div class="grow"><span class="lbl">Server</span><span class="sb-val mono">{ vm.Server.Command }</span></div>
+							default:
+								<div class="grow"><span class="lbl">Command</span><span class="sb-val mono">{ stdioCommand(vm.Server) }</span></div>
+								@secretRow("Environment", vm.Server.HasEnv)
+						}
+						<div class="grow"><span class="lbl">Tool prefix</span><span class={ "sb-val mono", templ.KV("sb-t3", vm.Server.ToolPrefix == "") }>{ orDefault(vm.Server.ToolPrefix, "None") }</span></div>
+					</div>
+					if vm.Server.HasHeaders || vm.Server.HasEnv {
+						<p class="foot-note">{ secretNote(vm.Server) }</p>
+					}
+				</section>
+				<section aria-labelledby="sdtools">
+					<h3 id="sdtools" class="sec-title">{ "Tools · " + strconv.Itoa(len(vm.Tools)) }</h3>
+					<div class="group">
+						if len(vm.Tools) > 0 {
+							<ul class="sb-tools">
+								for _, t := range vm.Tools {
+									<li>
+										if vm.Server.ToolPrefix != "" {
+											<span>{ vm.Server.ToolPrefix }</span>
+										}
+										{ t }
+									</li>
+								}
+							</ul>
+						} else {
+							<div class="grow"><span class="lbl fill">No tools listed. Test the connection to try again.</span></div>
+						}
+					</div>
+					<p class="foot-note">From the last test. Each attachment can override the prefix.</p>
+				</section>
+				<section aria-labelledby="sddel">
+					<h3 id="sddel" class="sec-title">Delete</h3>
+					@sbConfirm(vm.Delete)
+				</section>
+			</div>
+		</div>
+	}
+}
+
+templ secretRow(label string, set bool) {
+	<div class="grow">
+		<span class="lbl">{ label }</span>
+		if set {
+			<span class="sb-val mono">{ maskedSecret }</span>
+			<span class="sb-lock">
+				@sbIcon("lock")
+				Stored encrypted
+			</span>
+		} else {
+			<span class="sb-val sb-t3">None</span>
+		}
+	</div>
+}
+
+templ mcpFormScreen(n snavVM, vm mcpFormVM) {
+	@settingsScreen(mcpFormHeading(vm), n) {
+		<form class="spage-form sb-mcpform" method="post" action="/settings/mcp-servers">
+			<input type="hidden" name="id" value={ vm.Server.ID }/>
+			<div class="spage-scroll">
+				<div class="spage-inner">
+					<div>
+						@sbCrumbs("MCP servers", "/settings/mcp-servers", orDefault(mcpFormCrumb(vm), "New server"))
+						<div class="page-title"><h2>{ mcpFormHeading(vm) }</h2></div>
+						<p class="sb-lede">One entry per server. Attach it from any profile's or conversation's plugins. The credentials below never leave this server.</p>
+						@sbError(vm.Error)
+					</div>
+					<section aria-labelledby="asserver">
+						<h3 id="asserver" class="sec-title">Server</h3>
+						<div class="group sb-g">
+							<div class="grow sb-top">
+								<label for="asname" class="lbl">Name</label>
+								<span class="sb-ctl">
+									<input id="asname" name="name" class="field sb-block" value={ vm.Server.Name } required/>
+									<span class="sb-hint">Shown as the plugin's name in every picker.</span>
+								</span>
+							</div>
+							<div class="grow sb-top">
+								<span id="astr" class="lbl">Transport</span>
+								<span class="sb-ctl">
+									<span role="radiogroup" aria-labelledby="astr" class="sb-seg inline">
+										@sbSegOpt("transport", "http", "HTTP", vm.Server.Transport == "http")
+										@sbSegOpt("transport", "stdio", "Stdio", vm.Server.Transport == "stdio" || vm.Server.Transport == "")
+										@sbSegOpt("transport", "inproc", "In-process", vm.Server.Transport == "inproc")
+									</span>
+									<span class="sb-hint">How psmithd reaches the server. Stdio runs a command on the server machine.</span>
+								</span>
+							</div>
+						</div>
+					</section>
+					<section aria-labelledby="asend" class="sb-tr-http">
+						<h3 id="asend" class="sec-title">Endpoint</h3>
+						<div class="group sb-g">
+							<div class="grow sb-top">
+								<label for="asurl" class="lbl">URL</label>
+								<span class="sb-ctl">
+									<input id="asurl" name="url" class="field sb-block mono" value={ vm.Server.URL }/>
+									<span class="sb-hint">JSON-RPC endpoint (Streamable HTTP transport).</span>
+								</span>
+							</div>
+							<div class="grow sb-top">
+								<label for="ashead" class="lbl">HTTP headers</label>
+								<span class="sb-ctl">
+									<textarea id="ashead" name="headers" class="sb-ta mono sb-block" rows="2" placeholder={ secretPlaceholder(vm.Server.HasHeaders) }>{ vm.Headers }</textarea>
+									<span class="sb-hint">KEY: VALUE per line, usually the auth header. Stored encrypted and never shown again.</span>
+								</span>
+							</div>
+						</div>
+					</section>
+					<section aria-labelledby="ascmd" class="sb-tr-stdio">
+						<h3 id="ascmd" class="sec-title">Command</h3>
+						<div class="group sb-g">
+							<div class="grow sb-top">
+								<label for="ascommand" class="lbl">Command</label>
+								<span class="sb-ctl">
+									<input id="ascommand" name="command" class="field sb-block mono" value={ vm.Server.Command }/>
+									<span class="sb-hint">An executable on the server's PATH, like npx.</span>
+								</span>
+							</div>
+							<div class="grow sb-top">
+								<label for="asargs" class="lbl">Arguments</label>
+								<span class="sb-ctl">
+									<textarea id="asargs" name="args" class="sb-ta mono sb-block" rows="2">{ vm.Server.Args }</textarea>
+									<span class="sb-hint">One per line.</span>
+								</span>
+							</div>
+							<div class="grow sb-top">
+								<label for="asenv" class="lbl">Environment</label>
+								<span class="sb-ctl">
+									<textarea id="asenv" name="env" class="sb-ta mono sb-block" rows="2" placeholder={ secretPlaceholder(vm.Server.HasEnv) }></textarea>
+									<span class="sb-hint">KEY=VALUE per line. Stored encrypted and never shown again.</span>
+								</span>
+							</div>
+						</div>
+					</section>
+					<section aria-labelledby="asinproc" class="sb-tr-inproc">
+						<h3 id="asinproc" class="sec-title">In-process server</h3>
+						<div class="group sb-g">
+							<div class="grow sb-top">
+								<label for="asinname" class="lbl">Server</label>
+								<span class="sb-ctl">
+									<input id="asinname" name="inproc_server" class="field sb-block mono" value={ vm.Server.Command }/>
+									<span class="sb-hint">The name of a server compiled into psmithd.</span>
+								</span>
+							</div>
+						</div>
+					</section>
+					<section aria-labelledby="astools">
+						<h3 id="astools" class="sec-title">Tools</h3>
+						<div class="group sb-g">
+							<div class="grow sb-top">
+								<label for="asprefix" class="lbl">Tool prefix</label>
+								<span class="sb-ctl">
+									<input id="asprefix" name="tool_prefix" class="field sb-block mono" value={ vm.Server.ToolPrefix } placeholder="Optional"/>
+									<span class="sb-hint">Optional. Prepended to every tool name so two servers with the same tools don't collide. Each attachment can override it.</span>
+								</span>
+							</div>
+						</div>
+					</section>
+				</div>
+			</div>
+			if vm.Server.ID == "" {
+				@sbSubmitBar("Psmith tests the server as soon as it's registered.", "/settings/mcp-servers", "Register and test")
+			} else {
+				@sbSubmitBar("Psmith tests the server again when you save.", "/settings/mcp-servers/"+vm.Server.ID, "Save and test")
+			}
+		</form>
+	}
+}

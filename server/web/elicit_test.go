@@ -1,7 +1,6 @@
 package web
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -50,16 +49,12 @@ func TestParseElicitFields(t *testing.T) {
 	}
 }
 
-func TestElicitFormRender(t *testing.T) {
+// The elicitation card lands in the composer's place with a field per
+// schema property, a password kept as a password, and both answers.
+func TestElicitCardRender(t *testing.T) {
 	t.Parallel()
-	var buf bytes.Buffer
-	err := elicitForm("conv1", "eid1", "Enter your key", []elicitField{
-		{Name: "api_key", Label: "API Key", Type: "password"},
-	}).Render(context.Background(), &buf)
-	if err != nil {
-		t.Fatalf("render: %v", err)
-	}
-	out := buf.String()
+	payload := []byte(`{"elicitation_id":"eid1","message":"Enter your key","requested_schema":{"type":"object","properties":{"api_key":{"type":"string","format":"password","title":"API Key"}},"required":["api_key"]}}`)
+	out := elicitEvent(context.Background(), "conv1", payload, "create_issue")
 	for _, want := range []string{
 		"Enter your key",
 		`name="field_api_key"`,
@@ -69,7 +64,7 @@ func TestElicitFormRender(t *testing.T) {
 		`name="action" value="decline"`,
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("elicit form missing %q\ngot: %s", want, out)
+			t.Errorf("elicit card missing %q\ngot: %s", want, out)
 		}
 	}
 }

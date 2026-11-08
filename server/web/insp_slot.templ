@@ -1,0 +1,290 @@
+package web
+
+import "strconv"
+
+// The composer's slot: the composer, or the card that stands in for it.
+
+templ composerSlot(c convVM) {
+	<footer class="composer-wrap" id="composer-slot">
+		if c.Inspector.Card != nil {
+			@slotCard(*c.Inspector.Card)
+		} else {
+			@composer2(c)
+		}
+	</footer>
+}
+
+templ slotCard(s slotVM) {
+	switch s.Kind {
+		case "archived":
+			<section class="slot-line" aria-labelledby="arch-title">
+				<span class="slot-glyph">
+					@ii("archive")
+				</span>
+				<span class="slot-line-text"><b id="arch-title">{ s.Archived }</b><span>Read-only. Unarchive to reply.</span></span>
+				<form method="post" action={ templ.SafeURL("/c/" + s.ConvID + "/unarchive") }>
+					<button type="submit" class="btn primary h34">Unarchive</button>
+				</form>
+			</section>
+		case "readonly":
+			<section class="slot-line" aria-labelledby="ro-title">
+				<span class="slot-glyph">
+					@ii("eye")
+				</span>
+				<span class="slot-line-text"><b id="ro-title">{ s.CtxLabel + " is read-only" }</b><span>{ "Make it active to continue from here. " + s.ActiveLabel + " stays as it is." }</span></span>
+				<a class="btn h34 ro-back-btn" href={ templ.SafeURL("/c/" + s.ConvID) }>{ "Back to " + s.ActiveLabel }</a>
+				<form method="post" action={ templ.SafeURL("/c/" + s.ConvID + "/context/" + s.ContextID + "/activate") }>
+					<button type="submit" class="btn primary h34">Make active</button>
+				</form>
+			</section>
+		case "compress", "failed":
+			@compressCardT(s)
+		case "compacting":
+			<section class="slot-card2" aria-labelledby="card-title" aria-busy="true" hx-ext="sse" sse-connect={ "/c/" + s.ConvID + "/compact/stream?run=" + s.RunID } sse-close="done" data-compact-stream>
+				<div class="card-head">
+					<span class="card-glyph orange">
+						@icon("gauge")
+					</span>
+					<h2 id="card-title">Compressing</h2>
+					if s.ModelName != "" {
+						<span class="card-meta"><span class="live-model"><span class="dot s6"></span>{ s.ModelName }</span></span>
+					}
+				</div>
+				<p class="card-lede">{ "Writing the summary of " + s.CtxLabel + ". You review it before anything changes." }</p>
+				<div class="sum-box md" sse-swap="summary" hx-swap="innerHTML">
+					if s.SummaryHTML != "" {
+						@templ.Raw(s.SummaryHTML)
+					} else {
+						<p><span class="caret"></span></p>
+					}
+				</div>
+				<span hidden sse-swap="done" hx-swap="innerHTML"></span>
+				<form class="card-foot" method="post" action={ templ.SafeURL("/c/" + s.ConvID + "/compact/stop") }>
+					<input type="hidden" name="run" value={ s.RunID }/>
+					<span class="card-hint">{ s.CtxLabel + " stays as it is until you start the new one. " }<kbd>Esc</kbd>{ " stops" }</span>
+					<button type="submit" class="stop-btn" data-esc><i></i>Stop</button>
+				</form>
+			</section>
+		case "review":
+			<section class="slot-card2" aria-labelledby="card-title">
+				<div class="card-head">
+					<span class="card-glyph orange">
+						@icon("gauge")
+					</span>
+					<h2 id="card-title">
+						if s.Truncated {
+							Summary cut short
+						} else {
+							Summary ready for review
+						}
+					</h2>
+					<span class="card-meta">{ s.ModelName }</span>
+				</div>
+				if s.Truncated {
+					<p class="card-lede">The summary hit the model's output limit. Edit it, or discard it and compress again with a larger limit.</p>
+				} else {
+					<p class="card-lede">{ "Read it over. " + s.NextLabel + " starts from this summary, and " + s.CtxLabel + " stays readable." }</p>
+				}
+				<div class="sum-box md review">
+					@templ.Raw(s.SummaryHTML)
+				</div>
+				if s.Usage != "" {
+					<p class="sum-usage">{ s.Usage }</p>
+				}
+				<div class="card-foot">
+					<form method="post" action={ templ.SafeURL("/c/" + s.ConvID + "/summary/discard") }>
+						<input type="hidden" name="message_id" value={ s.MessageID }/>
+						<button type="submit" class="btn ghost h34 discard">Discard</button>
+					</form>
+					<span class="card-hint">Sending waits until you decide.</span>
+					<a class="btn h34 edit-btn" href={ templ.SafeURL("/c/" + s.ConvID + "?summary=edit") }>
+						@ii("edit14")
+						Edit
+					</a>
+					<form method="post" action={ templ.SafeURL("/c/" + s.ConvID + "/promote") } data-cmd-enter>
+						<input type="hidden" name="message_id" value={ s.MessageID }/>
+						<button type="submit" class="btn primary h34">Start new context from this summary<kbd>⌘↵</kbd></button>
+					</form>
+				</div>
+			</section>
+		case "edit":
+			<form class="slot-card2" method="post" action={ templ.SafeURL("/c/" + s.ConvID + "/summary") } aria-labelledby="card-title" data-esc-href={ "/c/" + s.ConvID }>
+				<input type="hidden" name="message_id" value={ s.MessageID }/>
+				<div class="card-head">
+					<span class="card-glyph orange">
+						@ii("edit14")
+					</span>
+					<h2 id="card-title">Edit summary</h2>
+					<span class="card-meta">Markdown · <span data-unsaved>unsaved</span></span>
+				</div>
+				<label for="sum-edit" class="card-lede edit-lede">{ "Edit the summary. " + s.NextLabel + " starts from exactly this text." }</label>
+				<textarea id="sum-edit" name="content" rows="15" class="sum-edit" autofocus>{ s.SummaryText }</textarea>
+				<div class="card-foot">
+					<span class="card-hint"><kbd>⌘</kbd> <kbd>S</kbd>{ " saves · " }<kbd>Esc</kbd>{ " cancels" }</span>
+					<a class="btn ghost h34 cancel" href={ templ.SafeURL("/c/" + s.ConvID) }>Cancel</a>
+					<button type="submit" class="btn primary h34" data-cmd-s>Save summary<kbd>⌘S</kbd></button>
+				</div>
+			</form>
+		case "elicit":
+			@elicitCard(s)
+	}
+}
+
+templ compressCardT(s slotVM) {
+	<form class={ "slot-card2", "cmp", templ.KV("failed", s.Kind == "failed") } method="post" action={ templ.SafeURL("/c/" + s.ConvID + "/compact") } aria-labelledby="card-title" data-cmd-enter data-esc-href={ "/c/" + s.ConvID } data-tokens={ fmtInt(s.Tokens) }>
+		<div class="card-head">
+			if s.Kind == "failed" {
+				<span class="card-glyph red">
+					@ii("warn")
+				</span>
+				<h2 id="card-title">Compression failed</h2>
+				<span class="card-meta">{ s.ModelMeta }</span>
+			} else {
+				<span class="card-glyph orange">
+					@icon("gauge")
+				</span>
+				<h2 id="card-title">Compress into a new context</h2>
+				<span class="card-meta wide-only">{ commas(s.Tokens) + " tokens · " + plural(s.Turns, "turn") }</span>
+			}
+		</div>
+		if s.Kind == "failed" {
+			<input type="hidden" name="guide" value={ s.Guide }/>
+			if s.MessageID != "" {
+				<input type="hidden" name="failed_id" value={ s.MessageID }/>
+			}
+			<p class="card-err" role="alert">{ s.Error }</p>
+			<p class="card-lede err-hint">{ s.ErrorHint }</p>
+			<div class="cmp-model">
+				<label for="cmp-model">Choose another model</label>
+				@cmpSelect(s)
+			</div>
+		} else {
+			<p class="card-lede">
+				<span class="wide-only">{ "A model summarizes " + s.CtxLabel + ". You review the summary before " + s.NextLabel + " starts, and " + s.CtxLabel + " stays readable." }</span>
+				<span class="narrow-only">{ "A model summarizes " + s.CtxLabel + "'s " + commas(s.Tokens) + " tokens. You review the summary before " + s.NextLabel + " starts." }</span>
+			</p>
+			<div class="cmp-guide-head">
+				<label for="cmp-guide">Instructions</label>
+				<span>{ s.GuideFrom }</span>
+			</div>
+			<textarea id="cmp-guide" name="guide" rows="3">{ s.Guide }</textarea>
+			<div class="cmp-model">
+				<label for="cmp-model">Summarize with</label>
+				@cmpSelect(s)
+			</div>
+		}
+		<div class="card-foot">
+			if s.Kind == "failed" {
+				<span class="card-hint"><kbd>Esc</kbd>{ " closes" }</span>
+			} else {
+				<span class="card-hint"><kbd>⌘</kbd> <kbd>Enter</kbd>{ " starts · " }<kbd>Esc</kbd>{ " cancels" }</span>
+			}
+			if s.Kind == "failed" && s.MessageID != "" {
+				<button type="submit" class="btn ghost h34 cancel" formaction={ templ.SafeURL("/c/" + s.ConvID + "/summary/discard") } name="message_id" value={ s.MessageID }>Cancel</button>
+			} else {
+				<a class="btn ghost h34 cancel" href={ templ.SafeURL("/c/" + s.ConvID) }>Cancel</a>
+			}
+			if s.Kind == "failed" {
+				<button type="submit" class="btn primary h34">
+					@ii("regen14")
+					Retry
+				</button>
+			} else {
+				<button type="submit" class="btn primary h34">Start<kbd class="wide-only">⌘↵</kbd></button>
+			}
+		</div>
+	</form>
+}
+
+templ cmpSelect(s slotVM) {
+	<select id="cmp-model" name="model" data-fit>
+		for _, g := range s.Groups {
+			<optgroup label={ g.Label }>
+				for _, o := range g.Options {
+					<option value={ o.Value } selected?={ o.Selected } data-window={ fmtInt(o.Window) }>{ o.Label }</option>
+				}
+			</optgroup>
+		}
+	</select>
+	<span class={ "cmp-fit", templ.KV("bad", !s.Fit.OK) } data-fit-label><span class="dot s6"></span><span>{ s.Fit.Label }</span></span>
+}
+
+// elicitSlot is the elicit SSE event: the card, swapped out of band into the
+// composer's place.
+templ elicitSlot(s slotVM) {
+	<footer class="composer-wrap" id="composer-slot" hx-swap-oob="outerHTML">
+		@elicitCard(s)
+	</footer>
+}
+
+templ elicitCard(s slotVM) {
+	<form class="slot-card2 elicit" method="post" action={ templ.SafeURL("/c/" + s.ConvID + "/elicit/" + s.Elicit.ID) } hx-post={ "/c/" + s.ConvID + "/elicit/" + s.Elicit.ID } hx-target="#composer-slot" hx-swap="outerHTML" aria-labelledby="card-title" data-cmd-enter>
+		<div class="card-head">
+			<span class="card-glyph accent">
+				@ii("key")
+			</span>
+			<h2 id="card-title">{ elicitTitle(s.Elicit) }</h2>
+			if s.Elicit.Tool != "" {
+				<span class="card-meta">
+					if s.Elicit.Source != "" {
+						{ "MCP server · " }
+					}
+					<span class="mono">{ s.Elicit.Tool }</span>
+				</span>
+			}
+		</div>
+		<p class="card-lede el-lede">{ s.Elicit.Message }</p>
+		for i, f := range s.Elicit.Fields {
+			<div class="el-row">
+				if f.Type == "checkbox" {
+					<span id={ "el-" + f.Name + "-l" } class="el-lbl">{ f.Label }</span>
+					<input type="hidden" name={ "field_" + f.Name } value={ boolStr(f.Default == "true") }/>
+					<button type="button" class="switch" role="switch" data-switch={ "field_" + f.Name } aria-checked={ boolStr(f.Default == "true") } aria-labelledby={ "el-" + f.Name + "-l" }></button>
+				} else {
+					<label for={ "el-" + f.Name } class="el-lbl">
+						{ f.Label }
+						if f.Required {
+							<span>Required</span>
+						}
+					</label>
+					<input id={ "el-" + f.Name } name={ "field_" + f.Name } type={ elicitInputType(f.Type) } value={ f.Default } required?={ f.Required } autocomplete="off" class={ "el-in", templ.KV("lead", i == firstRequired(s.Elicit.Fields)) } autofocus?={ i == firstRequired(s.Elicit.Fields) }/>
+				}
+			</div>
+		}
+		<div class="card-foot">
+			<span class="card-hint">The reply waits for your answer.</span>
+			<button type="submit" name="action" value="decline" class="btn h34 decline" formnovalidate>Decline</button>
+			<button type="submit" name="action" value="accept" class="btn primary h34">Submit<kbd>⌘↵</kbd></button>
+		</div>
+	</form>
+}
+
+func elicitInputType(t string) string {
+	switch t {
+	case "password", "number":
+		return t
+	}
+	return "text"
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+func fmtInt(n int64) string {
+	return strconv.FormatInt(n, 10)
+}
+
+// firstRequired is the field the card focuses: the first one it can't
+// submit without, or -1.
+func firstRequired(fields []elicitField) int {
+	for i, f := range fields {
+		if f.Required {
+			return i
+		}
+	}
+	return -1
+}

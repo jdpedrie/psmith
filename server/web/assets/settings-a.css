@@ -1,0 +1,291 @@
+/* settings-a area styles: General, Appearance, Usage, providers and models,
+   users. Shared parts live in app.css. Pages scope under .seta. */
+
+/* --- page head --- */
+.seta .pback{display:none}
+.seta .ptacts{display:flex;align-items:center;gap:12px}
+.seta .page-title .lede{margin:10px 0 0;font-size:13.5px;color:var(--t2)}
+.seta .page-title .btn.raised{background:var(--sgroup);box-shadow:inset 0 0 0 1px var(--line)}
+.seta .btn.wide{padding:0 18px}
+.seta .btn.primary kbd{margin-left:0;background:rgba(255,255,255,.2);color:var(--onAccent)}
+.seta .btn.phone{display:none}
+.seta .wide-only{display:inline}
+.seta .result.inrow{flex:1;margin:0}
+
+/* --- rows --- */
+.seta .grow .hint{font-size:12.5px;color:var(--t3)}
+.seta .grow .slash{color:var(--t3)}
+.seta .grow .val{flex:1;min-width:200px;color:var(--t1)}
+.seta .grow .val.muted{font-size:13px;color:var(--t3)}
+.seta .two > span{display:block}
+.seta .two > span:first-child{color:var(--t1)}
+.seta .lbl.two > span:first-child{color:var(--t2)}
+.seta .grow .sub{display:block;margin-top:2px;font-size:12.5px;color:var(--t3)}
+.seta .grow .fill{flex:1}
+.seta .help{flex-basis:100%;padding-left:196px;box-sizing:border-box;margin:-2px 0 2px;font-size:12.5px;color:var(--t3)}
+.seta .field.sel{width:180px;padding:0 8px}
+.seta .field.price{width:96px;font-variant-numeric:tabular-nums}
+.seta .field.num{font-variant-numeric:tabular-nums}
+.seta .field.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
+.seta .field.area{flex:1;min-width:200px;height:auto;min-height:80px;padding:8px 10px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical}
+.seta .field.is-changed,.seta .field.is-changed:focus{box-shadow:inset 0 0 0 1.5px var(--accent)}
+.seta .reset{width:32px;height:32px;border:0;border-radius:8px;background:var(--fill);color:var(--t2);display:flex;align-items:center;justify-content:center;padding:0}
+.seta .glink{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-top:1px solid var(--line);color:var(--accentInk);text-decoration:none;font-size:13.5px;font-weight:500}
+.seta .glink span{flex:1}
+.seta .tbl-empty{margin:0;padding:16px;font-size:13px;color:var(--t3)}
+.seta .formfoot{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:10px}
+.seta .formfoot p{flex:1;min-width:240px;margin:0;font-size:12.5px;color:var(--t3)}
+.seta .mono-av{flex:none;width:32px;height:32px;border-radius:8px;background:var(--fill2);color:var(--strong);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
+
+/* --- segmented control, chip toggles, stop chips --- */
+.seta .seg{box-sizing:border-box;display:flex;height:34px;border-radius:9px;background:var(--fill);padding:3px}
+.seta .seg > *{position:relative;display:flex;align-items:center;padding:0 12px;border:0;border-radius:7px;background:transparent;color:var(--t2);font-size:13px;text-decoration:none;cursor:pointer}
+.seta .seg input{position:absolute;opacity:0;width:0;height:0;margin:0}
+.seta .seg > [aria-checked="true"],.seta .seg > label:has(input:checked){background:var(--raise);color:var(--t1);font-weight:600;box-shadow:0 1px 2px var(--shadow)}
+.seta .seg > label:has(input:focus-visible){outline:2px solid var(--accent)}
+.seta .togs{flex:1;min-width:200px;display:flex;flex-wrap:wrap;gap:6px}
+.seta .tog{display:inline-flex;align-items:center;height:28px;padding:0 11px;border-radius:14px;background:var(--fill);color:var(--t2);font-size:12.5px;cursor:pointer}
+.seta .tog input{position:absolute;opacity:0;width:0;height:0;margin:0}
+.seta .tog:has(input:checked){background:var(--hl);color:var(--t1);font-weight:600}
+.seta .tog:has(input:focus-visible){outline:2px solid var(--accent)}
+.seta .stops{flex:1;min-width:200px;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.seta .stopchip{height:28px;padding:0 4px 0 10px;border-radius:7px;background:var(--fill2);display:flex;align-items:center;gap:4px;font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--t1)}
+.seta .stopchip button{width:22px;height:22px;border:0;border-radius:5px;background:transparent;color:var(--t2);display:flex;align-items:center;justify-content:center;padding:0}
+.seta .field.stopin{width:200px}
+
+/* --- defaults page --- */
+.seta .lineage{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:12px 0 0;padding:0;list-style:none;font-size:12.5px}
+.seta .lineage li{height:26px;padding:0 10px;border-radius:13px;display:flex;align-items:center;background:var(--fill);color:var(--t2)}
+.seta .lineage li.on{background:var(--hl);color:var(--accentInk);font-weight:600}
+.seta .lineage li.arr{height:auto;padding:0;background:none;color:var(--t3)}
+.seta .xdetails summary{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 16px;cursor:pointer;list-style:none}
+.seta .xdetails summary::-webkit-details-marker{display:none}
+.seta .xdetails .dis{color:var(--t3);display:flex}
+.seta .xdetails[open] .dis{transform:rotate(90deg)}
+.seta .xdetails .st{flex:1;font-size:13px;font-weight:600;color:var(--t2)}
+.seta .xdetails summary .hint{font-size:12.5px;color:var(--t3)}
+.seta .xbody{border-top:1px solid var(--line)}
+.seta .xnest{padding:16px;display:flex;flex-direction:column;gap:28px}
+
+/* --- model page --- */
+.seta .fav{width:36px;height:36px;border:0;border-radius:9px;background:var(--fill);color:var(--t2);display:flex;align-items:center;justify-content:center;padding:0}
+.seta .fav.on{background:var(--hl);color:var(--accentInk)}
+.seta .page-title .btn.danger{font-weight:500}
+.seta .grow .secret{flex:1;min-width:200px}
+.seta .probe{flex-basis:100%;margin:0 0 4px;padding:0 0 0 196px;box-sizing:border-box;list-style:none;font-size:12.5px;color:var(--t2);display:flex;flex-direction:column;gap:4px}
+.seta .probe b{font-weight:600;color:var(--t1)}
+.seta .probe li.good b{color:var(--green)}
+.seta .probe span{display:block;color:var(--t3)}
+
+/* --- providers --- */
+.seta .prow{display:flex;align-items:center;gap:14px;min-height:64px;padding:10px 16px;color:var(--t1);text-decoration:none}
+.seta .prow + .prow{border-top:1px solid var(--line)}
+.seta .pbody{flex:1;min-width:0}
+.seta .pbody b{display:block;font-weight:600}
+.seta .pbody span{display:block;margin-top:2px;font-size:12.5px;color:var(--t3)}
+.seta .pstat{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--t3)}
+.seta .pstat .dot{width:7px;height:7px;border-radius:4px;--dot:var(--t3)}
+.seta .pstat.ok{color:var(--green)}
+.seta .pstat.ok .dot{--dot:var(--green)}
+.seta .pstat.bad{color:var(--orange)}
+.seta .pstat.bad .dot{--dot:var(--orange)}
+.seta .chev{color:var(--t3);display:flex}
+.seta .tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.seta .tile{box-sizing:border-box;display:flex;align-items:center;gap:10px;min-width:0;height:56px;padding:0 12px;border-radius:10px;background:var(--sgroup);box-shadow:inset 0 0 0 1px var(--line);color:var(--t1);text-decoration:none}
+.seta .tile[aria-checked="true"]{box-shadow:inset 0 0 0 2px var(--accent)}
+.seta .tile .mono-av{width:28px;height:28px;font-size:13px}
+.seta .tbody{min-width:0}
+.seta .tbody b{display:block;font-size:13.5px;font-weight:600}
+.seta .tbody span{display:block;margin-top:1px;font-size:12px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seta .bigsearch{display:flex;align-items:center;gap:8px;height:34px;padding:0 11px;border-radius:9px;background:var(--fill);color:var(--t3);margin-bottom:12px}
+.seta .bigsearch input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--t1);font-size:13.5px}
+.seta .dtbl th:last-child,.seta .dtbl td:last-child{text-align:left}
+.seta .dtbl .ck{width:18px;padding:11px 4px 11px 16px}
+.seta .dtbl th.ck{padding:12px 4px 8px 16px}
+.seta .dtbl .ck input{display:block;width:18px;height:18px;margin:0;accent-color:var(--accent)}
+.seta .dtbl label.name{cursor:pointer}
+.seta .onbadge{margin-left:8px;font-size:11.5px;font-weight:600;padding:2px 7px;border-radius:5px;background:var(--greenFill);color:var(--green)}
+
+/* --- usage --- */
+.seta .spend{padding:18px 20px}
+.seta .spend .period{font-size:12.5px;color:var(--t3)}
+.seta .spend .big{display:flex;align-items:baseline;gap:12px;margin-top:6px}
+.seta .spend .big span:first-child{font-size:34px;font-weight:700}
+.seta .spend .big span + span{color:var(--t2)}
+.seta .utbl{min-width:560px}
+.seta .utbl td{padding:12px 8px}
+.seta .utbl td:first-child{padding-left:16px}
+.seta .utbl td:last-child{padding-right:16px}
+.seta .utbl .r{text-align:right}
+.seta .utbl td.amt{color:var(--t1)}
+.seta .utbl tr.none td.r{color:var(--t3)}
+.seta .utbl tfoot tr{border-top:1px solid var(--line)}
+.seta .utbl tfoot th{padding:12px 16px;text-align:left;font-size:13.5px;font-weight:600;color:var(--t1)}
+.seta .utbl tfoot td{font-weight:600;color:var(--t1)}
+.seta .urange .field{width:auto}
+
+/* --- general --- */
+.seta .who{flex:1;min-width:200px;display:flex;align-items:center;gap:10px}
+.seta .who b{color:var(--t1);font-weight:600}
+.seta .mono-sm{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--t3)}
+.seta .mono-xs{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--t3)}
+.seta .tag{font-size:11.5px;color:var(--t2);padding:2px 7px;border-radius:5px;background:var(--fill2)}
+.seta .custom{display:flex;align-items:center;gap:8px}
+
+/* --- appearance --- */
+.seta .themes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.seta .tcard{display:flex;flex-direction:column;gap:14px;padding:14px;border:0;border-radius:12px;background:var(--sgroup);box-shadow:inset 0 0 0 1px var(--line);color:var(--t1);text-align:left}
+.seta .tcard[aria-checked="true"]{box-shadow:inset 0 0 0 2px var(--accent)}
+.seta .tcard .thead{display:flex;align-items:flex-start;gap:10px;width:100%}
+.seta .tcard .tname{flex:1;min-width:0}
+.seta .tcard .tname b{display:block;font-size:14px;font-weight:600}
+.seta .tcard .tname span{display:block;margin-top:3px;font-size:12.5px;line-height:1.4;color:var(--t3)}
+.seta .tcard .tdot{flex:none;width:18px;height:18px;border-radius:9px;box-shadow:inset 0 0 0 1.5px var(--fill2);display:flex;align-items:center;justify-content:center;color:var(--onAccent)}
+.seta .tcard .tdot svg{display:none}
+.seta .tcard[aria-checked="true"] .tdot{background:var(--accent);box-shadow:none}
+.seta .tcard[aria-checked="true"] .tdot svg{display:block}
+.seta .tcard .sw{display:flex;gap:6px;width:100%}
+.seta .tcard .sw > span{flex:1;display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--t3)}
+.seta .tcard .sw i{display:block;height:22px;border-radius:6px;box-shadow:inset 0 0 0 1px var(--line)}
+.seta .tcard .sw .a{background:var(--accent)}
+.seta .tcard .sw .b{background:var(--bubble)}
+.seta .tcard .sw .h{background:var(--hl)}
+.seta .tsize{flex:1;min-width:200px;display:flex;align-items:center;gap:12px}
+.seta .tsize .a1{font-size:11px;color:var(--t2)}
+.seta .tsize .a2{font-size:18px;color:var(--t2)}
+.seta .tsize output{width:44px;text-align:right;color:var(--t1)}
+/* The thumb's center rides 9px inside the input's ends, so the input runs
+   9px past the drawn track on both sides and the thumb lands on the fill. */
+.seta .tsize input{-webkit-appearance:none;appearance:none;width:258px;height:20px;margin:0 -9px;background:transparent;cursor:pointer}
+.seta .tsize input::-webkit-slider-runnable-track{height:20px;background:linear-gradient(var(--accent),var(--accent)) 9px 8px/calc((100% - 18px) * var(--pct) / 100%) 4px no-repeat,linear-gradient(var(--fill2),var(--fill2)) 9px 8px/calc(100% - 18px) 4px no-repeat}
+.seta .tsize input::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:1px;border-radius:9px;background:var(--onAccent);box-shadow:0 1px 3px var(--shadow),inset 0 0 0 1px var(--line)}
+.seta .tsize input::-moz-range-track{height:4px;border-radius:2px;background:var(--fill2)}
+.seta .tsize input::-moz-range-progress{height:4px;border-radius:2px;background:var(--accent)}
+.seta .tsize input::-moz-range-thumb{width:18px;height:18px;border:0;border-radius:9px;background:var(--onAccent);box-shadow:0 1px 3px var(--shadow),inset 0 0 0 1px var(--line)}
+
+/* --- users --- */
+.seta .users td{padding:11px 8px}
+.seta .users td:first-child{padding-left:16px}
+.seta .users td:last-child{padding-right:16px}
+.seta .ucell{display:flex;align-items:center;gap:10px}
+.seta .ucell b{display:block;font-weight:600;color:var(--t1)}
+.seta .users .ucell .id{margin-top:1px}
+.seta .users tr.newrow{background:var(--fill)}
+.seta .users tr.newrow td{padding:12px 16px;text-align:left}
+.seta .rowform{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.seta .rowform.end{justify-content:flex-end}
+.seta .rowform .fill{flex:1}
+.seta .rowform .fill.txt{min-width:140px;font-size:13px;color:var(--t2);text-align:left}
+.seta .users td.rowform-cell{padding:8px 16px 8px 8px}
+.seta .field.sm{height:32px;font-size:13.5px}
+.seta .field.sm.mono{font-size:13px}
+.seta .w130{width:130px}.seta .w150{width:150px}.seta .w180{width:180px}
+.seta .rowform label.ck{display:flex;align-items:center;gap:7px;height:32px;padding:0 4px;color:var(--t2);font-size:13px}
+.seta .rowform label.ck input{width:16px;height:16px;margin:0;accent-color:var(--accent)}
+.seta .field.role{height:30px;padding:0 6px;border-radius:7px;font-size:13px}
+.seta .users td.acts{white-space:nowrap}
+.seta .users .you{color:var(--t3);font-size:13px}
+.seta .users td.acts .btn{vertical-align:middle}
+.seta .rmenu{display:inline-block;position:relative;vertical-align:middle}
+.seta .rmenu summary{width:32px;height:32px;border-radius:8px;color:var(--t2);display:inline-flex;align-items:center;justify-content:center;list-style:none;cursor:pointer}
+.seta .rmenu summary::-webkit-details-marker{display:none}
+.seta .rmenu .menu{right:0;top:36px;text-align:left}
+
+.seta :is(.mtbl,.utbl,.users) :is(th,td):first-child{padding-right:16px}
+.seta .btn:is(.h32,.ghost):not(.primary):not(.destructive){font-weight:400}
+.seta .ptacts .btn.ghost{font-weight:400}
+/* The frame's Sign out (settings_frame.templ) is drawn 30px tall and quiet. */
+.snav-foot .btn.ghost{height:30px;color:var(--t2);font-weight:400}
+.seta :is(.mtbl,.utbl,.users) :is(th,td):last-child{padding-left:16px}
+.seta .users tr td.rowform-cell{padding:8px 16px 8px 8px}
+.seta .btn[disabled]{opacity:.5;cursor:default}
+/* The boards set the hint inline on the text baseline, a pixel under center. */
+.seta .btn.primary kbd{position:relative;top:1px}
+
+/* --- phone: one column. /settings is the navigation list; every other page
+   hides the list and gets a back header. --- */
+@media (max-width:759px){
+  .settings:has(.seta){display:block;height:100vh}
+  .settings:has(.seta) .spage{height:100vh;max-height:100vh}
+  .settings:has(.seta):not(:has(.sindex)) .snav{display:none}
+  .settings:has(.sindex) .spage{display:none}
+  .settings:has(.sindex) .snav{height:100vh;max-height:100vh;overflow:auto;scrollbar-width:none;border-right:0;background:var(--sground)}
+  .settings:has(.sindex) .snav-top{height:56px;padding:0 8px;border-bottom:1px solid var(--line)}
+  .settings:has(.sindex) .back{height:44px;padding:0 12px 0 6px;border-radius:10px;font-size:15px}
+  .settings:has(.sindex) .snav-search{padding:12px 16px 0}
+  .settings:has(.sindex) .snav-search h1{font-size:26px}
+  .settings:has(.sindex) .snav-search label{height:44px;padding:0 12px;border-radius:10px}
+  .settings:has(.sindex) .snav-search input{font-size:16px}
+  .settings:has(.sindex) .snav-items{flex:none;overflow:visible;padding:0 16px;font-size:15px}
+  .settings:has(.sindex) .snav-group,.settings:has(.sindex) .snav-group:first-child{padding:18px 4px 6px}
+  .settings:has(.sindex) .snav-items a{height:auto;min-height:44px;padding:0 12px 0 16px;gap:10px;justify-content:flex-start;border-radius:0;background:var(--sgroup);border-bottom:1px solid var(--line);box-shadow:inset 1px 0 0 var(--line),inset -1px 0 0 var(--line);font-weight:400}
+  .settings:has(.sindex) .snav-group + a{border-radius:12px 12px 0 0;box-shadow:inset 1px 0 0 var(--line),inset -1px 0 0 var(--line),inset 0 1px 0 var(--line)}
+  .settings:has(.sindex) .snav-items a:has(+ .snav-group),.settings:has(.sindex) .snav-items a:last-child{border-bottom:0;border-radius:0 0 12px 12px;box-shadow:inset 1px 0 0 var(--line),inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line)}
+  .settings:has(.sindex) .snav-items a span{margin-left:auto;font-size:13.5px;color:var(--t3);font-variant-numeric:tabular-nums}
+  .settings:has(.sindex) .snav-items a .warn{color:var(--orange)}
+  .settings:has(.sindex) .snav-items a::after{content:"";order:2;flex:none;margin-left:auto;width:16px;height:16px;background:var(--t3);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 3l5 5-5 5'/%3E%3C/svg%3E") center/16px no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 3l5 5-5 5'/%3E%3C/svg%3E") center/16px no-repeat}
+  .settings:has(.sindex) .snav-items a:has(span)::after,.settings:has(.sindex) .snav-items a[href="/settings/appearance"]::after{margin-left:0}
+  .settings:has(.sindex) .snav-items a[href="/settings/appearance"]::before{order:1;margin-left:auto;font-size:13.5px;color:var(--t3)}
+  html[data-theme="system"] .settings:has(.sindex) a[href="/settings/appearance"]::before{content:"System"}
+  html[data-theme="sage"] .settings:has(.sindex) a[href="/settings/appearance"]::before{content:"Sage & Graphite"}
+  html[data-theme="clay"] .settings:has(.sindex) a[href="/settings/appearance"]::before{content:"Clay & Ink"}
+  html[data-theme="slate"] .settings:has(.sindex) a[href="/settings/appearance"]::before{content:"Slate Pro"}
+  html[data-theme="aubergine"] .settings:has(.sindex) a[href="/settings/appearance"]::before{content:"Aubergine & Cream"}
+  html[data-theme="nordic"] .settings:has(.sindex) a[href="/settings/appearance"]::before{content:"Nordic Mist"}
+  .settings:has(.sindex) .snav-foot{flex:none;height:auto;min-height:56px;margin:24px 16px 24px;padding:0 8px 0 16px;border:0;border-radius:12px;background:var(--sgroup);box-shadow:inset 0 0 0 1px var(--line)}
+  .settings:has(.sindex) .snav-foot .avatar{width:30px;height:30px;border-radius:15px;font-size:13px}
+  .settings:has(.sindex) .snav-foot .who{font-size:14px}
+  .settings:has(.sindex) .snav-foot .btn.ghost{height:44px;padding:0 12px;border-radius:9px;font-size:14px}
+
+  .settings:has(.sindex) .snav::-webkit-scrollbar{display:none}
+  .seta .spage-inner{padding:16px 0 96px;gap:24px}
+  .seta .phead{display:flex;flex-direction:column}
+  .seta .pback{display:flex;align-items:center;height:56px;margin:-16px -16px 16px;padding:0 8px;border-bottom:1px solid var(--line)}
+  .seta .pback a{height:44px;padding:0 12px 0 6px;border-radius:10px;display:flex;align-items:center;gap:6px;color:var(--t2);text-decoration:none;font-size:15px}
+  .seta .crumbs{display:none}
+  .seta .page-title{display:contents}
+  .seta .page-title h2{order:1;flex:none;margin:0;font-size:26px}
+  .seta .phead > .result{order:2;margin-top:8px}
+  .seta .page-title .lede{order:2}
+  .seta .ptacts{order:3;margin-top:12px;gap:8px}
+  .seta .ptacts .btn{height:44px;border-radius:10px;font-size:14px}
+  .seta .ptacts .btn.raised{flex:1}
+  .seta .btn.phone{display:flex}
+  .seta .wide-only{display:none}
+  .seta .sec-title{margin:0 0 8px 4px}
+  .seta .grow{flex-direction:column;align-items:stretch;gap:6px;min-height:0;padding:12px 16px}
+  .seta .grow > .lbl{flex:none;font-size:13px}
+  .seta .grow .field.wide,.seta .grow .field.num{flex:none;width:100%;min-width:0;height:44px;padding:0 12px;border-radius:9px;font-size:16px}
+  .seta .grow.keyrow{display:grid;grid-template-columns:1fr auto;grid-template-rows:1fr auto auto 1fr;column-gap:12px;row-gap:0;align-items:center;padding:12px 8px 12px 16px}
+  .seta .keyrow .lbl{grid-row:2}
+  .seta .keyrow .secret{grid-row:3;margin-top:4px;min-width:0}
+  .seta .keyrow .btn{grid-column:2;grid-row:1 / 5;height:44px;padding:0 14px;border-radius:9px;font-size:14px}
+  .seta .grow.swrow{flex-direction:row;align-items:center;gap:12px;min-height:52px;padding:4px 4px 4px 16px;box-sizing:border-box}
+  .seta .swrow .lbl{flex:1;font-size:15px}
+  .seta .swrow .switch{margin:10px 6px}
+  .seta .sec-bar{gap:8px;margin-bottom:8px}
+  .seta .sec-bar .sec-title{margin:0 0 0 4px}
+  .seta .sec-bar .btn{order:1;height:44px;padding:0 12px;border-radius:10px;font-size:14px;font-weight:600}
+  .seta .sec-bar .filter{order:2;flex-basis:100%;width:auto;height:44px;padding:0 12px;border-radius:10px;gap:8px}
+  .seta .sec-bar .filter input{font-size:16px}
+  .seta .tbl-wrap{overflow:visible}
+  .seta .mtbl{display:block;min-width:0}
+  .seta .mtbl thead{display:none}
+  .seta .mtbl tbody{display:block}
+  .seta .mtbl tr{position:relative;display:flex;flex-wrap:wrap;align-items:center;padding:10px 64px 10px 16px}
+  .seta .mtbl tbody tr:first-child{border-top:0}
+  .seta .mtbl td,.seta .mtbl td:first-child,.seta .mtbl td:last-child{padding:0;text-align:left}
+  .seta .mtbl td.mname{flex-basis:100%}
+  .seta .mtbl .name{display:block;font-size:15px}
+  .seta .mtbl td.mctx,.seta .mtbl td.mcost{margin-top:6px;font-size:12.5px;color:var(--t2)}
+  .seta .mtbl td.mctx::after{content:"\00a0·\00a0"}
+  .seta .mtbl td.mcost{margin-right:8px}
+  .seta .mtbl td.mcaps{margin-top:6px}
+  .seta .mtbl td.mon{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:52px;height:44px;display:flex;align-items:center;justify-content:center}
+  .settings:has(.seta) .savebar{left:10px;right:10px;bottom:14px;padding:0}
+  .settings:has(.seta) .savebar > div{padding:6px 6px 6px 16px;border-radius:16px;gap:6px}
+  .settings:has(.seta) .savebar .msg{font-size:14px}
+  .settings:has(.seta) .savebar .btn{height:44px;border-radius:10px;font-size:14px}
+  .settings:has(.seta) .savebar .btn.primary{padding:0 20px}
+  .settings:has(.seta) .savebar kbd{display:none}
+}

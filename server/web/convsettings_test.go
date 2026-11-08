@@ -84,10 +84,10 @@ func TestConvSettings_SaveCallSettings(t *testing.T) {
 		// explicit_cache off should be set; with no anthropic fields posted the block stays nil.
 	}
 
-	// Reload the page; the saved value renders into the input.
-	pageReq := httptest.NewRequest("GET", "/c/"+fx.convID.String()+"/settings", nil).WithContext(userCtx)
+	// The Settings tab renders the saved value back into the input.
+	pageReq := httptest.NewRequest("GET", "/c/"+fx.convID.String()+"?tab=settings", nil).WithContext(userCtx)
 	pageReq.SetPathValue("id", fx.convID.String())
-	pageRec := do(h.handleConvSettings, pageReq)
+	pageRec := do(h.handleConversation, pageReq)
 	if body := pageRec.Body.String(); !strings.Contains(body, `value="0.5"`) || !strings.Contains(body, "Call settings") {
 		t.Errorf("settings page missing saved value; body:\n%s", body[:min(2000, len(body))])
 	}

@@ -367,6 +367,10 @@ func run() error {
 		Langfuse:      langfuseSvc,
 		Files:         filesSvc,
 		Supervisor:    supervisor,
+		Bus:           eventBus,
+		Preferences:   preferencessvc.NewService(queries),
+		Speech:        speechSvc,
+		Streams:       streamsSvc,
 		Logger:        slog.Default(),
 	}).Mount(mux)
 

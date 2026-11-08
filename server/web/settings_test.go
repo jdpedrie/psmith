@@ -41,7 +41,7 @@ func TestProvidersSettings(t *testing.T) {
 
 	// The add form lists at least the anthropic driver type.
 	newRec := do(h.handleProviderNew, httptest.NewRequest("GET", "/settings/providers/new", nil).WithContext(userCtx))
-	if newRec.Code != http.StatusOK || !strings.Contains(newRec.Body.String(), `value="anthropic"`) {
+	if newRec.Code != http.StatusOK || !strings.Contains(newRec.Body.String(), `?t=anthropic`) {
 		t.Fatalf("new form missing anthropic type; code=%d body:\n%s", newRec.Code, newRec.Body.String())
 	}
 
@@ -69,7 +69,7 @@ func TestProvidersSettings(t *testing.T) {
 	detReq := httptest.NewRequest("GET", "/settings/providers/"+provID, nil).WithContext(userCtx)
 	detReq.SetPathValue("id", provID)
 	detRec := do(h.handleProvider, detReq)
-	if !strings.Contains(detRec.Body.String(), "MyProv") || !strings.Contains(detRec.Body.String(), "No models enabled") {
+	if !strings.Contains(detRec.Body.String(), "MyProv") || !strings.Contains(detRec.Body.String(), "No models on yet") {
 		t.Errorf("detail page wrong; body:\n%s", detRec.Body.String())
 	}
 

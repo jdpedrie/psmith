@@ -1,0 +1,283 @@
+package web
+
+import "strconv"
+
+// modelPageVM is one enabled model: identity, limits and prices,
+// capabilities, and the call settings it adds over its provider's.
+type modelPageVM struct {
+	ProvID, ProvName, ProvType string
+	ID, Name                   string
+	Favorite                   bool
+	Result                     *testVM
+	Probe                      []probeRowVM
+	MetaLine                   string
+	Ctx, Out                   string
+	In, OutP, CR, CW           string
+	Caps, Mods                 []saTog
+	Temp, TempHint             string
+	MaxTok, MaxInherit         string
+	MaxHint                    string
+	Effort, EffortInherit      string
+	EffortPrev                 string // set when the page arrives with effort dirty
+	Dirty                      int
+	Error                      string
+}
+
+type probeRowVM struct {
+	Capability, Outcome, Detail string
+	Good                        bool
+}
+
+func (m modelPageVM) url(suffix string) templ.SafeURL {
+	return templ.SafeURL("/settings/providers/" + m.ProvID + suffix)
+}
+
+func (m modelPageVM) op(op string) templ.SafeURL {
+	return m.url("/model-op/" + op + "/" + saModelPath(m.ID))
+}
+
+func (m modelPageVM) effortOpts() []saOpt {
+	first := "Not set"
+	if m.EffortInherit != "" {
+		first = "Inherit (" + m.EffortInherit + ")"
+	}
+	return []saOpt{{"", first}, {"off", "Off"}, {"low", "Low"}, {"medium", "Medium"}, {"high", "High"}, {"xhigh", "Extra high"}}
+}
+
+templ modelActions(m modelPageVM) {
+	<div class="ptacts">
+		<button class={ "fav", templ.KV("on", m.Favorite) } type="submit" formaction={ m.op("favorite") } aria-pressed={ strconv.FormatBool(m.Favorite) } aria-label="Favorite">
+			if m.Favorite {
+				@saIcon("star")
+			} else {
+				@saIcon("staroff")
+			}
+		</button>
+		<button class="btn raised" type="submit" formaction={ m.op("test") }>Test model</button>
+		<button class="btn danger" type="submit" formaction={ m.op("disable") }>Disable model</button>
+	</div>
+}
+
+var saCapOpts = []saOpt{{"streaming", "Streaming"}, {"thinking", "Thinking"}, {"tool_use", "Tool use"}, {"vision", "Vision"}, {"prompt_caching", "Prompt caching"}, {"generates_images", "Makes images"}}
+var saModOpts = []saOpt{{"text", "Text"}, {"image", "Image"}, {"pdf", "PDF"}, {"audio", "Audio"}, {"video", "Video"}}
+
+templ saLimitsRows(cwin, out, in, outp, cr, cw string, ph bool) {
+	<div class="grow">
+		<label for="mctx" class="lbl">Context window</label>
+		<input id="mctx" name="context_window" class="field num" inputmode="numeric" value={ cwin } placeholder={ saPhIf(ph, "Not set") }/>
+		<span class="hint">tokens</span>
+	</div>
+	<div class="grow">
+		<label for="mout" class="lbl">Max output</label>
+		<input id="mout" name="max_output" class="field num" inputmode="numeric" value={ out } placeholder={ saPhIf(ph, "Not set") }/>
+		<span class="hint">tokens</span>
+	</div>
+	<div class="grow">
+		<span class="lbl">Input / output</span>
+		<input id="pin" name="price_in" aria-label="Input saPrice" class="field price" inputmode="decimal" value={ in } placeholder={ saPhIf(ph, "0.00") }/>
+		<span class="slash">/</span>
+		<input id="pout" name="price_out" aria-label="Output saPrice" class="field price" inputmode="decimal" value={ outp } placeholder={ saPhIf(ph, "0.00") }/>
+		<span class="hint">USD per 1M tokens</span>
+	</div>
+	<div class="grow">
+		<span class="lbl">Cache read / write</span>
+		<input id="pcr" name="price_cache_read" aria-label="Cache read saPrice" class="field price" inputmode="decimal" value={ cr } placeholder={ saPhIf(ph, "0.00") }/>
+		<span class="slash">/</span>
+		<input id="pcw" name="price_cache_write" aria-label="Cache write saPrice" class="field price" inputmode="decimal" value={ cw } placeholder={ saPhIf(ph, "0.00") }/>
+		<span class="hint">USD per 1M tokens</span>
+	</div>
+}
+
+func saPhIf(on bool, s string) string {
+	if on {
+		return s
+	}
+	return ""
+}
+
+templ modelScreen(n snavVM, m modelPageVM) {
+	@settingsScreen(m.Name, n) {
+		<form class="spage-form seta" method="post" action={ m.url("/models/" + saModelPath(m.ID)) }>
+			<div class="spage-scroll">
+				<div class="spage-inner">
+					@saPageHead(saHead{Crumbs: []saCrumb{{"Providers", "/settings/providers"}, {m.ProvName, "/settings/providers/" + m.ProvID}}, Title: m.Name, Actions: modelActions(m)}) {
+						@saResult(m.Result)
+						if m.Error != "" {
+							<p role="alert" class="result bad"><span class="dot"></span>{ m.Error }</p>
+						}
+					}
+					<section aria-labelledby="ident">
+						<h3 id="ident" class="sec-title">Model</h3>
+						<div class="group">
+							<div class="grow">
+								<label for="mname" class="lbl">Display name</label>
+								<input id="mname" name="display_name" class="field wide" value={ m.Name }/>
+							</div>
+							<div class="grow">
+								<span class="lbl">Model ID</span>
+								<span class="secret">{ m.ID }</span>
+								<span class="hint">Sent to the provider. Can’t change.</span>
+							</div>
+							<div class="grow">
+								<span class="lbl">Metadata</span>
+								<span class="val">{ m.MetaLine }</span>
+								<button class="btn h32" type="submit" formaction={ m.op("refresh") }>Refresh metadata</button>
+							</div>
+						</div>
+						<p class="foot-note">Refreshing replaces hand edits to limits, prices and capabilities. Favorite and call settings stay.</p>
+					</section>
+					<section aria-labelledby="limits">
+						<h3 id="limits" class="sec-title">Limits and prices</h3>
+						<div class="group">
+							@saLimitsRows(m.Ctx, m.Out, m.In, m.OutP, m.CR, m.CW, false)
+						</div>
+					</section>
+					<section aria-labelledby="caps">
+						<h3 id="caps" class="sec-title">Capabilities</h3>
+						<div class="group">
+							<div class="grow">
+								<span class="lbl">Can do</span>
+								@saTogs("cap", m.Caps)
+							</div>
+							<div class="grow">
+								<span class="lbl">Accepts</span>
+								@saTogs("modality", m.Mods)
+							</div>
+							<div class="grow">
+								<span class="lbl">Check</span>
+								<span class="val muted">Runs a few tiny requests to see what the model really supports. Costs a few tokens.</span>
+								<button class="btn h32" type="submit" formaction={ m.op("probe") }>Probe</button>
+								if len(m.Probe) > 0 {
+									<ul class="probe">
+										for _, p := range m.Probe {
+											<li class={ templ.KV("good", p.Good) }><b>{ p.Capability }</b>{ " " + p.Outcome }
+												if p.Detail != "" {
+													<span>{ p.Detail }</span>
+												}
+											</li>
+										}
+									</ul>
+								}
+							</div>
+						</div>
+						<p class="foot-note">Profiles that need a capability hide models without it. A probe can switch a capability on, never off.</p>
+					</section>
+					<section aria-labelledby="calls">
+						<h3 id="calls" class="sec-title">Call settings for this model</h3>
+						<div class="group">
+							<div class="grow">
+								<label for="ctemp" class="lbl">Temperature</label>
+								<input id="ctemp" name="temperature" class="field num" inputmode="decimal" placeholder="Not set" value={ m.Temp }/>
+								<span class="hint">{ m.TempHint }</span>
+							</div>
+							<div class="grow">
+								<label for="cmax" class="lbl">Max output tokens</label>
+								<input id="cmax" name="max_output_tokens" class="field num" inputmode="numeric" placeholder={ orDefault(m.MaxInherit, "Not set") } value={ m.MaxTok }/>
+								if m.MaxHint != "" {
+									<span class="hint">{ m.MaxHint }</span>
+								}
+							</div>
+							<div class="grow">
+								<label for="ceff" class="lbl">Thinking effort</label>
+								<select id="ceff" name="effort" class={ "field", "sel", templ.KV("is-changed", m.EffortPrev != "") }>
+									for _, o := range m.effortOpts() {
+										<option value={ o.Value } selected?={ o.Value == m.Effort }>{ o.Label }</option>
+									}
+								</select>
+								if m.EffortPrev != "" {
+									<span class="changed">{ "Changed from " + m.EffortPrev }</span>
+								}
+							</div>
+							<a class="glink" href={ m.url("/model-defaults/" + saModelPath(m.ID)) }><span>All call settings for this model</span>@saIcon("chev")</a>
+						</div>
+						<p class="foot-note">{ "These sit above " + m.ProvName + "’s defaults and below profiles and conversations. Leave a field empty to inherit." }</p>
+					</section>
+				</div>
+			</div>
+			@saveBar(m.Dirty)
+		</form>
+	}
+}
+
+// addModelVM is the manual-model form.
+type addModelVM struct {
+	ProvID, ProvName       string
+	ModelID, Name          string
+	Ctx, Out               string
+	In, OutP, CR, CW       string
+	Caps, Mods             []saTog
+	Calls                  defaultsPageVM
+	CallsOpen              bool
+	Error                  string
+}
+
+templ addModelScreen(n snavVM, a addModelVM) {
+	@settingsScreen("Add a model by hand", n) {
+		<form class="spage-form seta" method="post" action={ templ.SafeURL("/settings/providers/" + a.ProvID + "/add-model") }>
+			<div class="spage-scroll">
+				<div class="spage-inner">
+					@saPageHead(saHead{Crumbs: []saCrumb{{"Providers", "/settings/providers"}, {a.ProvName, "/settings/providers/" + a.ProvID}}, Title: "Add a model by hand",
+						Lede: "For private fine-tunes, renamed models, or anything " + a.ProvName + " doesn’t list. Discover models won’t bring it back once you delete it."}) {
+						if a.Error != "" {
+							<p role="alert" class="result bad"><span class="dot"></span>{ a.Error }</p>
+						}
+					}
+					<section aria-labelledby="ident">
+						<h3 id="ident" class="sec-title">Model</h3>
+						<div class="group">
+							<div class="grow">
+								<label for="aid" class="lbl">Model ID</label>
+								<input id="aid" name="model_id" class="field wide mono" value={ a.ModelID } required autofocus/>
+							</div>
+							<div class="grow">
+								<label for="aname" class="lbl">Display name</label>
+								<input id="aname" name="display_name" class="field wide" value={ a.Name } required/>
+							</div>
+						</div>
+						<p class="foot-note">The model ID is sent to the provider as you type it here, and can’t change later.</p>
+					</section>
+					<section aria-labelledby="limits">
+						<h3 id="limits" class="sec-title">Limits and prices</h3>
+						<div class="group">
+							@saLimitsRows(a.Ctx, a.Out, a.In, a.OutP, a.CR, a.CW, true)
+						</div>
+						<p class="foot-note">All optional. Leave prices empty for a model that doesn’t bill per token.</p>
+					</section>
+					<section aria-labelledby="caps">
+						<h3 id="caps" class="sec-title">Capabilities</h3>
+						<div class="group">
+							<div class="grow">
+								<span class="lbl">Can do</span>
+								@saTogs("cap", a.Caps)
+							</div>
+							<div class="grow">
+								<span class="lbl">Accepts</span>
+								@saTogs("modality", a.Mods)
+							</div>
+						</div>
+						<p class="foot-note">Profiles that need a capability hide models without it. After adding, a probe on the model’s page can check these for you.</p>
+					</section>
+					<section aria-labelledby="acs">
+						<details class="group xdetails" open?={ a.CallsOpen }>
+							<summary id="acs">
+								<span class="dis">
+									@saIcon("chev12")
+								</span>
+								<span class="st">Call settings for this model</span>
+								<span class="hint">{ "Inherits " + a.ProvName + "’s defaults" }</span>
+							</summary>
+							<div class="xbody xnest">
+								@callSettingsFields(a.Calls)
+							</div>
+						</details>
+						<p class="foot-note">Open to set this model’s own defaults with the same fields as the provider’s. Leave it closed to inherit.</p>
+					</section>
+					<div class="formfoot">
+						<a class="btn h36 ghost" href={ templ.SafeURL("/settings/providers/" + a.ProvID) }>Cancel</a>
+						<button class="btn h36 primary wide" type="submit">Add model<kbd>⌘↵</kbd></button>
+					</div>
+				</div>
+			</div>
+		</form>
+	}
+}

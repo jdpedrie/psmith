@@ -34,6 +34,7 @@ type configFieldVM struct {
 	Required    bool
 	Value       string // current value (model: "providerID|modelID")
 	Checked     bool   // boolean fields
+	Secret      bool   // a credential: masked until shown
 	Options     []configOptVM
 }
 
@@ -59,12 +60,20 @@ func (h *Handler) buildPluginForm(ctx context.Context, t *psmithv1.PluginType, c
 	if t == nil || customFormPlugins[t.GetName()] {
 		return form
 	}
+	form.Fields = configFieldVMs(t, currentConfig, models, false)
+	form.HasForm = len(form.Fields) > 0
+	return form
+}
+
+// configFieldVMs renders a plugin's global fields (global=true) or its
+// per-instance fields (global=false), prefilled from currentConfig.
+func configFieldVMs(t *psmithv1.PluginType, currentConfig []byte, models []modelVM, global bool) []configFieldVM {
 	var cur map[string]json.RawMessage
 	_ = json.Unmarshal(currentConfig, &cur)
-
+	var out []configFieldVM
 	for _, f := range t.GetConfigFields() {
-		if f.GetGlobal() {
-			continue // global fields live on the dedicated plugin-settings surface
+		if f.GetGlobal() != global {
+			continue
 		}
 		vm := configFieldVM{
 			Name:        f.GetName(),
@@ -73,6 +82,7 @@ func (h *Handler) buildPluginForm(ctx context.Context, t *psmithv1.PluginType, c
 			Type:        fieldTypeName(f.GetType()),
 			Category:    f.GetCategory(),
 			Required:    f.GetRequired(),
+			Secret:      isSecretField(f),
 		}
 		raw, ok := cur[f.GetName()]
 		switch vm.Type {
@@ -89,10 +99,19 @@ func (h *Handler) buildPluginForm(ctx context.Context, t *psmithv1.PluginType, c
 		default:
 			vm.Value = scalarValue(raw, ok, f.GetDefaultJson())
 		}
-		form.Fields = append(form.Fields, vm)
+		out = append(out, vm)
 	}
-	form.HasForm = len(form.Fields) > 0
-	return form
+	return out
+}
+
+// isSecretField reports whether a field holds a credential. Plugins mark
+// most with Secret; API keys predating that flag are caught by name.
+func isSecretField(f *psmithv1.ConfigField) bool {
+	if f.GetSecret() {
+		return true
+	}
+	n := strings.ToLower(f.GetName())
+	return f.GetType() == psmithv1.ConfigField_TEXT && (strings.HasSuffix(n, "api_key") || strings.HasSuffix(n, "token") || strings.HasSuffix(n, "secret"))
 }
 
 // displayName is the plugin's display name, nil-safe.
@@ -199,13 +218,23 @@ func modelOptions(models []modelVM) []configOptVM {
 // and overwrites each non-global field, coercing by type. get returns the
 // posted value for a field's input (already prefix-resolved by the caller).
 func assemblePluginConfig(t *psmithv1.PluginType, current []byte, get func(field string) string) ([]byte, error) {
+	return assembleConfig(t, current, get, false)
+}
+
+// assembleGlobalConfig is assemblePluginConfig for the user-scoped fields
+// the global Plugins page edits.
+func assembleGlobalConfig(t *psmithv1.PluginType, current []byte, get func(field string) string) ([]byte, error) {
+	return assembleConfig(t, current, get, true)
+}
+
+func assembleConfig(t *psmithv1.PluginType, current []byte, get func(field string) string, global bool) ([]byte, error) {
 	out := map[string]json.RawMessage{}
 	_ = json.Unmarshal(current, &out)
 	if t == nil {
 		return current, nil
 	}
 	for _, f := range t.GetConfigFields() {
-		if f.GetGlobal() {
+		if f.GetGlobal() != global {
 			continue
 		}
 		name := f.GetName()

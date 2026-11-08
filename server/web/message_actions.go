@@ -8,19 +8,9 @@ import (
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 )
 
-// handleEditForm renders a focused editor for a single message's content.
-func (h *Handler) handleEditForm(w http.ResponseWriter, r *http.Request) {
-	convID := r.PathValue("id")
-	mid := r.PathValue("mid")
-	resp, err := h.convos.GetMessage(r.Context(), connect.NewRequest(&psmithv1.GetMessageRequest{Id: mid}))
-	if err != nil {
-		http.Error(w, "message not found", http.StatusNotFound)
-		return
-	}
-	h.render(w, r, http.StatusOK, editMessagePage(convID, mid, resp.Msg.GetMessage().GetContent()))
-}
-
-// handleEditSave applies an in-place content edit.
+// handleEditSave applies an in-place edit: the text, optionally the role,
+// and for a user turn optionally a resend, which runs a fresh reply to the
+// edited message as a new branch.
 func (h *Handler) handleEditSave(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
 	mid := r.PathValue("mid")
@@ -28,18 +18,37 @@ func (h *Handler) handleEditSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	if _, err := h.convos.EditMessage(r.Context(), connect.NewRequest(&psmithv1.EditMessageRequest{
-		Id:      mid,
-		Content: r.PostFormValue("content"),
-	})); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	req := &psmithv1.EditMessageRequest{Id: mid, Content: r.PostFormValue("content")}
+	switch r.PostFormValue("role") {
+	case "user":
+		role := psmithv1.MessageRole_MESSAGE_ROLE_USER
+		req.Role = &role
+	case "assistant":
+		role := psmithv1.MessageRole_MESSAGE_ROLE_ASSISTANT
+		req.Role = &role
+	}
+	resp, err := h.convos.EditMessage(r.Context(), connect.NewRequest(req))
+	if err != nil {
+		http.Error(w, friendlyError(err), http.StatusBadRequest)
 		return
 	}
-	http.Redirect(w, r, "/c/"+convID, http.StatusSeeOther)
+	if r.PostFormValue("resend") != "" && resp.Msg.GetMessage().GetRole() == psmithv1.MessageRole_MESSAGE_ROLE_USER {
+		send, err := h.convos.SendMessage(r.Context(), connect.NewRequest(&psmithv1.SendMessageRequest{
+			ConversationId: convID, ParentMessageId: &mid, Regenerate: true,
+		}))
+		if err != nil {
+			http.Error(w, friendlyError(err), http.StatusBadRequest)
+			return
+		}
+		backToConv(w, r, convID, "run="+send.Msg.GetStreamRun().GetId())
+		return
+	}
+	backToConv(w, r, convID, "")
 }
 
-// handleRegenerate re-runs the model from an assistant turn's parent, creating
-// a new branch, and redirects to the conversation streaming the fresh run.
+// handleRegenerate re-runs the model from an assistant turn's parent,
+// creating a new branch, optionally with another model, and lands on the
+// conversation streaming the fresh run. Retry on a failed reply is the same.
 func (h *Handler) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
 	if err := r.ParseForm(); err != nil {
@@ -51,31 +60,30 @@ func (h *Handler) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "parent_message_id required", http.StatusBadRequest)
 		return
 	}
-	resp, err := h.convos.SendMessage(r.Context(), connect.NewRequest(&psmithv1.SendMessageRequest{
-		ConversationId:  convID,
-		ParentMessageId: &parentID,
-		Regenerate:      true,
-	}))
+	req := &psmithv1.SendMessageRequest{ConversationId: convID, ParentMessageId: &parentID, Regenerate: true}
+	if pid, mid, ok := splitModelValue(r.PostFormValue("model")); ok {
+		req.ProviderId, req.ModelId = &pid, &mid
+	}
+	resp, err := h.convos.SendMessage(r.Context(), connect.NewRequest(req))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, friendlyError(err), http.StatusBadRequest)
 		return
 	}
-	http.Redirect(w, r, "/c/"+convID+"?run="+resp.Msg.GetStreamRun().GetId(), http.StatusSeeOther)
+	backToConv(w, r, convID, "run="+resp.Msg.GetStreamRun().GetId())
 }
 
-// handleMessageDelete removes a message (non-cascading — children stitch
-// to the deleted row's parent, mirroring the native clients' default).
-// Today's primary caller is the compression review bar's Delete, which
-// discards a pending summary so the conversation resumes in the current
-// context.
+// handleMessageDelete removes a message (non-cascading: children stitch to
+// the deleted row's parent, mirroring the native clients' default). The
+// confirm is the row itself, drawn in its delete state; the compression
+// review bar's Discard posts here too.
 func (h *Handler) handleMessageDelete(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
 	mid := r.PathValue("mid")
 	if _, err := h.convos.DeleteMessage(r.Context(), connect.NewRequest(&psmithv1.DeleteMessageRequest{
 		Id: mid,
 	})); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, friendlyError(err), http.StatusBadRequest)
 		return
 	}
-	http.Redirect(w, r, "/c/"+convID, http.StatusSeeOther)
+	backToConv(w, r, convID, "")
 }

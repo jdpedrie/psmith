@@ -115,9 +115,8 @@ func TestHandleConversation_RendersComposer(t *testing.T) {
 		t.Fatalf("status=%d want 200; body:\n%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	// The composer carries the rich model chip (not a <select>), showing the
-	// current model and opening the picker overlay.
-	for _, want := range []string{`id="composer"`, `id="messages"`, `id="composer-model-chip"`, "Claude Fake", `/c/` + fx.convID.String() + `/model`} {
+	// The header's model button shows the current model and opens the picker.
+	for _, want := range []string{`id="composer"`, `id="messages"`, `class="head-btn model-btn"`, "Claude Fake", `/c/` + fx.convID.String() + `/model`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("conversation page missing %q", want)
 		}

@@ -1,0 +1,87 @@
+package web
+
+// Parts the settings-b pages share: the page head, the select wrapper, the
+// in-place confirm card and the few glyphs icons.templ doesn't carry.
+
+templ sbIcon(name string) {
+	switch name {
+		case "more16":
+			<svg width="16" height="4" viewBox="0 0 14 4" fill="currentColor" aria-hidden="true"><circle cx="2" cy="2" r="1.4"></circle><circle cx="7" cy="2" r="1.4"></circle><circle cx="12" cy="2" r="1.4"></circle></svg>
+		case "elbow":
+			<svg class="sb-elbow" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><path d="M2 1v5a3 3 0 0 0 3 3h6"></path></svg>
+		case "lock":
+			<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.5"></rect><path d="M4.5 6V4.5a2.5 2.5 0 0 1 5 0V6"></path></svg>
+	}
+}
+
+// sbCrumbs is the breadcrumb above a page title.
+templ sbCrumbs(parent, parentHref, here string) {
+	<nav class="crumbs" aria-label="Breadcrumb"><a href={ templ.SafeURL(parentHref) }>{ parent }</a> / { here }</nav>
+}
+
+// sbStatus is a test result line under a page head.
+templ sbStatus(t *testVM) {
+	if t != nil {
+		<p role="status" class={ "result", templ.KV("bad", !t.OK) }><span class="dot"></span>{ t.Message }</p>
+	}
+}
+
+// sbSelect wraps a select with the boards' caret. Pass narrow for the 240px
+// width the call-settings rows use, dirty for a value changed but unsaved.
+templ sbSelect(id, name string, narrow, dirty bool, opts []sbOpt) {
+	<span class={ "sb-select", templ.KV("narrow", narrow) }>
+		<select id={ id } name={ name } class={ templ.KV("sb-dirty", dirty) } data-orig={ selectedValue(opts) }>
+			for _, o := range opts {
+				if o.Group != "" {
+					<optgroup label={ o.Group }>
+						for _, g := range o.Items {
+							<option value={ g.Value } selected?={ g.Selected }>{ g.Label }</option>
+						}
+					</optgroup>
+				} else {
+					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
+				}
+			}
+		</select>
+		@icon("caret")
+	</span>
+}
+
+// sbConfirm is a destructive action's section. Closed, it is a row with the
+// action button, which fetches the open state in place; open, the card asks.
+templ sbConfirm(c sbConfirmVM) {
+	<div class={ "group sb-g", templ.KV("sb-danger", c.Open) } id={ c.ID }>
+		if c.Open && c.InForm {
+			<div class="grow sb-confirm">
+				@sbConfirmAsk(c)
+				<button class="btn h32 destructive sb-p14" type="submit" formaction={ templ.SafeURL(c.Action) } formnovalidate>{ c.Verb }</button>
+			</div>
+		} else if c.Open {
+			<form class="grow sb-confirm" method="post" action={ templ.SafeURL(c.Action) }>
+				@sbConfirmAsk(c)
+				<button class="btn h32 destructive sb-p14" type="submit">{ c.Verb }</button>
+			</form>
+		} else {
+			<div class="grow">
+				<span class="lbl fill">{ c.Label }<span class="sb-sub">{ c.LabelDetail }</span></span>
+				<a class="btn h36 danger" href={ templ.SafeURL(c.OpenHref) } hx-get={ c.OpenHref + sbSep(c.OpenHref) + "fragment=" + c.ID } hx-target={ "#" + c.ID } hx-swap="outerHTML">{ c.Verb }</a>
+			</div>
+		}
+	</div>
+}
+
+templ sbConfirmAsk(c sbConfirmVM) {
+	<span role="alert" class="lbl fill sb-ask"><strong>{ c.Question }</strong><span class="sb-sub">{ c.Detail }</span></span>
+	<a class="btn h32 sb-n" href={ templ.SafeURL(c.CancelHref) } hx-get={ c.CancelHref + sbSep(c.CancelHref) + "fragment=" + c.ID } hx-target={ "#" + c.ID } hx-swap="outerHTML">Cancel</a>
+}
+
+// sbSubmitBar is the bar a create form ends with: a note and its submit.
+templ sbSubmitBar(note, cancelHref, verb string) {
+	<div class="savebar" role="region" aria-label={ verb } data-setb-submitbar>
+		<div>
+			<span class="msg">{ note }</span>
+			<a class="btn ghost sb-n" href={ templ.SafeURL(cancelHref) }>Cancel</a>
+			<button class="btn primary" type="submit">{ verb }<kbd>⌘S</kbd></button>
+		</div>
+	</div>
+}

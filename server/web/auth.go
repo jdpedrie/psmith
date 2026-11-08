@@ -10,6 +10,16 @@ import (
 	"github.com/jdpedrie/psmith/server/auth"
 )
 
+// signInVM is the sign-in page. A failed attempt keeps the username and
+// clears the password.
+type signInVM struct {
+	Server    string
+	Username  string
+	Password  string // fixtures only: the board draws a filled field
+	Error     string
+	ShowFocus bool // draw the password field focused (fixtures)
+}
+
 // sessionCookie carries the same opaque session token the RPC clients send as
 // a bearer header. The web layer just delivers it via an httpOnly cookie and
 // validates it through the identical auth path.
@@ -55,12 +65,12 @@ func (h *Handler) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/chats", http.StatusSeeOther)
 		return
 	}
-	h.render(w, r, http.StatusOK, loginPage(""))
+	h.render(w, r, http.StatusOK, signInScreen(signInVM{Server: r.Host}))
 }
 
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.render(w, r, http.StatusBadRequest, loginPage("Bad request."))
+		h.render(w, r, http.StatusBadRequest, signInScreen(signInVM{Server: r.Host, Error: "Bad request."}))
 		return
 	}
 	resp, err := h.auth.Login(r.Context(), connect.NewRequest(&psmithv1.LoginRequest{
@@ -68,7 +78,7 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Password: r.PostFormValue("password"),
 	}))
 	if err != nil {
-		h.render(w, r, http.StatusUnauthorized, loginPage("Invalid username or password."))
+		h.render(w, r, http.StatusUnauthorized, signInScreen(signInVM{Server: r.Host, Username: r.PostFormValue("username"), Error: "Invalid username or password."}))
 		return
 	}
 	exp := time.Now().Add(24 * time.Hour)

@@ -1,0 +1,264 @@
+package web
+
+import "strconv"
+
+type provRowVM struct {
+	ID, Name, Initial, Sub string
+	Status                 string // "ok", "bad" or "" for not tested
+	StatusText             string
+}
+
+type providersPageVM struct {
+	Rows        []provRowVM
+	CatalogLine string
+	CanRefresh  bool
+	CatalogMsg  *testVM
+}
+
+templ providersActions() {
+	<div class="ptacts">
+		<a class="btn h36 primary wide" href="/settings/providers/new">
+			@saIcon("plus12")
+			Add provider
+		</a>
+	</div>
+}
+
+templ providersScreen(n snavVM, p providersPageVM) {
+	@settingsScreen("Providers", n) {
+		<div class="spage-scroll seta">
+			<div class="spage-inner">
+				@saPageHead(saHead{Crumbs: []saCrumb{{"Settings", "/settings"}}, Title: "Providers", Actions: providersActions(),
+					Lede: "Each provider holds its own key and the models you turn on. Every profile and conversation picks from these."})
+				<section aria-labelledby="provs">
+					<h3 id="provs" class="sec-title">{ "Your providers · " + strconv.Itoa(len(p.Rows)) }</h3>
+					<div class="group">
+						for _, r := range p.Rows {
+							<a class="prow" href={ templ.SafeURL("/settings/providers/" + r.ID) }>
+								<span class="mono-av" aria-hidden="true">{ r.Initial }</span>
+								<span class="pbody"><b>{ r.Name }</b><span>{ r.Sub }</span></span>
+								<span class={ "pstat", r.Status }><span class="dot"></span>{ r.StatusText }</span>
+								<span class="chev">
+									@saIcon("chev")
+								</span>
+							</a>
+						}
+						if len(p.Rows) == 0 {
+							<p class="tbl-empty">No providers yet. Add one to start chatting.</p>
+						}
+					</div>
+					<p class="foot-note">The dot shows the last connection test. Open a provider to run it again.</p>
+				</section>
+				<section aria-labelledby="catalog">
+					<h3 id="catalog" class="sec-title">Model catalog</h3>
+					<div class="group">
+						<form class="grow" method="post" action="/settings/catalog/refresh">
+							<span class="val two"><span>models.dev</span><span class="sub">{ p.CatalogLine }</span></span>
+							if p.CanRefresh {
+								<button class="btn h32" type="submit">Refresh now</button>
+							}
+						</form>
+					</div>
+					@saResult(p.CatalogMsg)
+					<p class="foot-note">Fills in context windows, prices and capabilities when you discover models. Only admins can refresh it.</p>
+				</section>
+			</div>
+		</div>
+	}
+}
+
+type provTileVM struct {
+	Key, Name, Initial, Sub string
+	On                      bool
+}
+
+type addProviderVM struct {
+	Tiles        []provTileVM
+	Sel          string
+	Custom       bool
+	Driver       string // display line, or the custom driver choice
+	CustomDriver string // "anthropic" or "openai-compatible"
+	Name         string
+	Key          string
+	KeyHint      string
+	BaseURL      string
+	Error        string
+}
+
+templ addProviderScreen(n snavVM, a addProviderVM) {
+	@settingsScreen("Add provider", n) {
+		<form class="spage-scroll seta" method="post" action="/settings/providers">
+			<input type="hidden" name="t" value={ a.Sel }/>
+			<div class="spage-inner">
+				@saPageHead(saHead{Crumbs: []saCrumb{{"Providers", "/settings/providers"}}, Title: "Add provider"}) {
+					if a.Error != "" {
+						<p role="alert" class="result bad"><span class="dot"></span>{ a.Error }</p>
+					}
+				}
+				<section aria-labelledby="kind">
+					<h3 id="kind" class="sec-title">Provider</h3>
+					<div class="tiles" role="radiogroup" aria-labelledby="kind">
+						for _, t := range a.Tiles {
+							<a class="tile" role="radio" aria-checked={ strconv.FormatBool(t.On) } href={ templ.SafeURL("/settings/providers/new?t=" + t.Key) }>
+								<span class="mono-av" aria-hidden="true">{ t.Initial }</span>
+								<span class="tbody"><b>{ t.Name }</b><span>{ t.Sub }</span></span>
+							</a>
+						}
+					</div>
+					<p class="foot-note">Providers you’ve already added aren’t listed. Custom takes any Anthropic or OpenAI-compatible endpoint.</p>
+				</section>
+				<section aria-labelledby="conn">
+					<h3 id="conn" class="sec-title">Connection</h3>
+					<div class="group">
+						<div class="grow">
+							if a.Custom {
+								<label for="pdriver" class="lbl">Driver</label>
+								<select id="pdriver" name="driver" class="field sel">
+									<option value="openai-compatible" selected?={ a.CustomDriver != "anthropic" }>OpenAI-compatible</option>
+									<option value="anthropic" selected?={ a.CustomDriver == "anthropic" }>Anthropic</option>
+								</select>
+							} else {
+								<span class="lbl">Driver</span>
+								<span class="val">{ a.Driver }</span>
+							}
+						</div>
+						<div class="grow">
+							<label for="pname" class="lbl">Name</label>
+							<input id="pname" name="label" class="field wide" value={ a.Name } required/>
+						</div>
+						<div class="grow">
+							<label for="pkey" class="lbl">API key</label>
+							<input id="pkey" name="api_key" type="password" class="field wide" value={ a.Key } placeholder={ a.KeyHint } autocomplete="off" autofocus/>
+						</div>
+						<div class="grow">
+							<label for="purl" class="lbl">Base URL</label>
+							<input id="purl" name="base_url" class="field wide mono" value={ a.BaseURL } required?={ a.Custom }/>
+						</div>
+					</div>
+					<p class="foot-note">The key is encrypted on this server and never shown again. Change the base URL only for a proxy or gateway.</p>
+				</section>
+				<div class="formfoot">
+					<p>Adding tests the connection, then opens Discover models so you can turn some on.</p>
+					<a class="btn h36 ghost" href="/settings/providers">Cancel</a>
+					<button class="btn h36 primary wide" type="submit" data-submit-key>Add provider<kbd>⌘↵</kbd></button>
+				</div>
+			</div>
+		</form>
+	}
+}
+
+type discRowVM struct {
+	ID, Name, Context, Cost string
+	Caps                    []string
+	On, Checked             bool
+}
+
+type discoverVM struct {
+	ProvID, ProvName string
+	Rows             []discRowVM
+	NewCount         int
+	Checked          int
+	Error            string
+}
+
+func (d discoverVM) lede() string {
+	if d.Error != "" {
+		return ""
+	}
+	on := len(d.Rows) - d.NewCount
+	return d.ProvName + " lists " + strconv.Itoa(len(d.Rows)) + " models. " + strconv.Itoa(on) + " " + saPlural(on, "is", "are") + " on already."
+}
+
+func saPlural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}
+
+func (d discoverVM) selLabel() string {
+	return strconv.Itoa(d.Checked) + " of " + strconv.Itoa(d.NewCount) + " new " + saPlural(d.NewCount, "model", "models") + " selected"
+}
+
+templ discoverActions(d discoverVM) {
+	<div class="ptacts">
+		<a class="btn h36 raised" href={ templ.SafeURL("/settings/providers/" + d.ProvID + "/add-model") }>Add a model by hand</a>
+	</div>
+}
+
+templ discoverScreen(n snavVM, d discoverVM) {
+	@settingsScreen("Discover models", n) {
+		<form class="spage-form seta" method="post" action={ templ.SafeURL("/settings/providers/" + d.ProvID + "/enable") } data-select-count>
+			<div class="spage-scroll">
+				<div class="spage-inner">
+					@saPageHead(saHead{Crumbs: []saCrumb{{"Providers", "/settings/providers"}, {d.ProvName, "/settings/providers/" + d.ProvID}}, Title: "Discover models", Actions: discoverActions(d), Lede: d.lede()}) {
+						if d.Error != "" {
+							<p role="alert" class="result bad"><span class="dot"></span>{ d.Error }</p>
+						}
+					}
+					<section aria-labelledby="found">
+						<h3 id="found" class="sec-title">Available models</h3>
+						<label class="bigsearch">
+							@icon("search")
+							<input aria-label="Search models" placeholder="Search by name or ID" data-filter="#disc-rows"/>
+						</label>
+						<div class="group tbl-wrap">
+							<table class="tbl dtbl">
+								<thead>
+									<tr>
+										<th scope="col" class="ck"><span class="sr-only">Select</span></th>
+										<th scope="col">Model</th>
+										<th scope="col">Context</th>
+										<th scope="col">Cost</th>
+										<th scope="col">Can do</th>
+									</tr>
+								</thead>
+								<tbody id="disc-rows">
+									for i, r := range d.Rows {
+										<tr>
+											<td class="ck">
+												if r.On {
+													<input id={ "d" + strconv.Itoa(i) } type="checkbox" checked disabled/>
+												} else {
+													<input id={ "d" + strconv.Itoa(i) } type="checkbox" name="model_ids" value={ r.ID } checked?={ r.Checked }/>
+												}
+											</td>
+											<td>
+												<label for={ "d" + strconv.Itoa(i) } class="name">{ r.Name }</label>@saOnBadge(r.On)<span class="id">{ r.ID }</span>
+											</td>
+											<td class="tnum">{ r.Context }</td>
+											<td>{ r.Cost }</td>
+											<td>
+												<span class="tags">
+													for _, c := range r.Caps {
+														<span>{ c }</span>
+													}
+												</span>
+											</td>
+										</tr>
+									}
+								</tbody>
+							</table>
+						</div>
+						<p class="foot-note">Models already on stay on. Turn one off from the provider page.</p>
+					</section>
+				</div>
+			</div>
+			if d.NewCount > 0 {
+				<div class="savebar" role="region" aria-label="Selection">
+					<div>
+						<span class="msg" data-sel-label data-total={ strconv.Itoa(d.NewCount) }>{ d.selLabel() }</span>
+						<a class="btn ghost" href={ templ.SafeURL("/settings/providers/" + d.ProvID) }>Cancel</a>
+						<button class="btn primary" type="submit">Enable selected<kbd>⌘↵</kbd></button>
+					</div>
+				</div>
+			}
+		</form>
+	}
+}
+
+templ saOnBadge(on bool) {
+	if on {
+		<span class="onbadge">On</span>
+	}
+}

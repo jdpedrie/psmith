@@ -1,0 +1,82 @@
+package web
+
+// fragment draws one part of a reply that a ContentRenderer plugin built.
+templ fragment(m msgItem, p fragVM) {
+	switch p.Kind {
+		case "text":
+			<div class="md">
+				@templ.Raw(p.HTML)
+			</div>
+		case "card_list":
+			<div class="cards">
+				for _, c := range p.Cards {
+					<article class="card">
+						<div class="card-top">
+							<b>{ c.Title }</b>
+							if c.URL != "" {
+								<a href={ templ.SafeURL(c.URL) } target="_blank" rel="noopener noreferrer" aria-label={ "Open " + c.Host }>
+									@convIcon("external")
+								</a>
+							}
+						</div>
+						if len(c.Badges) > 0 {
+							<div class="card-badges">
+								for _, b := range c.Badges {
+									<span>{ b }</span>
+								}
+							</div>
+						}
+						if c.Description != "" {
+							<p>{ c.Description }</p>
+						}
+					</article>
+				}
+			</div>
+		case "key_value":
+			<dl class="kv">
+				for _, kv := range p.Pairs {
+					<dt>{ kv.Key }</dt>
+					<dd>{ kv.Value }</dd>
+				}
+			</dl>
+		case "choice_list":
+			<form class="choices" method="post" action={ templ.SafeURL("/c/" + m.ConvID + "/choice") } hx-post={ "/c/" + m.ConvID + "/choice" } hx-target="#messages" hx-select="#messages" hx-swap="outerHTML" aria-label="Choose one">
+				for _, c := range p.Choices {
+					if c.Action != "" {
+						<button class={ "choice", templ.KV("chosen", c.Chosen) } type="submit" name="choice" value={ c.Action } data-choice={ c.Action }>
+							<span class="letter">{ c.Letter }</span>
+							{ c.Label }
+						</button>
+					} else {
+						<div class={ "choice", "static", templ.KV("chosen", c.Chosen) }>
+							<span class="letter">{ c.Letter }</span>
+							{ c.Label }
+						</div>
+					}
+				}
+			</form>
+		case "image":
+			<div class="frag-images">
+				for _, im := range p.Images {
+					<figure>
+						<img src={ im.URL } alt={ im.Alt } loading="lazy"/>
+						if im.Caption != "" {
+							<figcaption>{ im.Caption }</figcaption>
+						}
+					</figure>
+				}
+			</div>
+		case "error":
+			<p class="reply-error" role="alert">
+				{ p.Message }
+				if p.Code != "" {
+					<span class="muted">{ " (" + p.Code + ")" }</span>
+				}
+			</p>
+		default:
+			<div class="codeblock">
+				<div class="codeblock-head">json<button type="button" data-copy-code>Copy</button></div>
+				<pre><code>{ p.HTML }</code></pre>
+			</div>
+	}
+}

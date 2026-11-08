@@ -1,0 +1,99 @@
+package web
+
+import "strconv"
+
+// snavVM is the Settings navigation column.
+type snavVM struct {
+	Active     string // item key
+	UsageTotal string // "$41.20"
+	Providers  int
+	Profiles   int
+	ServersBad int
+	Users      int
+	IsAdmin    bool
+	UserName   string
+	Initial    string
+	Server     string
+}
+
+// settingsScreen is the Settings frame: navigation column and a page.
+templ settingsScreen(title string, n snavVM) {
+	@page(title + " · Settings · Psmith") {
+		<div class="settings" hx-ext="sse" sse-connect="/events">
+			@settingsNav(n)
+			<main class="spage" id="spage">
+				{ children... }
+			</main>
+		</div>
+	}
+}
+
+templ snavLink(n snavVM, key, label, href string) {
+	<a
+		href={ templ.SafeURL(href) }
+		if n.Active == key {
+			aria-current="page"
+		}
+	>
+		{ label }
+		{ children... }
+	</a>
+}
+
+templ settingsNav(n snavVM) {
+	<nav class="snav" aria-label="Settings">
+		<div class="snav-top">
+			<a class="back" href="/chats">
+				@icon("back")
+				Conversations
+			</a>
+		</div>
+		<form class="snav-search" action="/settings" method="get" role="search">
+			<h1>Settings</h1>
+			<label>
+				@icon("search")
+				<input name="q" aria-label="Search settings" placeholder="Search settings"/>
+			</label>
+		</form>
+		<div class="snav-items">
+			<div class="snav-group">You</div>
+			@snavLink(n, "general", "General", "/settings/general")
+			@snavLink(n, "appearance", "Appearance", "/settings/appearance")
+			@snavLink(n, "usage", "Usage", "/settings/cost") {
+				if n.UsageTotal != "" {
+					<span class="tnum">{ n.UsageTotal }</span>
+				}
+			}
+			<div class="snav-group">Models</div>
+			@snavLink(n, "providers", "Providers", "/settings/providers") {
+				<span>{ strconv.Itoa(n.Providers) }</span>
+			}
+			@snavLink(n, "profiles", "Profiles", "/settings/profiles") {
+				<span>{ strconv.Itoa(n.Profiles) }</span>
+			}
+			<div class="snav-group">Tools</div>
+			@snavLink(n, "plugins", "Plugins", "/settings/plugins")
+			@snavLink(n, "servers", "MCP servers", "/settings/mcp-servers") {
+				if n.ServersBad > 0 {
+					<span class="warn"><span class="dot"></span>{ strconv.Itoa(n.ServersBad) + " failing" }</span>
+				}
+			}
+			<div class="snav-group">Server</div>
+			@snavLink(n, "embedder", "Embedder", "/settings/embedder")
+			@snavLink(n, "langfuse", "Langfuse", "/settings/langfuse")
+			@snavLink(n, "speech", "Speech", "/settings/speech")
+			if n.IsAdmin {
+				@snavLink(n, "users", "Users", "/settings/users") {
+					<span>{ strconv.Itoa(n.Users) }</span>
+				}
+			}
+		</div>
+		<div class="snav-foot">
+			<span class="avatar" aria-hidden="true">{ n.Initial }</span>
+			<span class="who">{ n.UserName + " · " + n.Server }</span>
+			<form method="post" action="/logout">
+				<button class="btn h28 ghost" type="submit">Sign out</button>
+			</form>
+		</div>
+	</nav>
+}

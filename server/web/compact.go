@@ -2,9 +2,9 @@ package web
 
 import (
 	"encoding/json"
-	"html"
-	"io"
+	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -14,45 +14,10 @@ import (
 	"github.com/jdpedrie/psmith/server/providers"
 )
 
-// handleCompactPage shows the compaction screen. If the active context already
-// holds an un-promoted summary, it offers to promote that; otherwise it offers
-// to run a new compaction.
-func (h *Handler) handleCompactPage(w http.ResponseWriter, r *http.Request) {
-	convID := r.PathValue("id")
-	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID}))
-	if err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-	conv := getResp.Msg.GetConversation()
-	ctxID := getResp.Msg.GetActiveContext().GetId()
-
-	msgsResp, err := h.convos.ListMessages(r.Context(), connect.NewRequest(&psmithv1.ListMessagesRequest{ContextId: ctxID}))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	var pending *summaryVM
-	for _, m := range msgsResp.Msg.GetMessages() {
-		if m.GetRole() == psmithv1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY {
-			pending = &summaryVM{
-				MessageID: m.GetId(),
-				HTML:      renderMarkdown(m.GetContent()),
-				Truncated: isTruncatedFinish(m.GetFinishReason()),
-			}
-		}
-	}
-	h.render(w, r, http.StatusOK, compactPage(convoVM{ID: conv.GetId(), Title: convoTitle(conv)}, pending))
-}
-
-type summaryVM struct {
-	MessageID string
-	HTML      string
-	// The summary hit the model's output limit even after the server's
-	// continuation legs — the review UI warns instead of presenting it
-	// as reviewable-complete.
-	Truncated bool
-}
+// Compression happens in the composer's place: the compress card (prompt and
+// model), the streaming card, the review card (with edit), and the failed
+// card. Each is a state of the conversation page, so every step is a URL or
+// a form post and works without script.
 
 // isTruncatedFinish reports whether a message finish_reason means the
 // output was cut at the model's token limit (Anthropic max_tokens,
@@ -67,28 +32,158 @@ func isTruncatedFinish(reason string) bool {
 	}
 }
 
-// handleCompactRun starts a compaction run and returns the streaming container
-// (an htmx SSE element that opens the summary stream), swapped into #compact-out.
-func (h *Handler) handleCompactRun(w http.ResponseWriter, r *http.Request) {
+// handleCompactPage shows the conversation with the compress card in the
+// composer's place. With a summary pending or a run in flight, the page
+// already shows that card instead.
+func (h *Handler) handleCompactPage(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	resp, err := h.convos.Compact(r.Context(), connect.NewRequest(&psmithv1.CompactRequest{ConversationId: convID}))
+	vm, err := h.loadConversation(r.Context(), r, convID)
 	if err != nil {
-		_, _ = io.WriteString(w, `<p class="error">`+html.EscapeString(err.Error())+`</p>`)
+		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	runID := resp.Msg.GetStreamRun().GetId()
-	_, _ = io.WriteString(w, renderComp(r.Context(), compactStream(convID, runID)))
+	if vm.Inspector.Card == nil || vm.Inspector.Card.Kind == "failed" {
+		conv, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID}))
+		if err != nil {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		base := slotVM{ConvID: convID, CtxLabel: activeLabel(vm.Inspector.Contexts, conv.Msg.GetActiveContext().GetId()), Tokens: vm.Gauge.Tokens, Turns: vm.Inspector.Turns}
+		base.NextLabel = nextLabel(vm.Inspector.Contexts)
+		card := h.compressCard(r.Context(), base, conv.Msg.GetConversation(), r.URL.Query().Get("model"), "")
+		vm.Inspector.Card, vm.Inspector.Compress = &card, "open"
+	}
+	h.renderConversation(w, r, vm)
 }
 
-// handleCompactStream streams the summary as named SSE events: `message`
-// carries the rendered markdown; `promote` swaps in the Promote form bound to
-// the freshly-created summary message; `done` closes the connection.
+func nextLabel(rows []ctxRowVM) string {
+	return "Context " + strconv.Itoa(len(rows)+1)
+}
+
+// renderConversation draws the conversation screen around an already-loaded
+// view model.
+func (h *Handler) renderConversation(w http.ResponseWriter, r *http.Request, vm convVM) {
+	if vm.RunID == "" {
+		vm.RunID = h.activeRunID(r, vm.ID)
+		if vm.RunID != "" && vm.Inspector.Card != nil && vm.Inspector.Card.RunID == vm.RunID {
+			vm.RunID = ""
+		}
+	}
+	l := h.loadList(r.Context(), r, vm.ID, "")
+	h.render(w, r, http.StatusOK, conversationScreen(l, vm))
+}
+
+// handleCompactRun starts a compression with the posted instructions and
+// model. A model whose window can't hold the context fails here, before
+// anything runs, with the card saying so.
+func (h *Handler) handleCompactRun(w http.ResponseWriter, r *http.Request) {
+	convID := r.PathValue("id")
+	_ = r.ParseForm()
+	guide := strings.TrimSpace(r.PostFormValue("guide"))
+	model := r.PostFormValue("model")
+
+	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID}))
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	conv, active := getResp.Msg.GetConversation(), getResp.Msg.GetActiveContext()
+	req := &psmithv1.CompactRequest{ConversationId: convID}
+	if guide != "" {
+		req.CompressionGuide = &guide
+	}
+	pid, mid, ok := splitModelValue(model)
+	if ok {
+		req.CompressionProviderId, req.CompressionModelId = &pid, &mid
+		if e := h.findModel(r.Context(), pid, mid); e != nil {
+			tokens := active.GetLastMessageTotalTokens()
+			for _, x := range h.contextRows(r.Context(), convID, active.GetId()) {
+				if x.Active {
+					tokens = x.Tokens
+				}
+			}
+			if win := int64(e.GetModel().GetContextWindow()); win > 0 && tokens > win {
+				name := orName(e.GetModel().GetDisplayName(), mid)
+				h.renderCompressFailed(w, r, convID, model, guide,
+					name+" can't fit this context. "+"{ctx} is "+commas(tokens)+" tokens and its window holds "+commas(win)+".",
+					"{ctx} is unchanged. Choose a model with a larger window, then retry.")
+				return
+			}
+		}
+	}
+	// Retrying after a failure clears the errored summary first, so the
+	// transcript keeps one record of the attempt that counts.
+	if failed := r.PostFormValue("failed_id"); failed != "" {
+		_, _ = h.convos.DeleteMessage(r.Context(), connect.NewRequest(&psmithv1.DeleteMessageRequest{Id: failed}))
+	}
+	if req.CompressionGuide == nil {
+		g := defaultCompressionGuide
+		if pg := h.resolvedProfile(r.Context(), conv.GetProfileId()).GetCompressionGuide(); pg != "" {
+			g = pg
+		}
+		req.CompressionGuide = &g
+	}
+	if req.CompressionProviderId == nil {
+		if p := h.resolvedProfile(r.Context(), conv.GetProfileId()); p.GetCompressionProviderId() == "" {
+			if pid, mid, ok := splitModelValue(currentSettingsModel(conv)); ok {
+				req.CompressionProviderId, req.CompressionModelId = &pid, &mid
+			}
+		}
+	}
+	if _, err := h.convos.Compact(r.Context(), connect.NewRequest(req)); err != nil {
+		h.renderCompressFailed(w, r, convID, model, guide, sentence(connectMessage(err)), "{ctx} is unchanged. Choose another model, then retry.")
+		return
+	}
+	http.Redirect(w, r, "/c/"+convID, http.StatusSeeOther)
+}
+
+// connectMessage is an RPC error's message without the code prefix.
+func connectMessage(err error) string {
+	var ce *connect.Error
+	if errors.As(err, &ce) {
+		return ce.Message()
+	}
+	return err.Error()
+}
+
+// renderCompressFailed draws the failed card for a compression that never
+// started. {ctx} in the copy names the active context.
+func (h *Handler) renderCompressFailed(w http.ResponseWriter, r *http.Request, convID, model, guide, msg, hint string) {
+	vm, err := h.loadConversation(r.Context(), r, convID)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	conv, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID}))
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	base := slotVM{ConvID: convID, CtxLabel: activeLabel(vm.Inspector.Contexts, conv.Msg.GetActiveContext().GetId()), Tokens: vm.Gauge.Tokens, Turns: vm.Inspector.Turns}
+	base.NextLabel = nextLabel(vm.Inspector.Contexts)
+	card := h.compressCard(r.Context(), base, conv.Msg.GetConversation(), model, guide)
+	card.Kind = "failed"
+	card.Error = strings.ReplaceAll(msg, "{ctx}", card.CtxLabel)
+	card.ErrorHint = strings.ReplaceAll(hint, "{ctx}", card.CtxLabel)
+	if pid, mid, ok := splitModelValue(card.Selected); ok {
+		card.ModelMeta = h.modelMeta(r.Context(), pid, mid)
+	}
+	vm.Inspector.Card, vm.Inspector.Compress = &card, "open"
+	h.renderConversation(w, r, vm)
+}
+
+// handleCompactStream streams the summary into the compacting card as
+// `summary` events. `done` carries the page to load next: the conversation,
+// which then shows the review card or the failed card.
 func (h *Handler) handleCompactStream(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
 	runID, err := uuid.Parse(r.URL.Query().Get("run"))
 	if err != nil {
 		http.Error(w, "bad run id", http.StatusBadRequest)
+		return
+	}
+	if _, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID})); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 	events, err := h.supervisor.Subscribe(r.Context(), runID, 0)
@@ -103,34 +198,43 @@ func (h *Handler) handleCompactStream(w http.ResponseWriter, r *http.Request) {
 	}
 	var buf strings.Builder
 	for ev := range events {
-		if ev.Chunk != nil && ev.Chunk.Type == providers.ChunkText {
-			var p struct {
-				Text string `json:"text"`
+		if ev.Chunk != nil {
+			switch ev.Chunk.Type {
+			case providers.ChunkText:
+				var p struct {
+					Text string `json:"text"`
+				}
+				_ = json.Unmarshal(ev.Chunk.Payload, &p)
+				buf.WriteString(p.Text)
+				sse.event("summary", renderMarkdown(buf.String())+`<span class="caret"></span>`)
+			case providers.ChunkContentReset:
+				buf.Reset()
 			}
-			_ = json.Unmarshal(ev.Chunk.Payload, &p)
-			buf.WriteString(p.Text)
-			sse.event("message", renderMarkdown(buf.String()))
 		}
 		if ev.Terminal != nil {
-			if ev.Terminal.Status != "completed" || ev.Terminal.ResultMessageID == nil {
-				sse.event("promote", `<p class="error">Compaction did not complete.</p>`)
-				sse.event("done", "")
-				return
-			}
-			// finish_reason lives on the settled message row, not the
-			// run — one fetch tells us whether the summary was cut at
-			// the output limit so the promote form can warn.
-			truncated := false
-			if msgResp, merr := h.convos.GetMessage(r.Context(), connect.NewRequest(&psmithv1.GetMessageRequest{
-				Id: ev.Terminal.ResultMessageID.String(),
-			})); merr == nil {
-				truncated = isTruncatedFinish(msgResp.Msg.GetMessage().GetFinishReason())
-			}
-			sse.event("promote", renderComp(r.Context(), promoteForm(convID, ev.Terminal.ResultMessageID.String(), renderMarkdown(buf.String()), truncated)))
-			sse.event("done", "")
+			sse.event("done", "/c/"+convID)
 			return
 		}
 	}
+}
+
+// handleCompactStop cancels a running compression.
+func (h *Handler) handleCompactStop(w http.ResponseWriter, r *http.Request) {
+	convID := r.PathValue("id")
+	_ = r.ParseForm()
+	runID, err := uuid.Parse(r.PostFormValue("run"))
+	if err != nil {
+		http.Error(w, "bad run id", http.StatusBadRequest)
+		return
+	}
+	if h.runningCompaction(r.Context(), convID) != runID.String() {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err := h.supervisor.Cancel(r.Context(), runID); err != nil {
+		h.logger.Warn("web: cancel compaction failed", "err", err)
+	}
+	http.Redirect(w, r, "/c/"+convID, http.StatusSeeOther)
 }
 
 // handleCompactPromote rolls the reviewed summary into a fresh active context.
@@ -145,6 +249,10 @@ func (h *Handler) handleCompactPromote(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "message_id required", http.StatusBadRequest)
 		return
 	}
+	if !h.summaryInConversation(r, convID, mid) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 	if _, err := h.convos.PromoteCompactionToNewContext(r.Context(), connect.NewRequest(&psmithv1.PromoteCompactionToNewContextRequest{
 		MessageId: mid,
 	})); err != nil {
@@ -152,4 +260,79 @@ func (h *Handler) handleCompactPromote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/c/"+convID, http.StatusSeeOther)
+}
+
+// handleSummarySave writes the edited summary back before it is promoted.
+func (h *Handler) handleSummarySave(w http.ResponseWriter, r *http.Request) {
+	convID := r.PathValue("id")
+	_ = r.ParseForm()
+	mid := r.PostFormValue("message_id")
+	if !h.summaryInConversation(r, convID, mid) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	content := r.PostFormValue("content")
+	if strings.TrimSpace(content) == "" {
+		http.Error(w, "the summary can't be empty", http.StatusBadRequest)
+		return
+	}
+	if _, err := h.convos.EditMessage(r.Context(), connect.NewRequest(&psmithv1.EditMessageRequest{Id: mid, Content: content})); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	http.Redirect(w, r, "/c/"+convID, http.StatusSeeOther)
+}
+
+// handleSummaryDiscard deletes a pending (or failed) summary, which gives the
+// composer back.
+func (h *Handler) handleSummaryDiscard(w http.ResponseWriter, r *http.Request) {
+	convID := r.PathValue("id")
+	_ = r.ParseForm()
+	mid := r.PostFormValue("message_id")
+	if !h.summaryInConversation(r, convID, mid) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if _, err := h.convos.DeleteMessage(r.Context(), connect.NewRequest(&psmithv1.DeleteMessageRequest{Id: mid})); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	http.Redirect(w, r, "/c/"+convID, http.StatusSeeOther)
+}
+
+// summaryInConversation reports whether mid is a compression summary in the
+// conversation's active context, so a posted id can't reach another
+// conversation's messages.
+func (h *Handler) summaryInConversation(r *http.Request, convID, mid string) bool {
+	if mid == "" {
+		return false
+	}
+	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID}))
+	if err != nil {
+		return false
+	}
+	msgs, err := h.convos.ListMessages(r.Context(), connect.NewRequest(&psmithv1.ListMessagesRequest{ContextId: getResp.Msg.GetActiveContext().GetId(), StructureOnly: true}))
+	if err != nil {
+		return false
+	}
+	for _, m := range msgs.Msg.GetMessages() {
+		if m.GetId() == mid && m.GetRole() == psmithv1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY {
+			return true
+		}
+	}
+	return false
+}
+
+// sentence capitalizes the first letter and ends with a period, for server
+// errors shown as card copy.
+func sentence(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+	s = strings.ToUpper(s[:1]) + s[1:]
+	if !strings.HasSuffix(s, ".") {
+		s += "."
+	}
+	return s
 }

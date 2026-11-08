@@ -1,0 +1,54 @@
+package web
+
+// imagePageVM is an attached image on its own page: the transcript's tiles
+// link here, and Esc goes back.
+type imagePageVM struct {
+	ConvID    string
+	ConvTitle string
+	MsgID     string
+	Name      string
+	Meta      string // "PNG · 412 KB · sent by you today at 10:31"
+	URL       string // signed bytes URL; "" draws the placeholder
+}
+
+templ imagePage(v imagePageVM) {
+	@page(v.Name + " · Psmith") {
+		<div class="app image-app">
+			<main class="main image-page" id="image-page">
+				<header class="image-head">
+					<a class="image-back" href={ templ.SafeURL("/c/" + v.ConvID + "#m-" + v.MsgID) } data-key="escape">
+						@convIcon("back15")
+						{ v.ConvTitle }
+						<kbd>Esc</kbd>
+					</a>
+					<div class="image-title">
+						<h1>{ v.Name }</h1>
+						<div>{ v.Meta }</div>
+					</div>
+					<a class="image-dl" href={ templ.SafeURL(imageDownload(v)) } download={ v.Name }>
+						@convIcon("download")
+						Download
+					</a>
+				</header>
+				<section class="image-stage" aria-label="Image">
+					if v.URL != "" {
+						<img src={ v.URL } alt={ v.Name }/>
+					} else {
+						<div class="image-ph" role="img" aria-label={ v.Name }>
+							@convIcon("image28")
+							{ v.Name }
+						</div>
+					}
+				</section>
+				<footer class="image-foot">Shown fit to the window. <kbd>Esc</kbd> goes back to the conversation.</footer>
+			</main>
+		</div>
+	}
+}
+
+func imageDownload(v imagePageVM) string {
+	if v.URL != "" {
+		return v.URL
+	}
+	return "#"
+}

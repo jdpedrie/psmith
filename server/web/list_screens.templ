@@ -1,0 +1,620 @@
+package web
+
+import "strconv"
+
+// listIcon holds the glyphs only the list area's screens draw.
+templ listIcon(name string) {
+	switch name {
+		case "pin":
+			<svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 1.5h4M5 1.5v3.2L3 7h6L7 4.7V1.5M6 7v3.5"></path></svg>
+		case "pin15":
+			<svg width="15" height="15" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 1.5h4M5 1.5v3.2L3 7h6L7 4.7V1.5M6 7v3.5"></path></svg>
+		case "wand":
+			<svg width="15" height="15" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><path d="M2 12l7-7M10.5 1.5v2.5M9.25 2.75h2.5M12 6.5v1.5M11.25 7.25h1.5"></path></svg>
+		case "archive":
+			<svg width="15" height="15" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="2" width="11" height="3" rx="1"></rect><path d="M2.5 5v6.5h9V5M5.5 7.5h3"></path></svg>
+		case "check":
+			<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5"></path></svg>
+		case "alert":
+			<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="6.3"></circle><path d="M8 4.8v3.6M8 11h.01"></path></svg>
+		case "bubble":
+			<svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M5 7.5A2.5 2.5 0 0 1 7.5 5h13A2.5 2.5 0 0 1 23 7.5v9a2.5 2.5 0 0 1-2.5 2.5H12l-5 4v-4A2.5 2.5 0 0 1 5 16.5z"></path></svg>
+		case "person":
+			<svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="14" cy="10" r="4.5"></circle><path d="M5.5 23.5c1.2-4.2 4.5-6.5 8.5-6.5s7.3 2.3 8.5 6.5"></path></svg>
+		case "close":
+			<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"></path></svg>
+		case "send16":
+			<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"></path></svg>
+	}
+}
+
+// --- start page --------------------------------------------------------------
+
+// welcomeScreen is the app with nothing open.
+templ welcomeScreen(l listVM, w welcomeVM) {
+	@appScreen("Psmith", l) {
+		@welcomeMain(w)
+	}
+}
+
+templ welcomeMain(w welcomeVM) {
+	<main class="main home" id="main" data-list-home>
+		<div class="home-scroll">
+			<div class={ "home-inner", templ.KV("first", w.First) }>
+				<div>
+					if w.First {
+						<h1 class="home-h">Start your first conversation</h1>
+						<p class="home-p">Pick a profile and say hello. Each one brings its own instructions, model and plugins.</p>
+					} else {
+						<h1 class="home-h">Start a conversation</h1>
+						<p class="home-p">Pick a profile. Each one brings its own instructions, model and plugins.</p>
+					}
+				</div>
+				if len(w.Profiles) > 0 {
+					<section class="pgrid" aria-label="New conversation by profile">
+						for _, p := range w.Profiles {
+							<a class="pcard" href={ templ.SafeURL("/new?profile=" + p.ID) }>
+								@cardBody(p, false)
+							</a>
+						}
+					</section>
+				} else {
+					<div class="home-none"><a class="btn h36 lpad primary" href="/settings/profiles/new">Create a profile</a></div>
+				}
+				if !w.First && len(w.Recent) > 0 {
+					<section aria-labelledby="recent">
+						<div class="recent-bar"><h2 id="recent">Recent</h2><span><kbd>J</kbd> <kbd>K</kbd> move through the list</span></div>
+						<div class="recent">
+							for _, r := range w.Recent {
+								<a href={ templ.SafeURL("/c/" + r.ID) }><span class={ "dot", pc(r.Color) }></span><span class="rt">{ r.Title }</span><span class="rp">{ r.Profile }</span><span class="rtime">{ r.Time }</span></a>
+							}
+						</div>
+					</section>
+				}
+				<div class="home-keys">
+					<span><kbd>C</kbd> new conversation</span>
+					if w.First {
+						<span><a href="/settings/profiles">Manage profiles</a> in Settings</span>
+					} else {
+						<span><kbd>/</kbd> search or run a command</span>
+					}
+					<span><kbd>?</kbd> all shortcuts</span>
+				</div>
+			</div>
+		</div>
+	</main>
+}
+
+templ cardBody(p profileCardVM, badge bool) {
+	<span class="pcard-top"><span class={ "dot", pc(p.Color) }></span><span class="pcard-name">{ p.Name }</span>
+		if badge && p.Default {
+			<span class="pcard-def">Default</span>
+		}
+	</span>
+	<span class="pcard-desc">{ p.Desc }</span>
+	<span class="pcard-model">{ p.Model }</span>
+}
+
+// --- new conversation draft ---------------------------------------------------
+
+// draftScreen is a conversation that doesn't exist yet: pick a profile and a
+// model, write the first message. Sending creates it.
+templ draftScreen(l listVM, d draftVM) {
+	@appScreen("New conversation · Psmith", l) {
+		<main class="main draft" id="main">
+			<header class="conv-head">
+				<a class="menu-btn" href="/chats" aria-label="Conversations">
+					@icon("menu")
+				</a>
+				<div class="title">
+					<h1>New conversation</h1>
+					<div class="sub" data-draft-sub>
+						if d.Current != nil {
+							<span class={ "dot", "s7", pc(d.Current.Color) }></span>
+							<span data-draft-name>{ d.Current.Name }</span>
+						} else {
+							<span class="none">No profile</span>
+						}
+					</div>
+				</div>
+				@draftModel(d, "head")
+			</header>
+			if len(d.Profiles) > 0 {
+				<section class="draft-body" aria-label="Choose a profile">
+					<div class="draft-inner">
+						<div>
+							<h2 class="home-h">Who are you talking to?</h2>
+							<p class="home-p">A profile sets the system message, the model and the plugins. Nothing is saved until you send.</p>
+						</div>
+						<div class="pgrid" role="group" aria-label="Profiles">
+							for _, p := range d.Profiles {
+								<button
+									class="pcard"
+									type="submit"
+									form="composer"
+									formmethod="get"
+									formaction="/new"
+									name="profile"
+									value={ p.ID }
+									aria-pressed={ strconv.FormatBool(d.Current != nil && d.Current.ID == p.ID) }
+									data-pick-profile={ p.ID }
+									data-name={ p.Name }
+									data-color={ pc(p.Color) }
+									data-model={ p.ModelValue }
+								>
+									@cardBody(p, true)
+								</button>
+							}
+							<a class="pcard-new" href="/settings/profiles/new">
+								@icon("plus")
+								New profile
+							</a>
+						</div>
+					</div>
+				</section>
+			} else {
+				<section class="draft-body" aria-label="No profiles">
+					<div class="draft-none">
+						<span class="none-icon">
+							@listIcon("person")
+						</span>
+						<h2>No profiles yet</h2>
+						<p>Every conversation starts from a profile. It sets the system message, the model and the plugins. Make one, then start here.</p>
+						<div class="none-btns"><a class="btn h36 lpad primary" href={ templ.SafeURL(newProfileHref(d)) }>Create a profile</a></div>
+						<p class="none-note">Pick a model above and the new profile starts with it.</p>
+					</div>
+				</section>
+			}
+			<footer class="composer-wrap">
+				<form id="composer" class="composer draft-composer" method="post" action="/new" enctype="multipart/form-data">
+					if d.Current != nil {
+						<input type="hidden" name="profile_id" value={ d.Current.ID } data-draft-profile/>
+					}
+					<input type="hidden" name="model" value={ d.Model.Value } data-draft-model/>
+					<label for="composer-text" class="sr-only">{ d.Placeholder }</label>
+					<textarea id="composer-text" name="message" rows="2" placeholder={ d.Placeholder } disabled?={ d.Current == nil }>{ d.Text }</textarea>
+					<div class="composer-bar">
+						if d.Current != nil {
+							<label class="attach-btn" aria-label="Attach files">
+								@icon("attach")
+								<input type="file" name="file" multiple/>
+							</label>
+						}
+						@draftModel(d, "bar")
+						<span class="hint"><kbd>Enter</kbd> sends · <kbd>Shift</kbd> <kbd>Enter</kbd> new line</span>
+						<button class="draft-send" type="submit" disabled?={ d.Current == nil } aria-label="Send"><span>Send</span>
+							@listIcon("send16")
+						</button>
+					</div>
+				</form>
+			</footer>
+		</main>
+	}
+}
+
+func newProfileHref(d draftVM) string {
+	if d.Model.Value != "" {
+		return "/settings/profiles/new?model=" + d.Model.Value
+	}
+	return "/settings/profiles/new"
+}
+
+func draftModelLabel(d draftVM) string {
+	if d.Model.Name == "" {
+		return "Model: none chosen. Choose model"
+	}
+	return "Model: " + d.Model.Name + ". Change model"
+}
+
+// draftModel is the draft's model button and its menu. The header carries
+// it on a wide screen, the composer bar on a phone.
+templ draftModel(d draftVM, where string) {
+	<details class={ "draft-model", where } data-menu>
+		<summary class="head-btn" aria-label={ draftModelLabel(d) } aria-haspopup="menu">
+			if d.Model.Name != "" {
+				<span data-model-name>{ d.Model.Name }</span>
+				if where == "head" && d.Model.Provider != "" {
+					<small data-model-provider>{ d.Model.Provider }</small>
+				}
+			} else {
+				<span data-model-name>Choose model</span>
+			}
+			@icon("caret")
+		</summary>
+		<div class="menu dm-menu" role="menu">
+			if len(d.Models) == 0 {
+				<a href="/settings/providers" role="menuitem">Turn on a model in Settings</a>
+			}
+			for _, m := range d.Models {
+				<button
+					type="submit"
+					form="composer"
+					formmethod="get"
+					formaction="/new"
+					name="pick"
+					value={ m.Value }
+					role="menuitem"
+					class={ templ.KV("on", m.Value == d.Model.Value) }
+					data-pick-model={ m.Value }
+					data-name={ m.Name }
+					data-provider={ m.Provider }
+				>{ m.Name }<small>{ m.Provider }</small></button>
+			}
+		</div>
+	</details>
+}
+
+// --- keyboard shortcuts -------------------------------------------------------
+
+// shortcutsScreen opens the shortcuts in the right-hand column beside
+// whatever was open.
+templ shortcutsScreen(l listVM, c *convVM, w welcomeVM) {
+	@appScreen("Keyboard shortcuts · Psmith", l) {
+		if c != nil {
+			<main class="main" id="main" data-conv={ c.ID }>
+				@convHead(*c)
+				@transcript(*c)
+				@composerSlot(*c)
+			</main>
+		} else {
+			@welcomeMain(w)
+		}
+		<aside class="inspector shortcuts" id="shortcuts" aria-label="Keyboard shortcuts">
+			<div class="sc-head">
+				<h2>Keyboard shortcuts</h2>
+				<a class="sc-close" href={ templ.SafeURL(closeShortcuts(c)) } aria-label="Close shortcuts (Esc)" data-close-panel>
+					@listIcon("close")
+				</a>
+			</div>
+			<div class="sc-body">
+				for _, sec := range shortcutSections {
+					@scSection(sec.Title, sec.Keys)
+				}
+				<p class="sc-note">Single-key shortcuts work when no text field has focus.</p>
+			</div>
+		</aside>
+	}
+}
+
+type scKey struct {
+	Label string
+	Keys  []string
+}
+
+type scGroup struct {
+	Title string
+	Keys  []scKey
+}
+
+// shortcutSections are the panel's contents, in the order app.js and
+// list.js bind them.
+var shortcutSections = []scGroup{
+	{"Anywhere", []scKey{{"Search and commands", []string{"/"}}, {"New conversation", []string{"C"}}, {"Settings", []string{","}}, {"Show or hide the inspector", []string{"I"}}, {"This list of shortcuts", []string{"?"}}}},
+	{"Conversation list", []scKey{{"Next or previous conversation", []string{"J", "K"}}, {"Open the highlighted result", []string{"Enter"}}, {"Select conversations", []string{"X"}}, {"Leave search or selection", []string{"Esc"}}}},
+	{"Conversation", []scKey{{"Change model", []string{"M"}}, {"Edit last message", []string{"↑"}}, {"Stop the reply", []string{"Esc"}}}},
+	{"Composer", []scKey{{"Send", []string{"Enter"}}, {"New line", []string{"Shift", "Enter"}}}},
+	{"Settings", []scKey{{"Save changes", []string{"⌘S"}}}},
+}
+
+func closeShortcuts(c *convVM) string {
+	if c != nil {
+		return "/c/" + c.ID
+	}
+	return "/chats"
+}
+
+templ scSection(title string, keys []scKey) {
+	<section>
+		<h3>{ title }</h3>
+		<dl class="sc-keys">
+			for _, k := range keys {
+				<dt>{ k.Label }</dt>
+				<dd>
+					for i, key := range k.Keys {
+						if i > 0 {
+							{ " " }
+						}
+						<kbd>{ key }</kbd>
+					}
+				</dd>
+			}
+		</dl>
+	</section>
+}
+
+// --- search as a command line --------------------------------------------------
+
+// commandResults is what the search box shows while typing: commands,
+// conversations by title, and settings pages. app.js drops it in place of
+// the list body.
+templ commandResults(c commandVM) {
+	<div class="cmd" role="listbox" aria-label={ "Results for " + c.Query }>
+		if len(c.Commands) > 0 {
+			<div class="cmd-group">Commands</div>
+			for _, it := range c.Commands {
+				@cmdItem(it)
+			}
+		}
+		if len(c.Convs) > 0 {
+			<div class="cmd-group">Conversations</div>
+			for _, r := range c.Convs {
+				<a class="cmd-conv" role="option" aria-selected={ strconv.FormatBool(r.Active) } href={ templ.SafeURL("/c/" + r.ID) }>
+					<span class={ "dot", pc(r.Color) }></span>
+					<span class="row-body">
+						<span class="row-top"><span class="ct">
+							@boldRuns(r.Hits, r.Title)
+						</span><span class="row-time">{ r.Time }</span></span>
+						if r.Archived {
+							<span class="row-sub tagged">{ r.Profile }<span class="tag">Archived</span></span>
+						} else {
+							<span class="row-sub">{ r.Profile }</span>
+						}
+					</span>
+				</a>
+			}
+			if c.MoreHref != "" {
+				<a class="cmd-item more" role="option" aria-selected="false" href={ templ.SafeURL(c.MoreHref) }>
+					@icon("search13")
+					<span class="cl">{ "Show all " + strconv.Itoa(c.More) + " titles matching “" + c.Query + "”" }</span>
+				</a>
+			}
+		}
+		if len(c.Settings) > 0 {
+			<div class="cmd-group">Settings</div>
+			for _, it := range c.Settings {
+				@cmdItem(it)
+			}
+		}
+		if len(c.Commands) == 0 && len(c.Convs) == 0 && len(c.Settings) == 0 {
+			<p class="no-match">{ "Nothing matches “" + c.Query + "”." }</p>
+		}
+		<div class="keyhints">
+			<span><kbd>↑</kbd> <kbd>↓</kbd> move</span>
+			<span><kbd>Enter</kbd> run</span>
+			<span><kbd>Esc</kbd> back to the list</span>
+		</div>
+	</div>
+}
+
+templ boldRuns(hits []hlPart, s string) {
+	if len(hits) == 0 {
+		{ s }
+	} else {
+		for _, p := range hits {
+			if p.Hit {
+				<b>{ p.Text }</b>
+			} else {
+				{ p.Text }
+			}
+		}
+	}
+}
+
+templ cmdItem(it cmdVM) {
+	if it.Post != "" {
+		<form class="inline" method="post" action={ templ.SafeURL(it.Post) }>
+			for k, v := range it.Fields {
+				<input type="hidden" name={ k } value={ v }/>
+			}
+			<button class="cmd-item" type="submit" role="option" aria-selected={ strconv.FormatBool(it.Selected) }>
+				@cmdBody(it)
+			</button>
+		</form>
+	} else {
+		<a class="cmd-item" role="option" aria-selected={ strconv.FormatBool(it.Selected) } href={ templ.SafeURL(it.Href) }>
+			@cmdBody(it)
+		</a>
+	}
+}
+
+templ cmdBody(it cmdVM) {
+	@icon(it.Icon)
+	<span class="cl">
+		@boldRuns(it.Hits, it.Label)
+	</span>
+	if it.Hint != "" {
+		<span class="ch">{ it.Hint }</span>
+	}
+}
+
+// --- sign in -------------------------------------------------------------------
+
+templ signInScreen(s signInVM) {
+	@page("Sign in · Psmith") {
+		<main class="signin">
+			<div class="signin-inner">
+				<div class="signin-brand">
+					<span class="mark big" aria-hidden="true">P</span>
+					<div>
+						<h1>Sign in to Psmith</h1>
+						<div class="signin-server">{ s.Server }</div>
+					</div>
+				</div>
+				<form class="signin-card" method="post" action="/login">
+					if s.Error != "" {
+						<p id="signin-error" class="signin-err" role="alert">
+							@listIcon("alert")
+							{ s.Error }
+						</p>
+					}
+					<div>
+						<label class="flabel" for="username">Username</label>
+						<input class="sfield" id="username" name="username" autocomplete="username" value={ s.Username } autofocus?={ s.Username == "" }/>
+					</div>
+					<div>
+						<label class="flabel" for="password">Password</label>
+						if s.Error != "" {
+							<input class="sfield" id="password" name="password" type="password" autocomplete="current-password" aria-invalid="true" aria-describedby="signin-error" autofocus?={ s.Username != "" }/>
+						} else {
+							<input class={ "sfield", templ.KV("focus", s.ShowFocus) } id="password" name="password" type="password" autocomplete="current-password" value={ s.Password } autofocus?={ s.Username != "" }/>
+						}
+					</div>
+					<button class="btn-go" type="submit">Sign in<kbd>Enter</kbd></button>
+				</form>
+				<p class="signin-note">Accounts on this server are made by an admin.</p>
+			</div>
+		</main>
+	}
+}
+
+// --- first-run setup -------------------------------------------------------------
+
+templ setupScreen(step int) {
+	@page("Set up · Psmith") {
+		<main class="setup">
+			<div class="setup-inner">
+				<div class="setup-head">
+					<span class="mark big" aria-hidden="true">P</span>
+					<div>
+						<h1>Welcome to Psmith</h1>
+						<p>Connect a provider and turn on a model, and you're ready to chat. Your keys stay on this server.</p>
+					</div>
+					<ol class="steps" aria-label={ "Setup steps, step " + strconv.Itoa(step) + " of 3" }>
+						@setupStep(step, 1, "Provider")
+						<li class="step-line" aria-hidden="true"></li>
+						@setupStep(step, 2, "Key")
+						<li class="step-line" aria-hidden="true"></li>
+						@setupStep(step, 3, "Models")
+					</ol>
+				</div>
+				{ children... }
+			</div>
+		</main>
+	}
+}
+
+templ setupStep(cur, n int, label string) {
+	if n < cur {
+		<li class="step done"><span class="step-n">
+			@listIcon("check")
+		</span>{ label }</li>
+	} else if n == cur {
+		<li class="step now" aria-current="step"><span class="step-n">{ strconv.Itoa(n) }</span>{ label }</li>
+	} else {
+		<li class="step"><span class="step-n">{ strconv.Itoa(n) }</span>{ label }</li>
+	}
+}
+
+templ setupProviderScreen(s setupVM) {
+	@setupScreen(1) {
+		<form class="contents" method="get" action="/setup/key">
+			<fieldset class="tpl-set">
+				<legend>Choose a provider</legend>
+				<div class="tpl-grid">
+					for _, t := range s.Templates {
+						<label class="tpl">
+							<input type="radio" name="t" value={ t.ID } checked?={ t.ID == s.Template.ID }/>
+							<span class="tpl-mono" aria-hidden="true">{ t.Mono }</span>
+							<span class="tpl-text"><b>{ t.Name }</b><span>{ t.Kind }</span></span>
+						</label>
+					}
+				</div>
+			</fieldset>
+			<div class="setup-foot">
+				<span class="setup-step">Step 1 of 3</span>
+				<button class="btn-go" type="submit">Continue<kbd>Enter</kbd></button>
+			</div>
+		</form>
+	}
+}
+
+templ setupKeyScreen(s setupVM) {
+	@setupScreen(2) {
+		<form class="contents" method="post" action="/setup/key">
+			<button class="sr-only" type="submit" name="action" value="continue" tabindex="-1" aria-hidden="true"></button>
+			<input type="hidden" name="t" value={ s.Template.ID }/>
+			if s.ProviderID != "" {
+				<input type="hidden" name="p" value={ s.ProviderID }/>
+			}
+			<div class="setup-card">
+				<div class="sc-top">
+					<span class="tpl-mono" aria-hidden="true">{ s.Template.Mono }</span>
+					<span class="tpl-text"><b>{ s.Template.Name }</b><span>{ s.Template.Kind + hostSuffix(s.Template.Base) }</span></span>
+					<a class="btn h32" href={ templ.SafeURL("/setup?t=" + s.Template.ID) }>Change</a>
+				</div>
+				<div class="sc-fields">
+					<div>
+						<label class="flabel" for="plabel">Name</label>
+						<input class="sfield" id="plabel" name="label" value={ s.Label } required/>
+						<p class="fhint">Shown in model pickers.</p>
+					</div>
+					if s.Template.NeedsURL {
+						<div>
+							<label class="flabel" for="purl">Base URL</label>
+							<input class="sfield mono" id="purl" name="base_url" value={ s.BaseURL } placeholder="https://example.com/v1"/>
+						</div>
+					}
+					<div>
+						<label class="flabel" for="pkey">API key</label>
+						<div class="keyrow">
+							<input class={ "sfield", "mono", templ.KV("focus", s.ShowFocus) } id="pkey" name="api_key" type="password" autocomplete="off" value={ s.Key } autofocus/>
+							<button class="btn setup-raised" type="submit" name="action" value="test">Test connection</button>
+						</div>
+						if s.Test != nil {
+							<p role="status" class={ "result", templ.KV("bad", !s.Test.OK) }><span class="dot"></span>{ s.Test.Message }</p>
+						}
+					</div>
+				</div>
+			</div>
+			<p class="setup-note">The key stays on this server. Browsers and apps never see it.</p>
+			<div class="setup-foot">
+				<a class="btn ghost h36 lpad" href={ templ.SafeURL("/setup?t=" + s.Template.ID) }>Back</a>
+				<span class="setup-step">Step 2 of 3</span>
+				<button class="btn-go" type="submit" name="action" value="continue">Continue<kbd>Enter</kbd></button>
+			</div>
+		</form>
+	}
+}
+
+templ setupModelsScreen(s setupVM) {
+	@setupScreen(3) {
+		<form class="contents" method="post" action="/setup/models" data-count-on>
+			<input type="hidden" name="p" value={ s.ProviderID }/>
+			<input type="hidden" name="t" value={ s.Template.ID }/>
+			<section aria-labelledby="found">
+				<div class="found-bar">
+					<h2 id="found">{ s.Label + " offers " + strconv.Itoa(len(s.Models)) + " models · " }<span data-on-count>{ strconv.Itoa(s.onCount()) }</span> on</h2>
+					<a class="btn h32" href={ templ.SafeURL("/setup/models?p=" + s.ProviderID) }>Discover again</a>
+				</div>
+				if s.Error != "" {
+					<p class="result bad"><span class="dot"></span>{ s.Error }</p>
+				}
+				<div class="found-wrap">
+					<table class="tbl setup-tbl">
+						<thead>
+							<tr><th scope="col">Model</th><th scope="col">Context</th><th scope="col">Cost</th><th scope="col">Can do</th><th scope="col">On</th></tr>
+						</thead>
+						<tbody>
+							for _, m := range s.Models {
+								<tr>
+									<td><span class="name">{ m.Name }</span><span class="id">{ m.ID }</span></td>
+									<td class="tnum">{ m.Context }</td>
+									<td>{ m.Cost }</td>
+									<td>
+										<span class="tags">
+											for _, c := range m.Caps {
+												<span>{ c }</span>
+											}
+										</span>
+									</td>
+									<td>
+										<label class="cbs">
+											<input type="checkbox" role="switch" name="model_ids" value={ m.ID } checked?={ m.On } aria-label={ m.Name }/>
+											<span class="switch" aria-hidden="true"></span>
+										</label>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+				<p class="foot-note">Turn on the ones you want to chat with. You can change this later in Settings, Providers.</p>
+			</section>
+			<div class="setup-foot">
+				<a class="btn ghost h36 lpad" href={ templ.SafeURL("/setup/key?p=" + s.ProviderID + "&t=" + s.Template.ID) }>Back</a>
+				<span class="setup-step">Step 3 of 3</span>
+				<button class="btn-go" type="submit">Finish setup<kbd>Enter</kbd></button>
+			</div>
+		</form>
+	}
+}

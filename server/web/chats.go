@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -16,16 +17,8 @@ import (
 	"github.com/jdpedrie/psmith/server/auth"
 	"github.com/jdpedrie/psmith/server/providers"
 	"github.com/jdpedrie/psmith/server/store"
+	"github.com/jdpedrie/psmith/server/stream"
 )
-
-func (h *Handler) handleChats(w http.ResponseWriter, r *http.Request) {
-	convos, token, err := h.listConvosPage(r.Context(), "", "")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	h.render(w, r, http.StatusOK, chatsPage(convos, token))
-}
 
 // convTranscript is everything the conversation page (or its messages
 // partial) needs from one load pass.
@@ -34,60 +27,6 @@ type convTranscript struct {
 	msgs             []msgVM
 	pendingSummaryID string
 	pendingTruncated bool
-}
-
-// loadTranscript assembles the transcript view-model for a conversation:
-// messages of the active context, plus the pending-compression gate
-// state. Shared by the full page render and the SSE-triggered partial.
-func (h *Handler) loadTranscript(r *http.Request, id string) (convTranscript, error) {
-	var out convTranscript
-	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&psmithv1.GetConversationRequest{
-		Id: id,
-	}))
-	if err != nil {
-		return out, err
-	}
-	out.conv = getResp.Msg.GetConversation()
-	ctxID := getResp.Msg.GetActiveContext().GetId()
-
-	msgsResp, err := h.convos.ListMessages(r.Context(), connect.NewRequest(&psmithv1.ListMessagesRequest{
-		ContextId: ctxID,
-	}))
-	if err != nil {
-		return out, err
-	}
-
-	for _, m := range msgsResp.Msg.GetMessages() {
-		role := roleClass(m.GetRole())
-		if role == "system" {
-			continue // don't surface system framing in the transcript
-		}
-		content := m.GetContent()
-		if dc := m.GetDisplayContent(); dc != "" {
-			content = dc
-		}
-		var images []string
-		for _, a := range m.GetAttachments() {
-			if a.GetKind() == "image" {
-				if url := h.signedImageURL(r.Context(), a.GetFileId()); url != "" {
-					images = append(images, url)
-				}
-			}
-		}
-		out.msgs = append(out.msgs, msgVM{ID: m.GetId(), ConvID: id, ParentID: m.GetParentId(), Role: role, HTML: renderMarkdown(content), Images: images})
-	}
-
-	// A clean (non-errored) compression summary gates the conversation:
-	// the server refuses sends and compacts until it's promoted or
-	// deleted, so the composer gives way to the review bar. Truncated
-	// (output-limit-capped) summaries warn instead of inviting Confirm.
-	for _, m := range msgsResp.Msg.GetMessages() {
-		if m.GetRole() == psmithv1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY && m.GetErrorText() == "" {
-			out.pendingSummaryID = m.GetId()
-			out.pendingTruncated = isTruncatedFinish(m.GetFinishReason())
-		}
-	}
-	return out, nil
 }
 
 // activeRunID returns a running stream_run for the conversation, or ""
@@ -106,64 +45,49 @@ func (h *Handler) activeRunID(r *http.Request, convID string) string {
 		UserID:         u.ID,
 		ConversationID: cid,
 	})
-	if err != nil || len(runs) == 0 {
+	if err != nil {
 		return ""
 	}
-	return runs[0].ID.String()
+	// A compression run streams into the composer's slot, not the
+	// transcript; only a reply renders as a live row.
+	for _, run := range runs {
+		if run.Purpose != string(stream.PurposeCompression) {
+			return run.ID.String()
+		}
+	}
+	return ""
 }
 
 func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	t, err := h.loadTranscript(r, id)
+	c, err := h.loadConversation(r.Context(), r, id)
 	if err != nil {
 		http.Error(w, "conversation not found", http.StatusNotFound)
 		return
 	}
-	convos, sidebarToken, _ := h.listConvosPage(r.Context(), id, "")
-	harness := harnessVMFrom(t.conv.GetHarness())
-	pick := h.modelPicker(r.Context(), id, currentSettingsModel(t.conv), capsVM{}, harness)
-	runID := r.URL.Query().Get("run")
-	if runID == "" {
+	c.RunID = r.URL.Query().Get("run")
+	if c.RunID == "" {
 		// Entering (or reloading) a conversation with an in-flight run
 		// — from this client or any other — renders the live stream
 		// instead of a transcript that ends at the question.
-		runID = h.activeRunID(r, id)
+		c.RunID = h.activeRunID(r, id)
 	}
-	h.render(w, r, http.StatusOK, conversationPage(convos, sidebarToken, convoVM{ID: t.conv.GetId(), Title: convoTitle(t.conv), Harness: harness}, t.msgs, pick.Current, runID, t.pendingSummaryID, t.pendingTruncated, t.conv.GetArchivedAt() != nil))
+	h.applyPageState(r.Context(), r, &c)
+	l := h.loadList(r.Context(), r, id, "")
+	h.render(w, r, http.StatusOK, conversationScreen(l, c))
 }
 
-// handleMessagesPartial re-renders the #messages region. Triggered by
-// the SSE bridge when an account event names this conversation.
+// handleMessagesPartial re-renders the transcript. Triggered by the SSE
+// bridge when an account event names this conversation.
 func (h *Handler) handleMessagesPartial(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	t, err := h.loadTranscript(r, id)
+	c, err := h.loadConversation(r.Context(), r, id)
 	if err != nil {
 		http.Error(w, "conversation not found", http.StatusNotFound)
 		return
 	}
-	h.render(w, r, http.StatusOK, messagesRegion(id, t.msgs, h.activeRunID(r, id)))
-}
-
-// handleSidebarPartial re-renders the conversations sidebar. Triggered
-// by the SSE bridge on any conversation change.
-func (h *Handler) handleSidebarPartial(w http.ResponseWriter, r *http.Request) {
-	convos, token, err := h.listConvosPage(r.Context(), r.URL.Query().Get("active"), "")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	h.render(w, r, http.StatusOK, sidebar(convos, token))
-}
-
-// handleSidebarRowsPartial serves the Show-more continuation: the next
-// page of rows plus, when more remain, another Show-more button.
-func (h *Handler) handleSidebarRowsPartial(w http.ResponseWriter, r *http.Request) {
-	convos, token, err := h.listConvosPage(r.Context(), r.URL.Query().Get("active"), r.URL.Query().Get("token"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	h.render(w, r, http.StatusOK, sidebarRows(convos, token))
+	c.RunID = h.activeRunID(r, id)
+	h.render(w, r, http.StatusOK, transcript(c))
 }
 
 // handleSend sends a user turn. For htmx requests it returns an HTML fragment
@@ -177,6 +101,12 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 
 	text, modelVal := h.readCompose(r)
 	attachIDs, attachImages := h.uploadComposeFiles(r)
+	// Files uploaded ahead of the send ride along as stored ids.
+	for _, id := range r.Form["attachment"] {
+		if id = strings.TrimSpace(id); id != "" {
+			attachIDs = append(attachIDs, id)
+		}
+	}
 
 	if text == "" && len(attachIDs) == 0 {
 		if enhanced {
@@ -198,10 +128,10 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 			// Echo the attempted message so it isn't lost, then the error.
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			if text != "" || len(attachImages) > 0 {
-				echo := messageBubble(msgVM{ConvID: convID, Role: "user", HTML: renderMarkdown(text), Images: attachImages}, false)
+				echo := userRow(msgItem{ConvID: convID, Role: "user", Text: text, HTML: renderMarkdown(text), Images: imageAttach(attachImages)})
 				_, _ = io.WriteString(w, renderComp(r.Context(), echo))
 			}
-			_, _ = io.WriteString(w, `<div class="msg error"><div class="md">`+html.EscapeString(friendlyError(err))+`</div></div>`)
+			_, _ = io.WriteString(w, `<p class="reply-error" role="alert">`+html.EscapeString(friendlyError(err))+`</p>`)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -221,9 +151,21 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	user := messageBubble(msgVM{ID: userMsg.GetId(), ConvID: convID, Role: "user", HTML: renderMarkdown(userMsg.GetContent()), Images: attachImages}, true)
+	images, files := h.attachmentsOf(r.Context(), userMsg.GetAttachments())
+	if len(images)+len(files) == 0 {
+		images = imageAttach(attachImages)
+	}
+	user := userRow(msgItem{ID: userMsg.GetId(), ConvID: convID, Role: "user", Text: userMsg.GetContent(), HTML: renderMarkdown(userMsg.GetContent()), Images: images, Files: files})
 	_, _ = io.WriteString(w, renderComp(r.Context(), user))
-	_, _ = io.WriteString(w, renderComp(r.Context(), assistantStream(convID, runID)))
+	_, _ = io.WriteString(w, renderComp(r.Context(), liveReply(convID, runID, liveInit{})))
+}
+
+func imageAttach(urls []string) []attachVM {
+	out := make([]attachVM, 0, len(urls))
+	for _, u := range urls {
+		out = append(out, attachVM{URL: u})
+	}
+	return out
 }
 
 // uploadComposeFiles stores any attached files and returns their ids plus
@@ -319,7 +261,7 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
-	var buf strings.Builder
+	st := &liveState{}
 	for ev := range events {
 		if ev.Chunk != nil {
 			switch ev.Chunk.Type {
@@ -328,23 +270,71 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 					Text string `json:"text"`
 				}
 				_ = json.Unmarshal(ev.Chunk.Payload, &p)
-				buf.WriteString(p.Text)
-				sse.event("message", renderMarkdown(buf.String()))
+				if st.thinkStart != nil && st.thinkDur == 0 {
+					st.thinkDur = time.Since(*st.thinkStart)
+					sse.event("chips", renderComp(r.Context(), liveChips(st.chips())))
+				}
+				st.text.WriteString(p.Text)
+				sse.event("message", renderMarkdown(st.text.String())+`<span class="caret"></span>`)
+			case providers.ChunkThinking:
+				if st.thinkStart == nil {
+					now := time.Now()
+					st.thinkStart = &now
+					sse.event("chips", renderComp(r.Context(), liveChips(st.chips())))
+				}
+			case providers.ChunkContentReset:
+				st.text.Reset()
+			case providers.ChunkToolUseStart:
+				var p struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+				}
+				_ = json.Unmarshal(ev.Chunk.Payload, &p)
+				st.tools = append(st.tools, liveTool{id: p.ID, name: p.Name, started: time.Now()})
+				sse.event("chips", renderComp(r.Context(), liveChips(st.chips())))
+			case providers.ChunkToolUseDelta:
+				var p struct {
+					Partial string `json:"partial_json"`
+				}
+				_ = json.Unmarshal(ev.Chunk.Payload, &p)
+				if n := len(st.tools); n > 0 {
+					st.tools[n-1].input = append(st.tools[n-1].input, p.Partial...)
+				}
+			case providers.ChunkToolUseEnd:
+				if n := len(st.tools); n > 0 {
+					st.tools[n-1].summary = toolSummary(st.tools[n-1].input)
+					sse.event("chips", renderComp(r.Context(), liveChips(st.chips())))
+				}
+			case providers.ChunkToolResult:
+				var p struct {
+					ID        string `json:"tool_use_id"`
+					ElapsedMS int64  `json:"elapsed_ms"`
+					Error     string `json:"error"`
+				}
+				_ = json.Unmarshal(ev.Chunk.Payload, &p)
+				for i := range st.tools {
+					if st.tools[i].id == p.ID {
+						st.tools[i].done, st.tools[i].elapsed, st.tools[i].err = true, time.Duration(p.ElapsedMS)*time.Millisecond, p.Error
+					}
+				}
+				sse.event("chips", renderComp(r.Context(), liveChips(st.chips())))
 			case providers.ChunkError:
 				var p struct {
 					Message string `json:"message"`
 				}
 				_ = json.Unmarshal(ev.Chunk.Payload, &p)
-				buf.WriteString("\n\n[error: " + p.Message + "]")
-				sse.event("message", renderMarkdown(buf.String()))
+				sse.event("message", renderMarkdown(st.text.String())+`<p class="reply-error" role="alert">`+html.EscapeString(p.Message)+`</p>`)
 			case providers.ChunkElicit:
-				var p struct {
-					ElicitationID   string          `json:"elicitation_id"`
-					Message         string          `json:"message"`
-					RequestedSchema json.RawMessage `json:"requested_schema"`
+				// The tool that asked is the one still running.
+				tool := ""
+				for i := len(st.tools) - 1; i >= 0; i-- {
+					if !st.tools[i].done {
+						tool = st.tools[i].name
+						break
+					}
 				}
-				if json.Unmarshal(ev.Chunk.Payload, &p) == nil {
-					sse.event("elicit", renderComp(r.Context(), elicitForm(convID, p.ElicitationID, p.Message, parseElicitFields(p.RequestedSchema))))
+				if card := elicitEvent(r.Context(), convID, ev.Chunk.Payload, tool); card != "" {
+					sse.event("elicit", card)
 				}
 			}
 		}
@@ -353,6 +343,62 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+// liveState is what a streaming reply has shown so far.
+type liveState struct {
+	text       strings.Builder
+	thinkStart *time.Time
+	thinkDur   time.Duration
+	tools      []liveTool
+}
+
+type liveTool struct {
+	id, name, err string
+	summary       string
+	input         []byte
+	started       time.Time
+	done          bool
+	elapsed       time.Duration
+}
+
+// liveChipVM is one chip above a streaming reply.
+type liveChipVM struct {
+	Name     string // tool name, mono; empty for thinking
+	Label    string
+	Live     bool
+	Thinking bool
+	Secs     string // "3.2s" so far; the page keeps it ticking
+	Since    string // unix ms the chip's clock started, for the ticker
+}
+
+func (s *liveState) chips() []liveChipVM {
+	var out []liveChipVM
+	if s.thinkStart != nil {
+		if s.thinkDur > 0 {
+			out = append(out, liveChipVM{Label: fmt.Sprintf("Thought for %.1fs", s.thinkDur.Seconds())})
+		} else {
+			out = append(out, liveChipVM{Label: "Thinking", Live: true, Thinking: true,
+				Secs: fmt.Sprintf("%.1fs", time.Since(*s.thinkStart).Seconds()), Since: fmt.Sprint(s.thinkStart.UnixMilli())})
+		}
+	}
+	for i := range s.tools {
+		t := &s.tools[i]
+		label := ""
+		if t.summary != "" {
+			label = t.summary + " · "
+		}
+		switch {
+		case t.done && t.err != "":
+			out = append(out, liveChipVM{Name: t.name, Label: fmt.Sprintf("failed · %.1fs", t.elapsed.Seconds())})
+		case t.done:
+			out = append(out, liveChipVM{Name: t.name, Label: label + fmt.Sprintf("%.1fs", t.elapsed.Seconds())})
+		default:
+			out = append(out, liveChipVM{Name: t.name, Label: label + "running", Live: true,
+				Secs: fmt.Sprintf("%.1fs", time.Since(t.started).Seconds()), Since: fmt.Sprint(t.started.UnixMilli())})
+		}
+	}
+	return out
 }
 
 // readCompose reads the message and selected model from the composer. The

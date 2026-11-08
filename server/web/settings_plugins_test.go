@@ -65,7 +65,7 @@ func TestPluginPipeline(t *testing.T) {
 	}
 
 	// Remove it.
-	rmForm := url.Values{"ordinal": {"0"}}
+	rmForm := url.Values{"remove": {"basic_grounding"}}
 	rmReq := httptest.NewRequest("POST", "/settings/profiles/"+profileID+"/plugins/remove", strings.NewReader(rmForm.Encode())).WithContext(userCtx)
 	rmReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rmReq.SetPathValue("id", profileID)

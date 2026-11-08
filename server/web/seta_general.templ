@@ -1,0 +1,268 @@
+package web
+
+import "strconv"
+
+type generalVM struct {
+	Index       bool // served at /settings: a phone shows the navigation instead
+	WarnSel     string
+	WarnCustom  string
+	UserName    string
+	Login       string
+	Initial     string
+	Admin       bool
+	Server      string
+	Version     string
+	PwResult    *testVM
+}
+
+var saWarnOpts = []saOpt{{"0", "Off"}, {"50000", "50k tokens"}, {"75000", "75k tokens"}, {"100000", "100k tokens"}, {"150000", "150k tokens"}, {"200000", "200k tokens"}, {"custom", "Custom…"}}
+
+templ generalScreen(n snavVM, g generalVM) {
+	@settingsScreen("General", n) {
+		<div class="spage-scroll seta">
+			if g.Index {
+				<span class="sindex" hidden></span>
+			}
+			<div class="spage-inner">
+				@saPageHead(saHead{Crumbs: []saCrumb{{"Settings", "/settings"}}, Title: "General", Lede: "Your context warning follows you to every device. Changes apply as you make them."})
+				<section aria-labelledby="ctx">
+					<h3 id="ctx" class="sec-title">Context warning</h3>
+					<form class="group" method="post" action="/settings/general/warning" data-autosubmit>
+						<div class="grow">
+							<label for="warn" class="lbl">Warn at</label>
+							<select id="warn" name="warn" class="field sel" data-custom-toggle="#warn-custom">
+								for _, o := range saWarnOpts {
+									<option value={ o.Value } selected?={ o.Value == g.WarnSel }>{ o.Label }</option>
+								}
+							</select>
+							<span id="warn-custom" class="custom" hidden?={ g.WarnSel != "custom" }>
+								<input name="custom" class="field num" inputmode="numeric" aria-label="Custom warning in tokens" value={ g.WarnCustom } placeholder="Tokens"/>
+								<button class="btn h32" type="submit">Set</button>
+							</span>
+						</div>
+					</form>
+					<p class="foot-note">Past this size, a conversation’s context shows beside the model under the message field. Click it to compress. Near a model’s own limit it shows in red whatever this is set to. Applies on all your devices.</p>
+				</section>
+				<section aria-labelledby="acct">
+					<h3 id="acct" class="sec-title">Account</h3>
+					<div class="group">
+						<div class="grow">
+							<span class="lbl">Signed in as</span>
+							<span class="who"><span class="avatar" aria-hidden="true">{ g.Initial }</span><b>{ g.UserName }</b><span class="mono-sm">{ g.Login }</span></span>
+							if g.Admin {
+								<span class="tag">Admin</span>
+							}
+						</div>
+						<div class="grow">
+							<span class="lbl">Server</span>
+							<span class="val">{ g.Server }</span>
+							<span class="mono-xs">{ "psmithd " + g.Version }</span>
+						</div>
+					</div>
+				</section>
+				<section aria-labelledby="pw">
+					<h3 id="pw" class="sec-title">Change password</h3>
+					<form method="post" action="/settings/general/password">
+						<div class="group">
+							<div class="grow">
+								<label for="pwcur" class="lbl">Current password</label>
+								<input id="pwcur" name="current" type="password" autocomplete="current-password" class="field wide" required/>
+							</div>
+							<div class="grow">
+								<label for="pwnew" class="lbl">New password</label>
+								<input id="pwnew" name="new" type="password" autocomplete="new-password" class="field wide" required/>
+							</div>
+							<div class="grow">
+								<label for="pwconf" class="lbl">Confirm new password</label>
+								<input id="pwconf" name="confirm" type="password" autocomplete="new-password" class="field wide" required/>
+							</div>
+							<div class="grow">
+								if g.PwResult != nil {
+									<p role="status" class={ "result", "inrow", templ.KV("bad", !g.PwResult.OK) }><span class="dot"></span>{ g.PwResult.Message }</p>
+								} else {
+									<span class="fill"></span>
+								}
+								<button class="btn h32" type="submit">Change password</button>
+							</div>
+						</div>
+					</form>
+					<p class="foot-note">Lost your current password? Another admin can set a new one from Users.</p>
+				</section>
+			</div>
+		</div>
+	}
+}
+
+type themeCardVM struct {
+	ID, Name, Blurb string
+	On              bool
+}
+
+type appearanceVM struct {
+	Themes   []themeCardVM
+	Mode     string
+	TextSize int
+	Turns    bool
+}
+
+var saThemeBlurbs = map[string]string{
+	"system":    "Your system’s accent color and stock neutrals.",
+	"sage":      "Calm and green. Deep sage on a soft green-gray ground.",
+	"clay":      "Warm, approachable. Terracotta on linen-paper neutrals.",
+	"slate":     "Cool and focused. Steel blue on blue-gray neutrals.",
+	"aubergine": "Distinctive without being loud. Plum on warm cream.",
+	"nordic":    "Crisp and cold. Fjord blue on icy gray.",
+}
+
+func (a appearanceVM) sizePct() string {
+	return strconv.Itoa((a.TextSize-80)*100/80) + "%"
+}
+
+templ appearanceScreen(n snavVM, a appearanceVM) {
+	@settingsScreen("Appearance", n) {
+		<div class="spage-scroll seta">
+			<div class="spage-inner">
+				@saPageHead(saHead{Crumbs: []saCrumb{{"Settings", "/settings"}}, Title: "Appearance", Lede: "How Psmith looks in this browser. Stored here, not on the server, and applied as you choose."})
+				<section aria-labelledby="theme">
+					<h3 id="theme" class="sec-title">Theme</h3>
+					<form class="themes" role="radiogroup" aria-labelledby="theme" method="post" action="/prefs/appearance" hx-post="/prefs/appearance" hx-swap="none" data-radios>
+						for _, t := range a.Themes {
+							<button class="tcard" type="submit" name="theme" value={ t.ID } role="radio" aria-checked={ strconv.FormatBool(t.On) } data-theme={ t.ID } data-appearance="theme">
+								<span class="thead">
+									<span class="tname"><b>{ t.Name }</b><span>{ t.Blurb }</span></span>
+									<span class="tdot" aria-hidden="true">
+										@saIcon("check10")
+									</span>
+								</span>
+								<span class="sw">
+									<span><i class="a"></i>accent</span>
+									<span><i class="b"></i>bubble</span>
+									<span><i class="h"></i>highlight</span>
+								</span>
+							</button>
+						}
+					</form>
+					<p class="foot-note">Sets the accent, your message bubbles and the selection highlight.</p>
+				</section>
+				<section aria-labelledby="mode">
+					<h3 id="mode" class="sec-title">Light and dark</h3>
+					<form class="group" method="post" action="/prefs/appearance" hx-post="/prefs/appearance" hx-swap="none">
+						<div class="grow">
+							<span id="apl" class="lbl">Appearance</span>
+							<div class="seg" role="radiogroup" aria-label="Appearance" data-radios>
+								for _, o := range []saOpt{{"auto", "Auto"}, {"light", "Light"}, {"dark", "Dark"}} {
+									<button type="submit" name="mode" value={ o.Value } role="radio" aria-checked={ strconv.FormatBool(o.Value == a.Mode) } data-appearance="mode">{ o.Label }</button>
+								}
+							</div>
+						</div>
+					</form>
+					<p class="foot-note">Auto follows your system’s setting.</p>
+				</section>
+				<section aria-labelledby="text">
+					<h3 id="text" class="sec-title">Text size</h3>
+					<form class="group" method="post" action="/prefs/display" data-autosubmit>
+						<div class="grow">
+							<label id="sizel" for="tsize" class="lbl">Size</label>
+							<span class="tsize" style={ "--pct:" + a.sizePct() }>
+								<span class="a1" aria-hidden="true">A</span>
+								<input id="tsize" type="range" name="text_size" min="80" max="160" step="10" value={ strconv.Itoa(a.TextSize) } aria-valuetext={ strconv.Itoa(a.TextSize) + "%" } data-text-size/>
+								<span class="a2" aria-hidden="true">A</span>
+								<output for="tsize" class="tnum">{ strconv.Itoa(a.TextSize) + "%" }</output>
+							</span>
+						</div>
+					</form>
+					<p class="foot-note">Scales every label, message and control from 80% to 160%. Your browser’s zoom works too.</p>
+				</section>
+				<section aria-labelledby="transcript">
+					<h3 id="transcript" class="sec-title">Transcript</h3>
+					<form class="group" method="post" action="/prefs/display">
+						<div class="grow">
+							<span class="lbl fill two"><span id="turnl">Show turn details</span><span class="sub">Thinking and tool chips on every reply, with the model, token counts and times.</span></span>
+							<input type="hidden" name="turn_details" value={ strconv.FormatBool(!a.Turns) }/>
+							<button class="switch" type="submit" role="switch" aria-checked={ strconv.FormatBool(a.Turns) } aria-labelledby="turnl"></button>
+						</div>
+					</form>
+					<p class="foot-note">Off, a reply shows only what’s worth noticing: a model change, a poor cache on a big prompt, a reply that stopped early. The details stay one click away under the reply.</p>
+				</section>
+			</div>
+		</div>
+	}
+}
+
+type spendRowVM struct {
+	ID, Name, Type, Turns, Spend string
+	None                         bool
+}
+
+type spendVM struct {
+	Range      string // "month", "30d", "custom"
+	From, To   string // custom bounds, YYYY-MM-DD
+	Period     string
+	Total      string
+	Turns      string
+	Rows       []spendRowVM
+	TotalTurns string
+}
+
+templ spendScreen(n snavVM, u spendVM) {
+	@settingsScreen("Usage", n) {
+		<div class="spage-scroll seta">
+			<div class="spage-inner">
+				@saPageHead(saHead{Crumbs: []saCrumb{{"Settings", "/settings"}}, Title: "Usage", Actions: spendRange(u),
+					Lede: "Spend recorded per assistant turn, including compression and speech. Free-tier and subscription models don’t count."})
+				if u.Range == "custom" {
+					<form class="group urange" method="get" action="/settings/cost">
+						<input type="hidden" name="range" value="custom"/>
+						<div class="grow">
+							<label for="ufrom" class="lbl">From</label>
+							<input id="ufrom" type="date" name="from" class="field" value={ u.From }/>
+							<label for="uto" class="sr-only">To</label>
+							<span class="slash">to</span>
+							<input id="uto" type="date" name="to" class="field" value={ u.To }/>
+							<button class="btn h32" type="submit">Show</button>
+						</div>
+					</form>
+				}
+				<section aria-labelledby="spend">
+					<h3 id="spend" class="sec-title">Spend</h3>
+					<div class="group spend">
+						<div class="period">{ u.Period }</div>
+						<div class="big"><span class="tnum">{ u.Total }</span><span class="tnum">{ u.Turns }</span></div>
+					</div>
+				</section>
+				<section aria-labelledby="byprov">
+					<h3 id="byprov" class="sec-title">By provider</h3>
+					<div class="group tbl-wrap">
+						<table class="tbl utbl">
+							<thead>
+								<tr><th scope="col">Provider</th><th scope="col">Type</th><th scope="col" class="r">Turns</th><th scope="col" class="r">Spend</th></tr>
+							</thead>
+							<tbody>
+								for _, r := range u.Rows {
+									<tr class={ templ.KV("none", r.None) }>
+										<td><a class="name" href={ templ.SafeURL("/settings/providers/" + r.ID) }>{ r.Name }</a></td>
+										<td>{ r.Type }</td>
+										<td class="r tnum">{ r.Turns }</td>
+										<td class="r tnum amt">{ r.Spend }</td>
+									</tr>
+								}
+							</tbody>
+							<tfoot>
+								<tr><th scope="row">Total</th><td></td><td class="r tnum">{ u.TotalTurns }</td><td class="r tnum">{ u.Total }</td></tr>
+							</tfoot>
+						</table>
+					</div>
+					<p class="foot-note">Amounts under a cent show to their first significant digit.</p>
+				</section>
+			</div>
+		</div>
+	}
+}
+
+templ spendRange(u spendVM) {
+	<div class="seg" role="radiogroup" aria-label="Range">
+		for _, o := range []saOpt{{"month", "This month"}, {"30d", "Last 30 days"}, {"custom", "Custom"}} {
+			<a role="radio" aria-checked={ strconv.FormatBool(o.Value == u.Range) } href={ templ.SafeURL("/settings/cost?range=" + o.Value) }>{ o.Label }</a>
+		}
+	</div>
+}

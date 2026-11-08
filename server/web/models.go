@@ -38,6 +38,9 @@ type pickerModelVM struct {
 	Cutoff       string
 	Caps         capsVM
 
+	ContextWindow int32
+	Favorite      bool
+
 	Disabled bool     // lacks a capability the active pipeline requires
 	Missing  []string // human labels of the missing capabilities
 }
@@ -60,6 +63,16 @@ type pickerData struct {
 	// Why the list is shorter than the account's full set. Rendered above the
 	// groups so a missing provider reads as a rule rather than a bug.
 	Notice string
+}
+
+// ProviderLabel names a provider in the picker's groups.
+func (d pickerData) ProviderLabel(id string) string {
+	for _, g := range d.Groups {
+		if g.ProviderID == id {
+			return g.Label
+		}
+	}
+	return ""
 }
 
 // modelPicker builds the grouped, metadata-rich model list for a conversation,
@@ -132,11 +145,13 @@ func modelRowVM(providerID string, m *psmithv1.UserModel, selected string, requi
 		name = m.GetModelId()
 	}
 	vm := pickerModelVM{
-		ProviderID:  providerID,
-		ModelID:     m.GetModelId(),
-		Value:       modelValue(providerID, m.GetModelId()),
-		DisplayName: name,
-		Cutoff:      m.GetKnowledgeCutoff(),
+		ProviderID:    providerID,
+		ModelID:       m.GetModelId(),
+		Value:         modelValue(providerID, m.GetModelId()),
+		DisplayName:   name,
+		Cutoff:        m.GetKnowledgeCutoff(),
+		ContextWindow: m.GetContextWindow(),
+		Favorite:      m.GetFavorite(),
 	}
 	vm.Selected = vm.Value == selected
 	if m.ContextWindow != nil {
@@ -204,7 +219,7 @@ func abbrevTokens(n int32) string {
 		}
 		return fmt.Sprintf("%.1fM", v)
 	case n >= 1_000:
-		return fmt.Sprintf("%dK", n/1_000)
+		return fmt.Sprintf("%dk", n/1_000)
 	default:
 		return fmt.Sprintf("%d", n)
 	}
@@ -232,48 +247,149 @@ func costBucket(p *psmithv1.ModelPricing) (bucket, hint string) {
 	return bucket, b.String()
 }
 
-// handleModelPicker renders the rich picker. For htmx it returns the overlay
-// fragment; without JS it renders a standalone page.
+// pickerVM is the model picker in the inspector.
+type pickerVM struct {
+	ConvID       string
+	Query        string
+	ProfileModel string // "Demo uses Claude Opus 4.7"
+	UsingProfile bool   // the conversation sets no model of its own
+	Favorites    []pickerModelVM
+	Groups       []providerGroupVM
+	Notice       string
+	Foot         string
+}
+
+// badges are a model's capability chips, in the order the picker shows them.
+func badges(c capsVM) []string {
+	var out []string
+	if c.Vision {
+		out = append(out, "Vision")
+	}
+	if c.ToolUse {
+		out = append(out, "Tools")
+	}
+	if c.Thinking {
+		out = append(out, "Thinking")
+	}
+	return out
+}
+
+// metaLine is "200k · $$$", or whichever half is known.
+func metaLine(m pickerModelVM) string {
+	var parts []string
+	if m.ContextLabel != "" {
+		parts = append(parts, m.ContextLabel)
+	}
+	if m.CostBucket != "" {
+		parts = append(parts, m.CostBucket)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// needs is a disabled model's reason: "Needs tool use".
+func needs(missing []string) string {
+	return "Needs " + strings.Join(missing, " and ")
+}
+
+// buildPicker filters and arranges the picker's rows.
+func buildPicker(data pickerData, q string, req capsVM, profile string) *pickerVM {
+	vm := &pickerVM{ConvID: data.ConvID, Query: q, Notice: data.Notice}
+	q = strings.ToLower(strings.TrimSpace(q))
+	match := func(g providerGroupVM, m pickerModelVM) bool {
+		return q == "" || strings.Contains(strings.ToLower(m.DisplayName+" "+m.ModelID+" "+g.Label), q)
+	}
+	for _, g := range data.Groups {
+		grp := g
+		grp.Models = nil
+		for _, m := range g.Models {
+			if !match(g, m) {
+				continue
+			}
+			grp.Models = append(grp.Models, m)
+			if m.Favorite {
+				vm.Favorites = append(vm.Favorites, m)
+			}
+		}
+		if len(grp.Models) > 0 {
+			vm.Groups = append(vm.Groups, grp)
+		}
+	}
+	var need []string
+	if req.ToolUse {
+		need = append(need, "tool use")
+	}
+	if req.Vision {
+		need = append(need, "vision")
+	}
+	if req.Thinking {
+		need = append(need, "thinking")
+	}
+	if req.PromptCaching {
+		need = append(need, "prompt caching")
+	}
+	vm.Foot = "Applies from the next message."
+	if len(need) > 0 {
+		vm.Foot += " " + profile + " needs " + strings.Join(need, " and ") + ", so models without it are off."
+	}
+	return vm
+}
+
+// handleModelPicker opens the picker in the inspector.
 func (h *Handler) handleModelPicker(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
+	vm, err := h.loadConversation(r.Context(), r, convID)
+	if err != nil {
+		http.Error(w, "conversation not found", http.StatusNotFound)
+		return
+	}
 	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID}))
 	if err != nil {
 		http.Error(w, "conversation not found", http.StatusNotFound)
 		return
 	}
 	conv := getResp.Msg.GetConversation()
-	selected := currentSettingsModel(conv)
-	data := h.modelPicker(r.Context(), convID, selected, h.requiredCaps(r.Context(), convID), harnessVMFrom(conv.GetHarness()))
-
-	if r.Header.Get("HX-Request") != "" {
-		h.render(w, r, http.StatusOK, modelPickerModal(data))
-		return
+	req := h.requiredCaps(r.Context(), convID)
+	data := h.modelPicker(r.Context(), convID, vm.Model.Value, req, harnessVMFrom(conv.GetHarness()))
+	p := buildPicker(data, r.URL.Query().Get("q"), req, vm.Profile)
+	p.UsingProfile = currentSettingsModel(conv) == ""
+	if d := h.resolvedProfile(r.Context(), conv.GetProfileId()).GetDefaultSettings(); d.GetDefaultProviderId() != "" {
+		p.ProfileModel = vm.Profile + " uses " + h.modelName(r.Context(), d.GetDefaultProviderId(), d.GetDefaultModelId())
+	} else {
+		p.ProfileModel = vm.Profile + " sets no model"
 	}
-	h.render(w, r, http.StatusOK, modelPickerPage(data))
+	vm.Inspector.View, vm.Inspector.Picker, vm.ShowInsp, vm.Inspector.Page = "model", p, true, true
+	h.renderConversation(w, r, vm)
 }
 
-// handleSetModel records the chosen model as the conversation default. For htmx
-// it returns the refreshed composer model chip plus an out-of-band swap that
-// dismisses the picker overlay; without JS it redirects back to the chat.
+// handleSetModel sets the conversation's model; an empty value goes back to
+// the profile's.
 func (h *Handler) handleSetModel(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
 	_ = r.ParseForm()
 	value := r.FormValue("model")
-	if pid, mid, ok := splitModelValue(value); ok {
+	if value == "" {
+		h.clearConversationModel(r.Context(), convID)
+	} else if pid, mid, ok := splitModelValue(value); ok {
 		h.setConversationModel(r.Context(), convID, pid, mid)
 	}
+	http.Redirect(w, r, "/c/"+convID, http.StatusSeeOther)
+}
 
-	if r.Header.Get("HX-Request") != "" {
-		// Chip-only re-render: no harness filter needed, since it only reads
-		// data.Current, which the caller just chose.
-		data := h.modelPicker(r.Context(), convID, value, capsVM{}, nil)
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		// The chip swaps in place; the empty #modal OOB swap closes the overlay.
-		_, _ = w.Write([]byte(renderComp(r.Context(), modelChip(data.ConvID, data.Current))))
-		_, _ = w.Write([]byte(`<div id="modal" hx-swap-oob="innerHTML"></div>`))
+// clearConversationModel drops the conversation's own model so the
+// profile's applies again.
+func (h *Handler) clearConversationModel(ctx context.Context, convID string) {
+	getResp, err := h.convos.GetConversation(ctx, connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID}))
+	if err != nil {
 		return
 	}
-	http.Redirect(w, r, "/c/"+convID, http.StatusSeeOther)
+	settings := getResp.Msg.GetConversation().GetSettings()
+	if settings == nil {
+		return
+	}
+	settings.DefaultProviderId, settings.DefaultModelId = nil, nil
+	if _, err := h.convos.UpdateConversation(ctx, connect.NewRequest(&psmithv1.UpdateConversationRequest{Id: convID, Settings: settings})); err != nil {
+		h.logger.Warn("web: clear model failed", "err", err)
+	}
 }
 
 // setConversationModel writes the default provider/model onto the conversation,

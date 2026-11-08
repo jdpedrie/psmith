@@ -1,0 +1,523 @@
+package web
+
+import (
+	"net/url"
+	"strconv"
+)
+
+func filterLabel(l listVM) string {
+	switch l.Filter {
+	case "all":
+		return "All conversations"
+	case "archived":
+		return "Archived"
+	}
+	for _, c := range l.Chips {
+		if c.On {
+			return c.Label
+		}
+	}
+	return "Conversations"
+}
+
+// listTrigger keeps the list from refreshing under a row being renamed or
+// confirmed, an open menu, or a selection in progress.
+const listTrigger = "sse:conversation-changed[!document.querySelector('#list [data-hold], #list details[open]')]"
+
+// listColumn is the left column: brand and New, search, chips, sort, the rows
+// and the account footer. It refreshes itself when the account's
+// conversations change.
+templ listColumn(l listVM) {
+	<aside
+		class="list"
+		id="list"
+		aria-label="Conversations"
+		hx-get={ "/partials/list" + l.query(activeVals(l)) }
+		hx-trigger={ listTrigger }
+		hx-select="#list"
+		hx-swap="outerHTML"
+		data-offline?={ l.Offline }
+		data-search?={ l.Query != "" }
+		data-select?={ l.Select }
+		data-list-href={ l.listHref() }
+	>
+		<div class="list-head">
+			<span class="mark" aria-hidden="true">P</span>
+			<a class="brand" href={ templ.SafeURL(l.listHref()) }><b>Psmith</b><span>{ l.Server }</span></a>
+			<a class="btn-new" href="/new" aria-label="New conversation (C)" data-key="c">
+				@icon("plus")
+				New<kbd>C</kbd>
+			</a>
+		</div>
+		<form class="search-wrap" action="/chats" method="get" role="search">
+			if l.Filter != "all" {
+				<input type="hidden" name="f" value={ l.Filter }/>
+			}
+			if l.Sort == "created" {
+				<input type="hidden" name="sort" value="created"/>
+			}
+			if l.Archived {
+				<input type="hidden" name="arch" value="1"/>
+			}
+			<label class={ "search", templ.KV("on", l.Query != "" || l.Command != nil) }>
+				@icon("search")
+				<input id="search" name="q" value={ searchValue(l) } aria-label="Search conversations and commands" placeholder="Search or run a command" autocomplete="off" autofocus?={ l.Query != "" }/>
+				if l.Query != "" || l.Command != nil {
+					<kbd class="wide" data-search-key>Esc</kbd>
+				} else {
+					<kbd class="wide" data-search-key>/</kbd>
+				}
+			</label>
+		</form>
+		@offlineBanner(l)
+		if l.Command != nil {
+			<div id="command-results">
+				@commandResults(*l.Command)
+			</div>
+		}
+		<div id="list-body" class="list-body" hidden?={ l.Command != nil }>
+			if l.Query != "" {
+				@searchBody(l)
+			} else if l.Empty {
+				@chips(l)
+				<nav class="rows" id="rows" aria-label="Conversations">
+					<div class="empty">
+						<span class="empty-icon">
+							@listIcon("bubble")
+						</span>
+						<div class="empty-title">No conversations yet</div>
+						<div class="empty-sub">Everything you start shows up here.</div>
+					</div>
+				</nav>
+			} else if l.Select {
+				@chips(l)
+				<div class="list-meta">
+					<span role="status" class="sel-count" data-sel-count>{ selectedLabel(len(l.Selected)) }</span>
+					<button class="sel-all" type="submit" form="bulk" name="action" value="all" data-select-all>Select all</button>
+				</div>
+				<nav class="rows" id="rows" aria-label="Select conversations" data-hold>
+					@selectRows(l)
+				</nav>
+			} else {
+				@chips(l)
+				<form class="list-meta" action="/chats" method="get">
+					<span>{ filterLabel(l) }</span>
+					if l.Filter != "all" {
+						<input type="hidden" name="f" value={ l.Filter }/>
+					}
+					<select name="sort" aria-label="Sort conversations" onchange="this.form.requestSubmit()">
+						<option value="used" selected?={ l.Sort != "created" }>Recently used</option>
+						<option value="created" selected?={ l.Sort == "created" }>Recently created</option>
+					</select>
+					<a hidden href={ templ.SafeURL(l.selectHref()) } data-key="x">Select conversations</a>
+				</form>
+				<nav class="rows" id="rows" aria-label={ rowsLabel(l) }>
+					@listRows(l)
+				</nav>
+			}
+		</div>
+		if l.Select {
+			@selectBar(l)
+		} else {
+			@listFoot(l)
+		}
+	</aside>
+}
+
+func searchValue(l listVM) string {
+	if l.Command != nil {
+		return l.Command.Query
+	}
+	return l.Query
+}
+
+func activeVals(l listVM) url.Values {
+	if l.ActiveID == "" {
+		return nil
+	}
+	return url.Values{"active": {l.ActiveID}}
+}
+
+func (l listVM) selectHref() string {
+	return "/chats" + l.query(url.Values{"select": {"1"}})
+}
+
+func rowsLabel(l listVM) string {
+	if l.Filter == "archived" {
+		return "Archived conversations"
+	}
+	return "Conversations"
+}
+
+func selectedLabel(n int) string {
+	return strconv.Itoa(n) + " selected"
+}
+
+func resultsLabel(n int) string {
+	if n == 1 {
+		return "1 result · titles only"
+	}
+	return strconv.Itoa(n) + " results · titles only"
+}
+
+templ chips(l listVM) {
+	<div class="chips">
+		for _, c := range l.Chips {
+			if !l.Empty || c.Color == 0 {
+				<a class={ "chip", templ.KV("prof", c.Color > 0) } href={ templ.SafeURL(c.Href) } aria-pressed={ strconv.FormatBool(c.On) }>
+					if c.Color > 0 {
+						<span class={ "dot", pc(c.Color) }></span>
+					}
+					{ c.Label }
+				</a>
+			}
+		}
+	</div>
+}
+
+templ offlineBanner(l listVM) {
+	<div class="offline" role="status">
+		@listIcon("alert")
+		<span class="offline-text"><b>{ "Can't reach " + l.Server }</b><span>Reconnecting in <span data-retry-in>{ orDefault(l.RetryIn, "a moment") }</span>. Showing what was loaded.</span></span>
+		<button class="btn h28 offline-retry" type="button" data-retry>Retry now</button>
+	</div>
+}
+
+templ searchBody(l listVM) {
+	<div class="list-meta search-meta">
+		<span role="status">{ resultsLabel(len(l.Rows)) }</span>
+		<span class="incarch">
+			<span id="incarch">Include archived</span>
+			<a class="switch" role="switch" aria-checked={ strconv.FormatBool(l.Archived) } aria-labelledby="incarch" href={ templ.SafeURL(toggleArchived(l)) }></a>
+		</span>
+	</div>
+	<nav class="rows" id="rows" aria-label="Search results">
+		for _, r := range l.Rows {
+			@rowItem(l, r)
+		}
+		if len(l.Rows) == 0 {
+			<p class="no-match">{ "No titles match “" + l.Query + "”." }</p>
+		}
+		<div class="keyhints">
+			<span><kbd>↑</kbd> <kbd>↓</kbd> move</span>
+			<span><kbd>Enter</kbd> open</span>
+			<span><kbd>Esc</kbd> clear search</span>
+		</div>
+	</nav>
+}
+
+func toggleArchived(l listVM) string {
+	l.Archived = !l.Archived
+	return l.listHref()
+}
+
+// listRows renders one page of rows plus a Show more continuation.
+templ listRows(l listVM) {
+	for _, r := range l.Rows {
+		if r.Group != "" {
+			<div class="group-head">{ r.Group }</div>
+		}
+		@rowItem(l, r)
+	}
+	if l.Filter == "archived" && l.NextToken == "" && len(l.Rows) > 0 {
+		<p class="arch-note">Archived conversations are read-only. Unarchive one to keep talking.</p>
+	}
+	if l.NextToken != "" {
+		<button
+			class="btn h28 ghost more-rows"
+			hx-get={ "/partials/list/rows" + l.query(url.Values{"token": {l.NextToken}, "active": {l.ActiveID}}) }
+			hx-swap="outerHTML"
+		>Show more</button>
+	}
+}
+
+// rowItem is one conversation in the list, in whichever state it is in.
+templ rowItem(l listVM, r rowVM) {
+	if l.RenameID == r.ID {
+		@renameRow(l, r)
+	} else if l.ConfirmID == r.ID {
+		@confirmRow(l, r)
+	} else {
+		<div class={ "ritem", templ.KV("hover", l.HoverID == r.ID || l.MenuID == r.ID) } data-row={ r.ID }>
+			<a class="row" href={ templ.SafeURL(l.convHref(r.ID)) } data-id={ r.ID } if r.Active { aria-current="true" }>
+				<span class={ "dot", pc(r.Color) }></span>
+				<span class="row-body">
+					<span class="row-top">
+						<b>
+							@titleRuns(r)
+						</b>
+						if r.Pinned && l.Query == "" {
+							<span class="row-time pinned"><span aria-label="Pinned" role="img">
+								@listIcon("pin")
+							</span>{ r.Time }</span>
+						} else {
+							<span class="row-time">{ r.Time }</span>
+						}
+					</span>
+					if r.Live {
+						<span class="row-sub live"><span class="dot s6"></span>Replying</span>
+						<span class="row-sub when-offline">{ r.Profile }</span>
+					} else if r.Draft != "" {
+						<span class="row-sub"><span class="draft">Draft:</span> { r.Draft }</span>
+					} else if r.Archived && l.Query != "" {
+						<span class="row-sub tagged">{ r.Profile }<span class="tag">Archived</span></span>
+					} else {
+						<span class="row-sub">{ r.Profile }</span>
+					}
+				</span>
+			</a>
+			if r.Archived && l.Filter == "archived" {
+				<form class="inline" method="post" action={ templ.SafeURL("/c/" + r.ID + "/unarchive") }>
+					<button class="unarch" type="submit">Unarchive</button>
+				</form>
+			} else {
+				@rowMenu(l, r)
+			}
+		</div>
+	}
+}
+
+templ titleRuns(r rowVM) {
+	if len(r.Hits) == 0 {
+		{ r.Title }
+	} else {
+		for _, p := range r.Hits {
+			if p.Hit {
+				<mark>{ p.Text }</mark>
+			} else {
+				{ p.Text }
+			}
+		}
+	}
+}
+
+// rowMenu is the row's anchored menu. Every item works as a link or a form
+// post; htmx swaps the list in place when it is there.
+templ rowMenu(l listVM, r rowVM) {
+	<details class="rmore" data-menu open?={ l.MenuID == r.ID }>
+		<summary aria-label={ "More for " + r.Title } aria-haspopup="menu">
+			@icon("more")
+		</summary>
+		<div class="rmenu" role="menu" aria-label={ r.Title }>
+			<a
+				role="menuitem"
+				class={ templ.KV("hi", l.MenuID == r.ID) }
+				href={ templ.SafeURL(l.stateHref("rename", r.ID)) }
+				hx-get={ rowPartial(l, r.ID, "rename") }
+				hx-target="closest .ritem"
+				hx-swap="outerHTML"
+			>
+				<span class="mi">
+					@icon("edit")
+				</span>Rename
+			</a>
+			@rowAction(l, r.ID, "pin") {
+				<span class="mi">
+					@listIcon("pin15")
+				</span>
+				if r.Pinned {
+					Unpin
+				} else {
+					Pin
+				}
+			}
+			@rowAction(l, r.ID, "title") {
+				<span class="mi">
+					@listIcon("wand")
+				</span>Generate title
+			}
+			@rowAction(l, r.ID, "archive") {
+				<span class="mi">
+					@listIcon("archive")
+				</span>Archive
+			}
+			<div role="separator" class="msep"></div>
+			<a
+				role="menuitem"
+				class="danger"
+				href={ templ.SafeURL(l.stateHref("confirm", r.ID)) }
+				hx-get={ rowPartial(l, r.ID, "confirm") }
+				hx-target="closest .ritem"
+				hx-swap="outerHTML"
+			>
+				<span class="mi">
+					@icon("trash")
+				</span>Delete
+			</a>
+		</div>
+	</details>
+}
+
+// actionPath is where a row action posts. Rename and title live under
+// /chats so they can't collide with the conversation's own routes.
+func actionPath(id, action string) string {
+	if action == "title" {
+		return "/chats/" + id + "/title"
+	}
+	return "/c/" + id + "/" + action
+}
+
+func rowPartial(l listVM, id, state string) string {
+	v := url.Values{"state": {state}}
+	if l.ActiveID != "" {
+		v.Set("active", l.ActiveID)
+	}
+	return "/partials/list/row/" + id + l.query(v)
+}
+
+// rowAction posts one of the row's actions. Without JS the response
+// redirects back to the page; with htmx it is the refreshed list.
+templ rowAction(l listVM, id, action string) {
+	<form class="inline" method="post" action={ templ.SafeURL(actionPath(id, action)) } hx-post={ actionPath(id, action) } hx-target="#list" hx-select="#list" hx-swap="outerHTML">
+		<input type="hidden" name="back" value={ l.pageHref() }/>
+		<button type="submit" role="menuitem">
+			{ children... }
+		</button>
+	</form>
+}
+
+templ renameRow(l listVM, r rowVM) {
+	<form
+		class="ritem rename"
+		method="post"
+		action={ templ.SafeURL("/chats/" + r.ID + "/rename") }
+		hx-post={ "/chats/" + r.ID + "/rename" }
+		hx-target="#list"
+		hx-select="#list"
+		hx-swap="outerHTML"
+		data-hold
+		data-cancel={ rowPartial(l, r.ID, "") }
+	>
+		<input type="hidden" name="back" value={ l.pageHref() }/>
+		<span class={ "dot", pc(r.Color) }></span>
+		<span class="row-body">
+			<label for="rename" class="sr-only">Conversation title</label>
+			<input id="rename" name="title" value={ r.Title } autocomplete="off" autofocus/>
+			<span class="rename-hint"><kbd>Enter</kbd> saves · <kbd>Esc</kbd> cancels</span>
+		</span>
+	</form>
+}
+
+templ confirmRow(l listVM, r rowVM) {
+	<div class="ritem confirm" role="group" aria-label="Confirm delete" data-hold>
+		<div class="confirm-text">
+			<div class="confirm-title">{ "Delete “" + r.Title + "”?" }</div>
+			<div class="confirm-sub">Every message and context goes with it. Archive keeps it out of the list instead.</div>
+		</div>
+		<div class="confirm-btns">
+			<a class="btn h28 cancel" href={ templ.SafeURL(l.pageHref()) } hx-get={ rowPartial(l, r.ID, "") } hx-target="closest .ritem" hx-swap="outerHTML">Cancel</a>
+			<form class="inline" method="post" action={ templ.SafeURL("/c/" + r.ID + "/delete") }>
+				<input type="hidden" name="back" value={ l.pageHref() }/>
+				<button class="btn h28 destructive" type="submit">Delete</button>
+			</form>
+		</div>
+	</div>
+}
+
+// selectRows are the rows as checkboxes for select-many. They post with
+// the toolbar's form.
+templ selectRows(l listVM) {
+	for _, r := range l.Rows {
+		if r.Group != "" {
+			<div class="group-head">{ r.Group }</div>
+		}
+		<label class="row sel">
+			<input type="checkbox" form="bulk" name="id" value={ r.ID } checked?={ l.Selected[r.ID] } aria-label={ "Select " + r.Title }/>
+			<span class="check">
+				@listIcon("check")
+			</span>
+			<span class={ "dot", pc(r.Color) }></span>
+			<span class="row-body">
+				<span class="row-top"><b>{ r.Title }</b><span class="row-time">{ r.Time }</span></span>
+				if r.Live {
+					<span class="row-sub live"><span class="dot s6"></span>Replying</span>
+				} else if r.Draft != "" {
+					<span class="row-sub"><span class="draft">Draft:</span> { r.Draft }</span>
+				} else {
+					<span class="row-sub">{ r.Profile }</span>
+				}
+			</span>
+		</label>
+	}
+}
+
+templ selectBar(l listVM) {
+	<form id="bulk" class="list-foot selbar" role="toolbar" aria-label="Selected conversations" method="post" action="/chats/bulk">
+		<input type="hidden" name="back" value={ l.listHref() }/>
+		if l.ConfirmBulk {
+			<span class="selbar-q">{ "Delete " + strconv.Itoa(len(l.Selected)) + "?" }</span>
+			<a class="btn h34 ghost" href={ templ.SafeURL(l.selectHref()) }>Cancel</a>
+			<button class="btn h34 destructive" type="submit" name="action" value="delete">Delete</button>
+		} else {
+			<button class="btn h34" type="submit" name="action" value="archive">Archive</button>
+			<button class="btn h34 redfill" type="submit" name="action" value="confirm">Delete</button>
+			<span class="spacer"></span>
+			<a class="btn h34 ghost sel-cancel" href={ templ.SafeURL(l.listHref()) } data-sel-cancel>Cancel<kbd>Esc</kbd></a>
+		}
+	</form>
+}
+
+templ listFoot(l listVM) {
+	<div class="list-foot">
+		<details class="acct" data-menu open?={ l.AccountOpen }>
+			<summary class="acct-btn" aria-label={ "Account: " + l.UserName } aria-haspopup="menu">
+				<span class="avatar" aria-hidden="true">{ l.Initial }</span>
+				<span class="who">{ l.UserName }</span>
+			</summary>
+			@accountMenu(l)
+		</details>
+		<span class="status" id="conn-status">
+			<span class="dot"></span>
+			if l.Offline {
+				<span>Reconnecting</span>
+			} else {
+				<span>Online</span>
+			}
+		</span>
+		<a class="foot-link" href="/settings" aria-label="Settings" data-key=",">
+			@icon("gear")
+		</a>
+	</div>
+}
+
+func roleLabel(admin bool) string {
+	if admin {
+		return "Admin"
+	}
+	return "Member"
+}
+
+func shortcutsHref(l listVM) string {
+	if l.ActiveID != "" {
+		return "/shortcuts?c=" + url.QueryEscape(l.ActiveID)
+	}
+	return "/shortcuts"
+}
+
+templ accountMenu(l listVM) {
+	<div class="amenu" role="menu" aria-label="Account">
+		<div class="amenu-head">
+			<span class="avatar big" aria-hidden="true">{ l.Initial }</span>
+			<span class="amenu-who"><b>{ l.UserName }</b><span>{ roleLabel(l.IsAdmin) + " · " + l.Server }</span></span>
+		</div>
+		<div role="separator" class="msep top"></div>
+		<a href="/settings" role="menuitem">Settings<span class="mk"><kbd>,</kbd></span></a>
+		<a href={ templ.SafeURL(shortcutsHref(l)) } role="menuitem" data-key="?">Keyboard shortcuts<span class="mk"><kbd>?</kbd></span></a>
+		<div class="appear">
+			<span id="appearance">Appearance</span>
+			<form class="seg" role="radiogroup" aria-labelledby="appearance" method="post" action="/prefs/appearance" hx-post="/prefs/appearance" hx-swap="none">
+				@modeRadio("dark", "Dark")
+				@modeRadio("light", "Light")
+				@modeRadio("auto", "Auto")
+			</form>
+		</div>
+		<div role="separator" class="msep"></div>
+		<form class="inline" method="post" action="/logout">
+			<button type="submit" role="menuitem">Sign out</button>
+		</form>
+	</div>
+}
+
+templ modeRadio(value, label string) {
+	<button type="submit" name="mode" value={ value } role="radio" aria-checked={ strconv.FormatBool(prefsOf(ctx).Mode == value) } data-appearance="mode">{ label }</button>
+}

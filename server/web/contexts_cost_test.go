@@ -35,7 +35,7 @@ func TestCostPage(t *testing.T) {
 		t.Fatalf("cost status=%d", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Cost") || !strings.Contains(body, "$0.0000") {
+	if !strings.Contains(body, "Usage") || !strings.Contains(body, "$0.00") {
 		t.Errorf("cost page missing expected content; body:\n%s", body)
 	}
 }
@@ -52,12 +52,12 @@ func TestContextsView(t *testing.T) {
 	fx := seedSendable(t, q, "http://unused")
 	userCtx := auth.ContextWithUser(context.Background(), auth.User{ID: fx.userID, Username: "u"})
 
-	// Contexts list shows the active context.
+	// The old contexts page now lives in the inspector.
 	listReq := httptest.NewRequest("GET", "/c/"+fx.convID.String()+"/contexts", nil).WithContext(userCtx)
 	listReq.SetPathValue("id", fx.convID.String())
 	listRec := do(h.handleContexts, listReq)
-	if listRec.Code != http.StatusOK || !strings.Contains(listRec.Body.String(), "active") {
-		t.Fatalf("contexts list bad; code=%d body:\n%s", listRec.Code, listRec.Body.String())
+	if listRec.Code != http.StatusSeeOther || listRec.Header().Get("Location") != "/c/"+fx.convID.String()+"?tab=contexts" {
+		t.Fatalf("contexts redirect bad; code=%d location=%q", listRec.Code, listRec.Header().Get("Location"))
 	}
 
 	// Look up the active context id and render its read-only view.
@@ -70,7 +70,8 @@ func TestContextsView(t *testing.T) {
 	viewReq.SetPathValue("id", fx.convID.String())
 	viewReq.SetPathValue("cid", cid)
 	viewRec := do(h.handleContextView, viewReq)
-	if viewRec.Code != http.StatusOK || !strings.Contains(viewRec.Body.String(), "Contexts") {
-		t.Errorf("context view bad; code=%d", viewRec.Code)
+	// The active context has no read-only page; it is the conversation.
+	if viewRec.Code != http.StatusSeeOther {
+		t.Errorf("active context view code=%d want 303", viewRec.Code)
 	}
 }

@@ -8,50 +8,102 @@ import (
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 )
 
-// handleNewForm renders the new-conversation page: pick a profile to start a chat.
-func (h *Handler) handleNewForm(w http.ResponseWriter, r *http.Request) {
-	profiles := h.listProfiles(r.Context())
-	// Default-profile fast path (iOS parity): "New chat" skips the
-	// chooser when a default exists. ?choose=1 forces the chooser —
-	// the created conversation's Settings page covers per-chat
-	// profile switching, and the chooser badges the default row.
-	if r.URL.Query().Get("choose") == "" {
-		for _, p := range profiles {
-			if p.IsDefault {
-				resp, err := h.convos.CreateConversation(r.Context(), connect.NewRequest(&psmithv1.CreateConversationRequest{
-					ProfileId: p.ID,
-				}))
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-				http.Redirect(w, r, "/c/"+resp.Msg.GetConversation().GetId(), http.StatusSeeOther)
-				return
-			}
-		}
-	}
-	convos, sidebarToken, _ := h.listConvosPage(r.Context(), "", "")
-	h.render(w, r, http.StatusOK, newConversationPage(convos, sidebarToken, profiles))
+// draftVM is a new conversation before its first message: the profiles to
+// pick from, the one picked, the model and the text so far.
+type draftVM struct {
+	Profiles    []profileCardVM
+	Current     *profileCardVM
+	Model       draftModelVM
+	Models      []draftModelVM
+	Text        string
+	Placeholder string
 }
 
-// handleNewCreate creates a conversation under the chosen profile and redirects
-// to it. A plain form POST so it works without JS.
-func (h *Handler) handleNewCreate(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
+type draftModelVM struct {
+	Value, Name, Provider string
+}
+
+// handleNewForm renders the draft. ?profile picks a profile (the default
+// one otherwise), ?pick or ?model a model (the profile's otherwise), and
+// ?message carries text typed before a no-JS profile switch.
+func (h *Handler) handleNewForm(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	q := r.URL.Query()
+	order, models := h.enabledModels(ctx)
+	d := draftVM{Profiles: h.profileCards(ctx, h.profileIndex(ctx), models), Text: q.Get("message")}
+	want := q.Get("profile")
+	if want == "" {
+		want = q.Get("profile_id")
 	}
-	profileID := r.PostFormValue("profile_id")
+	for i := range d.Profiles {
+		if p := &d.Profiles[i]; p.ID == want || (want == "" && p.Default) {
+			d.Current = p
+		}
+	}
+	if d.Current == nil && want == "" && len(d.Profiles) > 0 {
+		d.Current = &d.Profiles[0]
+	}
+	for _, v := range order {
+		m := models[v]
+		d.Models = append(d.Models, draftModelVM{Value: v, Name: m.Name, Provider: m.Provider})
+	}
+	pick := q.Get("pick")
+	if pick == "" {
+		pick = q.Get("model")
+	}
+	if pick == "" && d.Current != nil {
+		pick = d.Current.ModelValue
+	}
+	if m, ok := models[pick]; ok {
+		d.Model = draftModelVM{Value: pick, Name: m.Name, Provider: m.Provider}
+	}
+	d.Placeholder = "Message"
+	if d.Current != nil {
+		d.Placeholder = "Message " + d.Current.Name
+	} else if len(d.Profiles) == 0 {
+		d.Placeholder = "Create a profile to start"
+	}
+	h.render(w, r, http.StatusOK, draftScreen(h.loadList(ctx, r, "", ""), d))
+}
+
+// handleNewCreate is the draft's first send: it creates the conversation
+// under the chosen profile, sends the message and opens the conversation on
+// the streaming reply. A plain form POST so it works without JS. With no
+// message it only creates the conversation.
+func (h *Handler) handleNewCreate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	text, modelVal := h.readCompose(r)
+	profileID := r.FormValue("profile_id")
 	if profileID == "" {
 		http.Error(w, "profile_id is required", http.StatusBadRequest)
 		return
 	}
-	resp, err := h.convos.CreateConversation(r.Context(), connect.NewRequest(&psmithv1.CreateConversationRequest{
+	resp, err := h.convos.CreateConversation(ctx, connect.NewRequest(&psmithv1.CreateConversationRequest{
 		ProfileId: profileID,
 	}))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/c/"+resp.Msg.GetConversation().GetId(), http.StatusSeeOther)
+	id := resp.Msg.GetConversation().GetId()
+	h.persistModel(ctx, id, modelVal)
+
+	attachIDs, _ := h.uploadComposeFiles(r)
+	if text == "" && len(attachIDs) == 0 {
+		http.Redirect(w, r, "/c/"+id, http.StatusSeeOther)
+		return
+	}
+	req := &psmithv1.SendMessageRequest{ConversationId: id, Content: text, AttachmentFileIds: attachIDs}
+	if pid, mid, ok := splitModelValue(modelVal); ok {
+		req.ProviderId, req.ModelId = &pid, &mid
+	}
+	sent, err := h.convos.SendMessage(ctx, connect.NewRequest(req))
+	if err != nil {
+		// The conversation exists; open it so the message can be retried
+		// from its composer rather than lost on an error page.
+		h.logger.Warn("web: first send failed", "err", err)
+		http.Redirect(w, r, "/c/"+id, http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/c/"+id+"?run="+sent.Msg.GetStreamRun().GetId(), http.StatusSeeOther)
 }

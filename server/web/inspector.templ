@@ -1,0 +1,509 @@
+package web
+
+import (
+	"fmt"
+	"strconv"
+)
+
+// The inspector column: three tabs (Context, Settings, Plugins), each a URL
+// (?tab=), and the sub-views that replace the tabs with a back button (the
+// model picker, the conversation's info, a plugin's panel or settings).
+
+func tabName(t string) string {
+	switch t {
+	case "settings":
+		return "Settings"
+	case "plugins":
+		return "Plugins"
+	}
+	return "Context"
+}
+
+func tabHref(convID, tab string) string {
+	return "/c/" + convID + "?tab=" + tab
+}
+
+templ inspector(c convVM) {
+	<aside class={ "inspector", templ.KV("as-page", c.Inspector.Page) } id="inspector" aria-label="Inspector">
+		<header class="insp-page-head">
+			<a class="insp-page-back" href={ templ.SafeURL("/c/" + c.ID) } aria-label="Back to the conversation">
+				@icon("back")
+			</a>
+			<div class="insp-page-title">
+				<h1>{ inspPageTitle(c.Inspector) }</h1>
+				<div>{ c.Title }</div>
+			</div>
+		</header>
+		switch c.Inspector.View {
+			case "model":
+				@inspSubHead("/c/"+c.ID, "Back to the inspector", "Model")
+				@pickerView(c, c.Inspector.Picker)
+			case "info":
+				@inspSubHead("/c/"+c.ID, "Back to the inspector", "Conversation")
+				@infoView(c.Inspector.Info)
+			case "panel":
+				@inspSubHead(tabHref(c.ID, "plugins"), "Back to plugins", c.Inspector.Panel.Title)
+				@panelView(c.Inspector.Panel)
+			case "config":
+				@inspSubHead(tabHref(c.ID, "plugins"), "Back to plugins", c.Inspector.Config.Display)
+				@configView(c.Inspector.Config)
+			default:
+				<div class="insp-head">
+					<div class="tabs" role="tablist" aria-label="Inspector">
+						for _, t := range inspTabs {
+							<a role="tab" href={ templ.SafeURL(tabHref(c.ID, t)) } aria-selected={ strconv.FormatBool(c.Inspector.Tab == t) }>{ tabName(t) }</a>
+						}
+					</div>
+				</div>
+				switch c.Inspector.Tab {
+					case "settings":
+						if c.Harness != nil {
+							@harnessPanel(c)
+						} else if c.Inspector.Settings != nil {
+							@settingsTab(c.Inspector.Settings)
+						}
+					case "plugins":
+						if c.Inspector.Plugins != nil {
+							@pluginsTab(c.Inspector.Plugins)
+						}
+					default:
+						<div class="insp-body">
+							@contextTab(c)
+						</div>
+				}
+		}
+	</aside>
+}
+
+func inspPageTitle(in inspVM) string {
+	switch in.View {
+	case "model":
+		return "Model"
+	case "info":
+		return "Conversation"
+	case "panel":
+		return in.Panel.Title
+	case "config":
+		return in.Config.Display
+	}
+	return tabName(in.Tab)
+}
+
+templ inspSubHead(back, backLabel, title string) {
+	<div class="insp-head sub">
+		<a class="insp-back" href={ templ.SafeURL(back) } aria-label={ backLabel }>
+			@icon("back")
+		</a>
+		<h2>{ title }</h2>
+	</div>
+}
+
+// --- Context tab ---
+
+templ contextTab(c convVM) {
+	<section>
+		<div class="sec-head">
+			<h2>Context size</h2>
+			<span class={ "ctx-tokens", c.Gauge.State }>{ commas(c.Gauge.Tokens) + " tokens" }</span>
+		</div>
+		<div class={ "meter", c.Gauge.State }>
+			<i style={ fmt.Sprintf("width:%.1f%%", c.Gauge.Percent) }></i>
+			if c.Gauge.Warn > 0 && c.Gauge.Window > 0 {
+				<b style={ fmt.Sprintf("left:%.1f%%", c.Gauge.WarnPct) } aria-hidden="true"></b>
+			}
+		</div>
+		<div class="meter-legend">
+			if c.Gauge.Warn > 0 {
+				<span>{ "Your warning: " + abbrevTokens(int32(c.Gauge.Warn)) }</span>
+			} else {
+				<span>No warning set</span>
+			}
+			if c.Gauge.Window > 0 {
+				<span>{ "Window: " + abbrevTokens(int32(c.Gauge.Window)) }</span>
+			}
+		</div>
+		@compressButton(c)
+	</section>
+	<section>
+		<h2 class="h2-gap">This context</h2>
+		<dl class="stats">
+			<dt>Cost</dt><dd class="tnum">{ c.Inspector.Cost }</dd>
+			<dt>Turns</dt><dd>{ strconv.Itoa(c.Inspector.Turns) }</dd>
+			<dt>Cache, last reply</dt><dd class="good">{ c.Inspector.Cache }</dd>
+			<dt>Model changes</dt><dd>{ strconv.Itoa(c.Inspector.Changes) }</dd>
+		</dl>
+	</section>
+	if c.Inspector.View == "contexts" {
+		@contextsManage(c)
+	} else {
+		if len(c.Inspector.Branches) > 0 {
+			@branchesSection(c.Inspector.Branches)
+		}
+		@contextsList(c.ID, c.Inspector.Contexts, "active")
+		if len(c.Inspector.Branches) == 0 {
+			@keysSection()
+		}
+	}
+}
+
+// branchesSection takes the keyboard section's place when the transcript
+// has branches: they're what a reader needs to find, and the keys are in
+// the account menu.
+templ branchesSection(rows []branchRowVM) {
+	<section>
+		<div class="sec-head h2-gap"><h2>Branches</h2><span class="muted">{ strconv.Itoa(len(rows)) }</span></div>
+		<div class="ctx-list">
+			for _, b := range rows {
+				<a class="branch-row" href={ templ.SafeURL(b.Href) }><span>{ b.Label }</span><span class="tnum">{ b.Pos }</span></a>
+			}
+		</div>
+	</section>
+}
+
+templ keysSection() {
+	<section class="insp-keys">
+		<h2 class="h2-gap">Keyboard</h2>
+		<dl class="keys">
+			<dt>Search and commands</dt><dd><kbd>/</kbd></dd>
+			<dt>Next or previous conversation</dt><dd><kbd>J</kbd> <kbd>K</kbd></dd>
+			<dt>Change model</dt><dd><kbd>M</kbd></dd>
+			<dt>Edit last message</dt><dd><kbd>↑</kbd></dd>
+		</dl>
+	</section>
+}
+
+templ compressButton(c convVM) {
+	switch c.Inspector.Compress {
+		case "running":
+			<button class="btn h36 full cmp-btn off" type="button" disabled>Compressing</button>
+		case "review":
+			<button class="btn h36 full cmp-btn off" type="button" disabled>Summary awaiting review</button>
+		case "open":
+			<a class={ "btn", "h36", "full", "cmp-btn", "on", templ.KV("warn", c.Gauge.State != "") } href={ templ.SafeURL("/c/" + c.ID) } aria-pressed="true">Compress into a new context</a>
+		default:
+			if c.Slot != "archived" {
+				<a class={ "btn", "h36", "full", "cmp-btn", templ.KV("warn", c.Gauge.State != "") } href={ templ.SafeURL("/c/" + c.ID + "/compact") }>Compress into a new context</a>
+			}
+	}
+}
+
+// contextsList is the compact list. mark names how the current row reads:
+// "active", or "viewing" on a read-only context's page.
+templ contextsList(convID string, rows []ctxRowVM, mark string) {
+	<section>
+		<a class="sec-head h2-gap sec-link" href={ templ.SafeURL(tabHref(convID, "contexts")) } aria-label="Manage contexts"><h2>Contexts</h2><span class="muted">{ strconv.Itoa(len(rows)) }</span></a>
+		<div class="ctx-list">
+			for _, x := range newestFirst(rows) {
+				<a class="ctx" href={ templ.SafeURL(ctxHref(convID, x)) } if ctxCurrent(x, mark) { aria-current="true" }>
+					<b>{ x.Label }</b>
+					if x.Active {
+						{ " · active" }
+					} else if x.Viewing {
+						{ " · viewing" }
+					}
+					<span>{ x.Detail }</span>
+				</a>
+			}
+		</div>
+	</section>
+}
+
+func ctxHref(convID string, x ctxRowVM) string {
+	if x.Active {
+		return "/c/" + convID
+	}
+	return "/c/" + convID + "/context/" + x.ID
+}
+
+func ctxCurrent(x ctxRowVM, mark string) bool {
+	if mark == "viewing" {
+		return x.Viewing
+	}
+	return x.Active
+}
+
+// contextsManage lists contexts with rename, delete (confirmed in place) and
+// Make active.
+templ contextsManage(c convVM) {
+	<section>
+		<div class="sec-head h2-gap"><h2>Contexts</h2><span class="muted">{ strconv.Itoa(len(c.Inspector.Contexts)) }</span></div>
+		<div class="ctx-list">
+			for _, x := range newestFirst(c.Inspector.Contexts) {
+				if c.Inspector.Rename == x.ID {
+					<form class="ctx-edit" method="post" action={ templ.SafeURL("/c/" + c.ID + "/context/" + x.ID + "/rename") } if x.Active { aria-current="true" } data-esc-href={ tabHref(c.ID, "contexts") }>
+						<label for="ctx-rename" class="sr-only">{ x.Label + " title" }</label>
+						<input id="ctx-rename" name="title" value={ ctxTitleValue(x) } autocomplete="off" autofocus/>
+						<span>
+							{ x.Label }
+							if x.Active {
+								{ " · active" }
+							}
+							{ " · " }<kbd>Enter</kbd>{ " saves · " }<kbd>Esc</kbd>{ " cancels" }
+						</span>
+					</form>
+				} else if c.Inspector.Confirm == x.ID {
+					<div class="confirm" role="group" aria-label={ "Delete " + x.Label }>
+						<b>{ "Delete " + x.Label + "?" }</b>
+						<span>{ deleteContextNote(c.Inspector.Contexts, x) }</span>
+						<div class="insp-confirm-btns">
+							<a class="cbtn" href={ templ.SafeURL(tabHref(c.ID, "contexts")) }>Cancel</a>
+							<form method="post" action={ templ.SafeURL("/c/" + c.ID + "/context/" + x.ID + "/delete") }>
+								<button class="cbtn del" type="submit">Delete</button>
+							</form>
+						</div>
+					</div>
+				} else {
+					<div class={ "ctx-row", templ.KV("on", x.Active) }>
+						<div class="ctx-row-top">
+							<a href={ templ.SafeURL(ctxHref(c.ID, x)) }>{ x.Title }</a>
+							<a class="ibtn" href={ templ.SafeURL(tabHref(c.ID, "contexts") + "&rename=" + x.ID) } aria-label={ "Rename " + x.Label }>
+								@ii("edit14")
+							</a>
+							if !x.Active {
+								<a class="ibtn" href={ templ.SafeURL(tabHref(c.ID, "contexts") + "&confirm=" + x.ID) } aria-label={ "Delete " + x.Label }>
+									@ii("trash14")
+								</a>
+							}
+						</div>
+						<span>{ x.Summary }</span>
+						if !x.Active {
+							<form method="post" action={ templ.SafeURL("/c/" + c.ID + "/context/" + x.ID + "/activate") }>
+								<button class="btn h28 make-active" type="submit">Make active</button>
+							</form>
+						}
+					</div>
+				}
+			}
+		</div>
+		<p class="insp-note">Open a past context to read it. Making it active continues the conversation from there.</p>
+	</section>
+}
+
+func ctxTitleValue(x ctxRowVM) string {
+	if x.Title == x.Label {
+		return ""
+	}
+	return x.Title
+}
+
+// deleteContextNote says what deleting a context loses, and that the
+// summary the next context started from survives.
+func deleteContextNote(rows []ctxRowVM, x ctxRowVM) string {
+	s := "Its " + plural(x.Turns, "turn") + " are deleted for good."
+	if x.Turns == 1 {
+		s = "Its one turn is deleted for good."
+	}
+	for _, r := range rows {
+		if r.N == x.N+1 && r.N > 1 {
+			s += " The summary that started " + r.Label + " stays."
+		}
+	}
+	return s
+}
+
+// --- Settings tab ---
+
+templ settingsTab(s *callSettingsVM) {
+	<form class="insp-body padded" method="post" action={ templ.SafeURL("/c/" + s.ConvID + "/settings") } id="insp-settings">
+		<section>
+			<h2 class="h2-gap">Model</h2>
+			<a class="model-card" href={ templ.SafeURL("/c/" + s.ConvID + "/model") }>
+				<span><b>{ s.ModelName }</b><span>{ s.ModelSub }</span></span>
+				<span class="chev">
+					@ii("chev")
+				</span>
+			</a>
+		</section>
+		<section>
+			<h2>Call settings</h2>
+			<p class="insp-intro">{ s.Intro }</p>
+			<div>
+				for _, r := range s.Rows {
+					@setRow(r)
+				}
+			</div>
+		</section>
+		if len(s.ProviderRows) > 0 {
+			<section>
+				<h2>{ s.ProviderTitle }</h2>
+				<p class="insp-intro">{ s.ProviderNote }</p>
+				<div>
+					for _, r := range s.ProviderRows {
+						@setRow(r)
+					}
+				</div>
+			</section>
+		}
+		@inspSaveBar(s.Dirty)
+	</form>
+}
+
+templ setRow(r setRowVM) {
+	<div class={ "set-row", templ.KV("set", r.Set() || r.Dirty) } data-set-row data-from={ r.From } data-inherits={ r.Inherits }>
+		<div class="set-lbl">
+			<label for={ "cs-" + r.Name }>{ r.Label }<span class="set-dot" aria-label="Set for this conversation"></span></label>
+			<span>{ r.Sub() }</span>
+		</div>
+		if r.Kind == "select" {
+			<select id={ "cs-" + r.Name } name={ r.Name } class={ "set-in", "wide", templ.KV("dirty", r.Dirty) }>
+				for _, o := range r.Options {
+					<option value={ o.Value } selected?={ o.Value == r.Value }>{ o.Label }</option>
+				}
+			</select>
+		} else {
+			<input id={ "cs-" + r.Name } name={ r.Name } value={ r.Value } placeholder={ r.Placeholder } autocomplete="off" class={ "set-in", templ.KV("wide", r.Wide), templ.KV("dirty", r.Dirty) }/>
+		}
+		<button type="button" class="set-reset" data-reset={ "cs-" + r.Name } aria-label={ resetLabel(r) }>
+			@ii("reset")
+		</button>
+		<span class="set-pad"></span>
+	</div>
+}
+
+func resetLabel(r setRowVM) string {
+	if r.Inherits == "" {
+		return "Reset " + r.Label + " to inherited"
+	}
+	return "Reset " + r.Label + " to inherited (" + r.Inherits + ")"
+}
+
+// inspSaveBar floats over the bottom of the inspector while the form holds
+// unsaved changes. app.js counts them; dirty is what the page opens with.
+templ inspSaveBar(dirty int) {
+	<div class="insp-save" role="region" aria-label="Unsaved changes" data-savebar data-initial={ strconv.Itoa(dirty) } hidden?={ dirty == 0 }>
+		<div>
+			<span data-dirty-count>{ unsavedLabel(dirty) }</span>
+			<button type="reset" class="btn ghost">Revert</button>
+			<button type="submit" class="btn primary">Save<kbd>⌘S</kbd></button>
+		</div>
+	</div>
+	<noscript>
+		<div class="insp-save static">
+			<div>
+				<span>Changes save when you press Save.</span>
+				<button type="submit" class="btn primary">Save</button>
+			</div>
+		</div>
+	</noscript>
+}
+
+func unsavedLabel(n int) string {
+	if n == 1 {
+		return "1 unsaved change"
+	}
+	return strconv.Itoa(n) + " unsaved changes"
+}
+
+// --- Plugins tab ---
+
+templ pluginsTab(p *pluginsTabVM) {
+	<form class="insp-body padded" method="post" action={ templ.SafeURL("/c/" + p.ConvID + "/plugins") } id="insp-plugins">
+		<section>
+			<div class="sec-head"><h2>Pipeline</h2><span class="muted">{ plural(len(p.Rows), "plugin") }</span></div>
+			<p class="insp-intro wide">{ "Plugins run in this order. Inherited ones come from the " + p.Profile + " profile. Switching one off here leaves the profile alone." }</p>
+			<ol class="plugs">
+				for _, r := range p.Rows {
+					<li class={ "plug", r.Kind }>
+						<span class="plug-n">{ strconv.Itoa(r.N) }</span>
+						<span class="plug-body">
+							<span class="plug-top">
+								<b>{ r.Display }</b>
+								switch r.Kind {
+									case "conversation":
+										<span class="pbadge mine">This conversation</span>
+									default:
+										<span class="pbadge inh">Inherited</span>
+										<span class="pbadge off">Off here</span>
+								}
+							</span>
+							<span class="plug-id">{ r.Name }</span>
+							if r.Panel {
+								<a class="plug-link" href={ templ.SafeURL("/c/" + p.ConvID + "/panel/" + r.Name) }>
+									Open panel
+									@ii("chev")
+								</a>
+							}
+							if r.Configure {
+								<a class="plug-link" href={ templ.SafeURL("/c/" + p.ConvID + "/plugin/" + r.Name) }>
+									Configure
+									@ii("chev")
+								</a>
+							}
+						</span>
+						if r.Kind == "conversation" {
+							<button type="submit" class="plug-x" name="remove" value={ r.Name } aria-label={ "Remove " + r.Display + " from this conversation" }>×</button>
+						} else {
+							<input type="hidden" name={ "on_" + r.Name } value={ strconv.FormatBool(r.Kind != "off") }/>
+							<button type="button" class="switch" role="switch" data-switch={ "on_" + r.Name } aria-checked={ strconv.FormatBool(r.Kind != "off") } aria-label={ r.Display + " on in this conversation" }></button>
+						}
+					</li>
+				}
+			</ol>
+			if len(p.Addable) > 0 {
+				<details class="add-plug" data-menu>
+					<summary class="btn h36 full">
+						@ii("plus13")
+						Add plugin
+						@icon("caret")
+					</summary>
+					<div class="menu">
+						for _, o := range p.Addable {
+							<button type="submit" name="add" value={ o.Name } title={ o.Description }>{ o.Display }</button>
+						}
+					</div>
+				</details>
+			}
+		</section>
+		@inspSaveBar(p.Dirty)
+	</form>
+}
+
+// harnessPanel takes the Settings tab's place when a harness runs the
+// conversation: the harness owns the transcript, so the call settings Psmith
+// would send don't apply, and what's fixed is what a reader needs to know.
+templ harnessPanel(c convVM) {
+	<div class="insp-body padded">
+		<section class="harness-card" aria-label={ c.Harness.ProviderLabel + " binding" }>
+			<h2>
+				@harnessIcon("terminal")
+				{ c.Harness.ProviderLabel }
+			</h2>
+			<p>{ "This conversation runs inside " + c.Harness.ProviderLabel + ", which keeps the transcript on the server. Psmith sends it one message at a time and never rebuilds the history, so a few things are fixed for the life of the conversation." }</p>
+			<ul>
+				<li>
+					@harnessIcon("swap")
+					<b>Stays on this provider</b><span>You can still switch models within it.</span>
+				</li>
+				if c.Harness.FrozenPrompt {
+					<li>
+						@harnessIcon("lines")
+						<b>System prompt is fixed</b><span>Set when the session opened. Editing the profile changes new conversations, not this one.</span>
+					</li>
+				}
+				if c.Harness.NoAttachments {
+					<li>
+						@harnessIcon("clip")
+						<b>No attachments</b><span>Paste the relevant part into your message instead.</span>
+					</li>
+				}
+			</ul>
+			<p class="harness-foot">Start a new conversation to change any of this.</p>
+		</section>
+		if c.ProfileID != "" {
+			<a class="btn h36 full harness-new" href={ templ.SafeURL("/new?profile=" + c.ProfileID) }>{ "New conversation with " + c.Profile }</a>
+		}
+	</div>
+}
+
+templ harnessIcon(name string) {
+	switch name {
+		case "terminal":
+			<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"></rect><path d="M4.5 6.5L6.5 8l-2 1.5M8 10h3"></path></svg>
+		case "swap":
+			<span class="hi"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4.5h9M8.5 2l2.5 2.5L8.5 7M12 9.5H3M5.5 7L3 9.5 5.5 12"></path></svg></span>
+		case "lines":
+			<span class="hi"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M2 3.5h10M2 7h10M2 10.5h6"></path></svg></span>
+		case "clip":
+			<span class="hi"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M13.5 7.5l-5.6 5.6a3.3 3.3 0 0 1-4.7-4.7l5.9-5.9a2.2 2.2 0 0 1 3.1 3.1L6.4 11.4a1.1 1.1 0 0 1-1.6-1.6l5.3-5.3"></path></svg></span>
+	}
+}

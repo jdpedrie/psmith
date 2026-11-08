@@ -2,6 +2,8 @@ package web
 
 import (
 	"bytes"
+	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/microcosm-cc/bluemonday"
@@ -38,5 +40,29 @@ func renderMarkdown(src string) string {
 	if err := mdEngine.Convert([]byte(src), &buf); err != nil {
 		return mdPolicy.Sanitize(src)
 	}
-	return string(mdPolicy.SanitizeBytes(buf.Bytes()))
+	return wrapCodeBlocks(string(mdPolicy.SanitizeBytes(buf.Bytes())))
+}
+
+var preCode = regexp.MustCompile(`<pre><code(?: class="language-([A-Za-z0-9_+#.-]+)")?>`)
+
+// wrapCodeBlocks gives every fenced block the boards' frame: a header with
+// the language and a Copy button. It runs after sanitizing, on markup the
+// sanitizer produced, so the language is already a safe token.
+func wrapCodeBlocks(h string) string {
+	if !strings.Contains(h, "<pre><code") {
+		return h
+	}
+	h = preCode.ReplaceAllStringFunc(h, func(m string) string {
+		lang := preCode.FindStringSubmatch(m)[1]
+		label := lang
+		if label == "" {
+			label = "code"
+		}
+		cls := ""
+		if lang != "" {
+			cls = ` class="language-` + lang + `"`
+		}
+		return `<div class="codeblock"><div class="codeblock-head">` + label + `<button type="button" data-copy-code>Copy</button></div><pre><code` + cls + `>`
+	})
+	return strings.ReplaceAll(h, "</code></pre>", "</code></pre></div>")
 }

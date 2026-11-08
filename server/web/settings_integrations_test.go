@@ -38,15 +38,17 @@ func TestEmbedderSettings(t *testing.T) {
 	if pageRec.Code != http.StatusOK || !strings.Contains(pageRec.Body.String(), "Embedder") {
 		t.Fatalf("embedder page bad; code=%d", pageRec.Code)
 	}
+	if strings.Contains(pageRec.Body.String(), `name="dimensions"`) {
+		t.Error("the page still asks for dimensions; the column only stores 768")
+	}
 
 	// Save a config.
 	form := url.Values{
-		"enabled":    {"on"},
-		"type":       {"openai"},
-		"base_url":   {"http://localhost:11434/v1"},
-		"model":      {"nomic-embed-text"},
-		"dimensions": {"768"},
-		"api_key":    {"sk-x"},
+		"enabled":  {"true"},
+		"type":     {"openai"},
+		"base_url": {"http://localhost:11434/v1"},
+		"model":    {"nomic-embed-text"},
+		"api_key":  {"sk-x"},
 	}
 	saveReq := httptest.NewRequest("POST", "/settings/embedder", strings.NewReader(form.Encode())).WithContext(userCtx)
 	saveReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -82,7 +84,7 @@ func TestLangfuseSettings(t *testing.T) {
 	}
 
 	form := url.Values{
-		"enabled":    {"on"},
+		"enabled":    {"true"},
 		"host":       {"https://us.cloud.langfuse.com"},
 		"public_key": {"pk-123"},
 		"secret_key": {"sk-456"},

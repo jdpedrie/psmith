@@ -1,0 +1,390 @@
+package web
+
+import "strconv"
+
+// --- model picker ---
+
+templ pickerView(c convVM, p *pickerVM) {
+	<form class="pick-search" method="get" action={ templ.SafeURL("/c/" + p.ConvID + "/model") } role="search">
+		<label>
+			@icon("search")
+			<input name="q" value={ p.Query } aria-label="Search models" placeholder="Search models" autocomplete="off" autofocus data-pick-filter/>
+			<kbd class="wide">M</kbd>
+		</label>
+	</form>
+	<form class="pick-body" method="post" action={ templ.SafeURL("/c/" + p.ConvID + "/model") }>
+		if p.Notice != "" {
+			<p class="pick-notice">{ p.Notice }</p>
+		}
+		<button type="submit" name="model" value="" class="pick-row" if p.UsingProfile { aria-current="true" }>
+			<span class="pick-main"><span class="pick-name">Use the profile's model</span><span class="pick-sub">{ p.ProfileModel }</span></span>
+			if p.UsingProfile {
+				<span class="pick-check">
+					@ii("check")
+				</span>
+			}
+		</button>
+		if len(p.Favorites) > 0 {
+			@pickGroup("Favorites", "", p.Favorites, p.UsingProfile)
+		}
+		for _, g := range p.Groups {
+			@pickGroup(g.Label, plural(len(g.Models), "model"), g.Models, p.UsingProfile)
+		}
+		<p class="pick-foot">
+			{ p.Foot + " " }
+			<kbd>↑</kbd> <kbd>↓</kbd>{ " moves · " }<kbd>Enter</kbd>{ " picks" }
+		</p>
+	</form>
+}
+
+templ pickGroup(label, count string, models []pickerModelVM, usingProfile bool) {
+	<div role="group" aria-label={ label } class="pick-group">
+		<div class="pick-head"><span>{ label }</span><span>{ count }</span></div>
+		for _, m := range models {
+			<button type="submit" name="model" value={ m.Value } class="pick-row" if m.Selected && !usingProfile { aria-current="true" } disabled?={ m.Disabled } data-pick-name={ m.DisplayName }>
+				<span class="pick-main">
+					<span class="pick-name">
+						{ m.DisplayName }
+						if m.Favorite {
+							<span class="pick-star" aria-label="Favorite">
+								@ii("star")
+							</span>
+						}
+					</span>
+					<span class="pick-meta">
+						if l := metaLine(m); l != "" {
+							<span class="pick-ctx">{ l }</span>
+						}
+						for _, b := range badges(m.Caps) {
+							<span class="pick-cap">{ b }</span>
+						}
+						if m.Disabled {
+							<span class="pick-why">{ needs(m.Missing) }</span>
+						}
+					</span>
+				</span>
+				if m.Selected && !usingProfile {
+					<span class="pick-check">
+						@ii("check")
+					</span>
+				}
+			</button>
+		}
+	</div>
+}
+
+// --- conversation info ---
+
+templ infoView(in *infoVM) {
+	<div class="insp-body sub">
+		<section>
+			<form method="post" action={ templ.SafeURL("/c/" + in.ConvID + "/title") }>
+				<label for="info-title" class="info-lbl">Title</label>
+				<input id="info-title" name="title" value={ in.Title } placeholder="Untitled" autocomplete="off" class="info-title"/>
+				<button type="submit" class="btn info-gen" formaction={ templ.SafeURL("/c/" + in.ConvID + "/info/title/generate") }>Generate title</button>
+			</form>
+		</section>
+		<section>
+			<h2 class="h2-gap">Details</h2>
+			<dl class="info-dl">
+				<dt>Profile</dt><dd><a href={ templ.SafeURL("/settings/profiles/" + in.ProfileID) }><span class={ "dot", "s7", pc(in.Color) }></span>{ in.Profile }</a></dd>
+				<dt>Model</dt><dd><a href={ templ.SafeURL("/c/" + in.ConvID + "/model") }>{ in.Model }</a><span>{ in.ModelSub }</span></dd>
+				<dt>Created</dt><dd>{ in.Created }</dd>
+				<dt>Last message</dt><dd>{ in.Last }</dd>
+				<dt>Contexts</dt><dd>{ in.Contexts }</dd>
+				<dt>Cost</dt><dd class="tnum">{ in.Cost }</dd>
+			</dl>
+		</section>
+		<section class="info-acts">
+			<h2>Actions</h2>
+			if !in.Archived {
+				<form method="post" action={ templ.SafeURL("/c/" + in.ConvID + "/pin") }>
+					<button type="submit" class="act">
+						@ii("pin")
+						<span>{ pinTitle(in.Pinned) }</span>
+					</button>
+				</form>
+				<form method="post" action={ templ.SafeURL("/c/" + in.ConvID + "/archive") }>
+					<button type="submit" class="act">
+						@ii("archive")
+						<span>Archive</span>
+					</button>
+				</form>
+			} else {
+				<form method="post" action={ templ.SafeURL("/c/" + in.ConvID + "/unarchive") }>
+					<button type="submit" class="act">
+						@ii("archive")
+						<span>Unarchive</span>
+					</button>
+				</form>
+			}
+			if in.Confirm {
+				<div class="confirm" role="group" aria-label="Delete conversation">
+					<b>Delete this conversation?</b>
+					<span>{ in.DeleteNote }</span>
+					<div class="insp-confirm-btns">
+						<a class="cbtn" href={ templ.SafeURL("/c/" + in.ConvID + "?tab=info") }>Cancel</a>
+						<form method="post" action={ templ.SafeURL("/c/" + in.ConvID + "/info/delete") }>
+							<button class="cbtn del" type="submit">Delete</button>
+						</form>
+					</div>
+				</div>
+			} else {
+				<a class="act danger" href={ templ.SafeURL("/c/" + in.ConvID + "?tab=info&confirm=delete") }>
+					@ii("trash14")
+					<span>Delete</span>
+				</a>
+			}
+		</section>
+	</div>
+}
+
+// --- plugin panel ---
+
+templ panelView(p *panelVM) {
+	<div class="insp-body sub">
+		<section id="panel-body">
+			if p.Subtitle != "" {
+				<p class="panel-sub">{ sentence(p.Subtitle) }</p>
+			}
+			@panelBody(*p)
+		</section>
+	</div>
+}
+
+// panelBody is what an action re-renders.
+templ panelBody(p panelVM) {
+	<div class="panel-parts" id="panel-parts">
+		if p.Error != "" {
+			<p class="panel-err" role="alert">{ p.Error }</p>
+		}
+		if len(p.Parts) == 0 && p.Error == "" {
+			<p class="insp-note">Nothing here yet.</p>
+		}
+		for _, part := range p.Parts {
+			switch part.Kind {
+				case "text":
+					<div class="md panel-text">
+						@templ.Raw(part.HTML)
+					</div>
+				case "cards":
+					<div class="pcards">
+						for _, card := range part.Cards {
+							if card.Action != "" {
+								<form method="post" action={ templ.SafeURL("/c/" + p.ConvID + "/panel/" + p.Plugin) } hx-post={ "/c/" + p.ConvID + "/panel/" + p.Plugin } hx-target="#panel-parts" hx-swap="outerHTML">
+									<button type="submit" name="action" value={ actionValue(card) } class={ "plug-card", templ.KV("on", card.Chosen) } if card.Chosen { aria-pressed="true" }>
+										@pcardText(card)
+										if card.Chosen {
+											<span class="pcard-mark on">
+												@ii("check")
+											</span>
+										} else {
+											<span class="pcard-mark">
+												@ii("plus13")
+											</span>
+										}
+									</button>
+								</form>
+							} else {
+								<div class="plug-card static">
+									@pcardText(card)
+								</div>
+							}
+						}
+					</div>
+				default:
+					<pre class="panel-raw">{ part.HTML }</pre>
+			}
+		}
+	</div>
+}
+
+templ pcardText(card panelCardVM) {
+	<span class="pcard-body">
+		<span class="plug-card-top">
+			<b>{ card.Title }</b>
+			for _, b := range card.Badges {
+				<span class={ "pbadge", badgeTone(card) }>{ b }</span>
+			}
+			if card.External != "" {
+				<a href={ templ.SafeURL(card.External) } target="_blank" rel="noopener noreferrer" class="plug-link">Open</a>
+			}
+		</span>
+		if card.Description != "" {
+			<span class="plug-card-desc">{ card.Description }</span>
+		}
+	</span>
+}
+
+// badgeTone colors a card's badge: the accent while the plugin still offers
+// to undo it, green once it's settled.
+func badgeTone(c panelCardVM) string {
+	if c.Action != "" {
+		return "mine"
+	}
+	return "done"
+}
+
+// --- plugin settings ---
+
+templ configView(cfg *pluginConfigVM) {
+	<form class="insp-body sub" method="post" action={ templ.SafeURL("/c/" + cfg.ConvID + "/plugin/" + cfg.Name) }>
+		<section class="cfg">
+			if cfg.Form.HasForm {
+				for _, f := range cfg.Form.Fields {
+					<label class="cfg-row">
+						<span class="info-lbl">
+							{ f.Display }
+							if f.Required {
+								<span class="muted">{ " · required" }</span>
+							}
+						</span>
+						switch f.Type {
+							case "boolean":
+								<input type="hidden" name={ "cfg_" + f.Name } value="false"/>
+								<input type="checkbox" name={ "cfg_" + f.Name } value="true" checked?={ f.Checked }/>
+							case "textarea":
+								<textarea class="info-title area" name={ "cfg_" + f.Name } rows="4">{ f.Value }</textarea>
+							case "select", "model":
+								<select class="info-title" name={ "cfg_" + f.Name }>
+									<option value="">None</option>
+									for _, o := range f.Options {
+										<option value={ o.Value } selected?={ o.Value == f.Value }>{ o.Label }</option>
+									}
+								</select>
+							default:
+								<input class="info-title" name={ "cfg_" + f.Name } value={ f.Value } type={ cfgInputType(f.Type) }/>
+						}
+						if f.Description != "" {
+							<span class="insp-note">{ f.Description }</span>
+						}
+					</label>
+				}
+			} else {
+				<label class="cfg-row">
+					<span class="info-lbl">Settings (JSON)</span>
+					<textarea class="info-title area mono" name="config" rows="10">{ cfg.Form.RawJSON }</textarea>
+				</label>
+			}
+			<button type="submit" class="btn primary h32">Save</button>
+		</section>
+	</form>
+}
+
+func cfgInputType(t string) string {
+	if t == "number" {
+		return "number"
+	}
+	return "text"
+}
+
+// --- read-only context page ---
+
+templ contextViewScreen(l listVM, c convVM, v ctxViewVM) {
+	@appScreen(c.Title+" · "+v.Label+" · Psmith", l) {
+		<main class="main" id="main" data-conv={ c.ID }>
+			<header class="conv-head ro-head">
+				<a class="ro-back" href={ templ.SafeURL("/c/" + c.ID) } aria-label={ "Back to " + v.ActiveLabel }>
+					@icon("back")
+				</a>
+				<div class="title">
+					<h1>{ c.Title }</h1>
+					<div class="sub">
+						<span class={ "dot", "s7", pc(c.Color) }></span>
+						{ c.Profile + " · " + v.Label + " of " + strconv.Itoa(len(c.Inspector.Contexts)) + " · read-only" }
+					</div>
+				</div>
+				<button class="insp-toggle" type="button" data-key="i" data-toggle-inspector aria-pressed={ strconv.FormatBool(c.ShowInsp) } aria-label={ inspLabel(c.ShowInsp) }>
+					@icon("panel")
+				</button>
+			</header>
+			<section class="transcript" id="transcript" aria-label="Transcript">
+				<div class="transcript-inner">
+					<div class="strip">{ v.Range }</div>
+					for _, it := range v.Items {
+						switch it.Role {
+							case "user":
+								<div class="bubble">
+									if len(it.Images) > 0 {
+										<div class="att-images">
+											for _, a := range it.Images {
+												<img src={ a.URL } alt={ a.Name } loading="lazy"/>
+											}
+										</div>
+									}
+									<div class="md">
+										@templ.Raw(it.HTML)
+									</div>
+								</div>
+							case "summary":
+								<article class="sum-card" aria-label="Compression summary">
+									<div class="sum-head">
+										@icon("gauge")
+										<span>Compression summary</span>
+										<span class="muted">{ joinDot(it.Model, it.Started) }</span>
+									</div>
+									<div class="md sum-text" data-clamp>
+										@templ.Raw(it.HTML)
+									</div>
+									<button type="button" class="sum-more" data-unclamp>Read in full</button>
+								</article>
+							default:
+								<article class="reply" aria-label="Reply">
+									<div class="md">
+										@templ.Raw(it.HTML)
+									</div>
+								</article>
+						}
+					}
+				</div>
+			</section>
+			@composerSlot(c)
+		</main>
+		if c.ShowInsp {
+			<aside class="inspector" id="inspector" aria-label="Inspector">
+				<div class="insp-head">
+					<div class="tabs" role="tablist" aria-label="Inspector">
+						for _, t := range inspTabs {
+							<a role="tab" href={ templ.SafeURL(tabHref(c.ID, t)) } aria-selected={ strconv.FormatBool(t == "context") }>{ tabName(t) }</a>
+						}
+					</div>
+				</div>
+				<div class="insp-body">
+					<section>
+						<div class="sec-head">
+							<h2>Context size</h2>
+							<span class="ctx-tokens">{ commas(v.Tokens) + " tokens" }</span>
+						</div>
+						<div class="meter viewing">
+							<i style={ "width:" + strconv.FormatFloat(v.Percent, 'f', 1, 64) + "%" }></i>
+							if v.Warn > 0 && v.Window > 0 {
+								<b style={ "left:" + strconv.FormatFloat(v.WarnPct, 'f', 1, 64) + "%" } aria-hidden="true"></b>
+							}
+						</div>
+						<div class="meter-legend">
+							if v.Warn > 0 {
+								<span>{ "Your warning: " + abbrevTokens(int32(v.Warn)) }</span>
+							} else {
+								<span>No warning set</span>
+							}
+							if v.Window > 0 {
+								<span>{ "Window: " + abbrevTokens(int32(v.Window)) }</span>
+							}
+						</div>
+					</section>
+					<section>
+						<h2 class="h2-gap">{ v.Label }</h2>
+						<dl class="stats">
+							<dt>Cost</dt><dd class="tnum">{ v.Cost }</dd>
+							<dt>Turns</dt><dd>{ strconv.Itoa(v.Turns) }</dd>
+							<dt>Cache, last reply</dt><dd class="good">{ v.Cache }</dd>
+							<dt>Model changes</dt><dd>{ strconv.Itoa(v.Changes) }</dd>
+						</dl>
+					</section>
+					@contextsList(c.ID, c.Inspector.Contexts, "viewing")
+					@keysSection()
+				</div>
+			</aside>
+		}
+	}
+}

@@ -8,7 +8,6 @@ package web
 import (
 	"context"
 	"embed"
-	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -26,9 +25,12 @@ import (
 	"github.com/jdpedrie/psmith/server/files"
 	"github.com/jdpedrie/psmith/server/langfusesvc"
 	"github.com/jdpedrie/psmith/server/modelproviders"
+	"github.com/jdpedrie/psmith/server/preferencessvc"
 	"github.com/jdpedrie/psmith/server/profiles"
+	"github.com/jdpedrie/psmith/server/speechsvc"
 	"github.com/jdpedrie/psmith/server/store"
 	"github.com/jdpedrie/psmith/server/stream"
+	"github.com/jdpedrie/psmith/server/streamsvc"
 )
 
 //go:embed assets
@@ -47,6 +49,9 @@ type Deps struct {
 	Langfuse      *langfusesvc.Service
 	Files         *files.Service
 	Supervisor    *stream.Supervisor
+	Preferences   *preferencessvc.Service
+	Speech        *speechsvc.Service
+	Streams       *streamsvc.Service
 	// Bus may be nil — the /events SSE bridge then reports 404 and
 	// pages simply never receive push triggers (htmx SSE fails quietly).
 	Bus    *events.Bus
@@ -64,6 +69,9 @@ type Handler struct {
 	langfuse   *langfusesvc.Service
 	files      *files.Service
 	supervisor *stream.Supervisor
+	prefs      *preferencessvc.Service
+	speech     *speechsvc.Service
+	streams    *streamsvc.Service
 	bus        *events.Bus
 	logger     *slog.Logger
 }
@@ -83,6 +91,9 @@ func New(d Deps) *Handler {
 		langfuse:   d.Langfuse,
 		files:      d.Files,
 		supervisor: d.Supervisor,
+		prefs:      d.Preferences,
+		speech:     d.Speech,
+		streams:    d.Streams,
 		bus:        d.Bus,
 		logger:     d.Logger,
 	}
@@ -108,82 +119,16 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /{$}", h.handleHome)
 	mux.HandleFunc("GET /login", h.handleLoginForm)
+	mux.HandleFunc("POST /prefs/appearance", h.handleAppearance)
 	mux.HandleFunc("POST /login", h.handleLogin)
 	mux.HandleFunc("POST /logout", h.handleLogout)
-	mux.HandleFunc("GET /chats", h.requireUser(h.handleChats))
-	mux.HandleFunc("GET /new", h.requireUser(h.handleNewForm))
-	mux.HandleFunc("POST /new", h.requireUser(h.handleNewCreate))
-	mux.HandleFunc("GET /c/{id}", h.requireUser(h.handleConversation))
-	mux.HandleFunc("POST /c/{id}/pin", h.requireUser(h.handlePinToggle))
-	mux.HandleFunc("POST /c/{id}/archive", h.requireUser(h.handleArchive))
-	mux.HandleFunc("POST /c/{id}/unarchive", h.requireUser(h.handleUnarchive))
-	mux.HandleFunc("GET /archived", h.requireUser(h.handleArchivedList))
-	mux.HandleFunc("POST /c/{id}/delete", h.requireUser(h.handleConversationDelete))
 	mux.HandleFunc("GET /events", h.requireUser(h.handleEvents))
-	mux.HandleFunc("GET /partials/sidebar", h.requireUser(h.handleSidebarPartial))
-	mux.HandleFunc("GET /partials/sidebar/rows", h.requireUser(h.handleSidebarRowsPartial))
-	mux.HandleFunc("GET /c/{id}/partials/messages", h.requireUser(h.handleMessagesPartial))
-	mux.HandleFunc("POST /c/{id}/send", h.requireUser(h.handleSend))
-	mux.HandleFunc("GET /c/{id}/stream", h.requireUser(h.handleStream))
-	mux.HandleFunc("POST /c/{id}/elicit/{eid}", h.requireUser(h.handleElicitRespond))
-	mux.HandleFunc("GET /c/{id}/model", h.requireUser(h.handleModelPicker))
-	mux.HandleFunc("POST /c/{id}/model", h.requireUser(h.handleSetModel))
-	mux.HandleFunc("GET /c/{id}/settings", h.requireUser(h.handleConvSettings))
-	mux.HandleFunc("POST /c/{id}/settings", h.requireUser(h.handleConvSettingsSave))
-	mux.HandleFunc("POST /c/{id}/plugins/override", h.requireUser(h.handleConvPluginOverride))
 
-	mux.HandleFunc("GET /settings", h.requireUser(h.handleSettings))
-	mux.HandleFunc("GET /settings/providers", h.requireUser(h.handleProviders))
-	mux.HandleFunc("GET /settings/providers/new", h.requireUser(h.handleProviderNew))
-	mux.HandleFunc("POST /settings/providers", h.requireUser(h.handleProviderCreate))
-	mux.HandleFunc("GET /settings/providers/{id}", h.requireUser(h.handleProvider))
-	mux.HandleFunc("POST /settings/providers/{id}/discover", h.requireUser(h.handleProviderDiscover))
-	mux.HandleFunc("POST /settings/providers/{id}/enable", h.requireUser(h.handleProviderEnable))
-	mux.HandleFunc("POST /settings/providers/{id}/test", h.requireUser(h.handleProviderTest))
-	mux.HandleFunc("POST /settings/providers/{id}/delete", h.requireUser(h.handleProviderDelete))
-
-	mux.HandleFunc("GET /settings/profiles", h.requireUser(h.handleProfiles))
-	mux.HandleFunc("GET /settings/profiles/new", h.requireUser(h.handleProfileNew))
-	mux.HandleFunc("POST /settings/profiles", h.requireUser(h.handleProfileCreate))
-	mux.HandleFunc("GET /settings/profiles/{id}", h.requireUser(h.handleProfileEdit))
-	mux.HandleFunc("POST /settings/profiles/{id}", h.requireUser(h.handleProfileUpdate))
-	mux.HandleFunc("POST /settings/profiles/{id}/delete", h.requireUser(h.handleProfileDelete))
-	mux.HandleFunc("GET /settings/profiles/{id}/plugins", h.requireUser(h.handlePluginsPage))
-	mux.HandleFunc("POST /settings/profiles/{id}/plugins", h.requireUser(h.handlePluginsSave))
-	mux.HandleFunc("POST /settings/profiles/{id}/plugins/add", h.requireUser(h.handlePluginAdd))
-	mux.HandleFunc("POST /settings/profiles/{id}/plugins/remove", h.requireUser(h.handlePluginRemove))
-
-	mux.HandleFunc("GET /settings/mcp-servers", h.requireUser(h.handleMCPServers))
-	mux.HandleFunc("GET /settings/mcp-servers/new", h.requireUser(h.handleMCPServerNew))
-	mux.HandleFunc("POST /settings/mcp-servers", h.requireUser(h.handleMCPServerSave))
-	mux.HandleFunc("GET /settings/mcp-servers/{id}", h.requireUser(h.handleMCPServerEdit))
-	mux.HandleFunc("POST /settings/mcp-servers/{id}/test", h.requireUser(h.handleMCPServerTest))
-	mux.HandleFunc("POST /settings/mcp-servers/{id}/delete", h.requireUser(h.handleMCPServerDelete))
-
-	mux.HandleFunc("GET /settings/embedder", h.requireUser(h.handleEmbedder))
-	mux.HandleFunc("POST /settings/embedder", h.requireUser(h.handleEmbedderSave))
-	mux.HandleFunc("POST /settings/embedder/test", h.requireUser(h.handleEmbedderTest))
-	mux.HandleFunc("POST /settings/embedder/delete", h.requireUser(h.handleEmbedderDelete))
-
-	mux.HandleFunc("GET /settings/langfuse", h.requireUser(h.handleLangfuse))
-	mux.HandleFunc("POST /settings/langfuse", h.requireUser(h.handleLangfuseSave))
-	mux.HandleFunc("POST /settings/langfuse/test", h.requireUser(h.handleLangfuseTest))
-	mux.HandleFunc("POST /settings/langfuse/delete", h.requireUser(h.handleLangfuseDelete))
-
-	mux.HandleFunc("GET /settings/cost", h.requireUser(h.handleCost))
-
-	mux.HandleFunc("GET /c/{id}/contexts", h.requireUser(h.handleContexts))
-	mux.HandleFunc("GET /c/{id}/context/{cid}", h.requireUser(h.handleContextView))
-
-	mux.HandleFunc("GET /c/{id}/message/{mid}/edit", h.requireUser(h.handleEditForm))
-	mux.HandleFunc("POST /c/{id}/message/{mid}/edit", h.requireUser(h.handleEditSave))
-	mux.HandleFunc("POST /c/{id}/regenerate", h.requireUser(h.handleRegenerate))
-	mux.HandleFunc("POST /c/{id}/message/{mid}/delete", h.requireUser(h.handleMessageDelete))
-
-	mux.HandleFunc("GET /c/{id}/compact", h.requireUser(h.handleCompactPage))
-	mux.HandleFunc("POST /c/{id}/compact", h.requireUser(h.handleCompactRun))
-	mux.HandleFunc("GET /c/{id}/compact/stream", h.requireUser(h.handleCompactStream))
-	mux.HandleFunc("POST /c/{id}/promote", h.requireUser(h.handleCompactPromote))
+	h.mountList(mux)
+	h.mountConversation(mux)
+	h.mountInspector(mux)
+	h.mountSettingsA(mux)
+	h.mountSettingsB(mux)
 }
 
 func cacheControl(next http.Handler) http.Handler {
@@ -194,19 +139,6 @@ func cacheControl(next http.Handler) http.Handler {
 }
 
 // --- view models (decouple templ from the proto types) ---
-
-type convoVM struct {
-	ID      string
-	Title   string
-	Active  bool
-	RelTime string // short relative time, e.g. "3h", "Apr 2"
-	Group   string // date bucket header for the sidebar, e.g. "Today"
-	Pinned  bool
-	// Set once a stateful harness has answered here. Nil for every row the
-	// sidebar renders: the list RPC does not carry it, and the sidebar has
-	// nothing to do with it.
-	Harness *harnessVM
-}
 
 // harnessVM is what a conversation is committed to, in the shape the templates
 // want. See docs/design/providers.md; the constraints all follow from the
@@ -247,71 +179,12 @@ type modelVM struct {
 	Selected bool
 }
 
-type profileVM struct {
-	ID          string
-	Name        string
-	Description string
-	IsDefault   bool
-}
-
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, status int, c templ.Component) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	if err := c.Render(r.Context(), w); err != nil {
+	if err := c.Render(withPrefs(r.Context(), readPrefs(r)), w); err != nil {
 		h.logger.Warn("web: render failed", "err", err)
 	}
-}
-
-// listConvos loads the caller's conversations for the sidebar, marking
-// activeID as current.
-func (h *Handler) listConvos(ctx context.Context, activeID string) ([]convoVM, error) {
-	out, _, err := h.listConvosPage(ctx, activeID, "")
-	return out, err
-}
-
-// listConvosPage is the paged form: pass the previous response's token
-// to continue, "" for page one (which also carries the pinned block).
-// The returned token is empty on the last page. The sidebar's
-// "Show more" fragment is the consumer; full-page renders take page
-// one and let the fragment extend it in place.
-func (h *Handler) listConvosPage(ctx context.Context, activeID, pageToken string) ([]convoVM, string, error) {
-	resp, err := h.convos.ListConversations(ctx, connect.NewRequest(&psmithv1.ListConversationsRequest{
-		PageSize:  100,
-		PageToken: pageToken,
-	}))
-	if err != nil {
-		return nil, "", err
-	}
-	now := time.Now()
-	out := make([]convoVM, 0, len(resp.Msg.GetConversations()))
-	var lastGroup string
-	for _, c := range resp.Msg.GetConversations() {
-		vm := convoVM{ID: c.GetId(), Title: convoTitle(c), Active: c.GetId() == activeID, Pinned: c.GetPinnedAt() != nil}
-		if ts := c.GetUpdatedAt(); ts != nil {
-			t := ts.AsTime()
-			vm.RelTime = relTime(now, t)
-			if g := dateGroup(now, t); g != lastGroup {
-				vm.Group = g
-				lastGroup = g
-			}
-		}
-		out = append(out, vm)
-	}
-	return out, resp.Msg.GetNextPageToken(), nil
-}
-
-// relTime renders a compact "time since" label for the sidebar: minutes/hours
-// within a day, "d" within a week, then an absolute month/day.
-// sidebarActiveID extracts the highlighted conversation id from the
-// sidebar rows — the sidebar's self-refresh URL carries it so a
-// re-render keeps the same row highlighted.
-func sidebarActiveID(convos []convoVM) string {
-	for _, c := range convos {
-		if c.Active {
-			return c.ID
-		}
-	}
-	return ""
 }
 
 // pinTitle labels the sidebar pin toggle for its current state.
@@ -320,31 +193,6 @@ func pinTitle(pinned bool) string {
 		return "Unpin"
 	}
 	return "Pin"
-}
-
-// serverBuildVersion feeds the settings page's version footer.
-// Package-level (not a Handler method) so the templ template can call
-// it without threading the handler through.
-func serverBuildVersion() string {
-	return auth.BuildVersion()
-}
-
-func relTime(now, t time.Time) string {
-	d := now.Sub(t)
-	switch {
-	case d < time.Minute:
-		return "now"
-	case d < time.Hour:
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%dh", int(d.Hours()))
-	case d < 7*24*time.Hour:
-		return fmt.Sprintf("%dd", int(d.Hours()/24))
-	case t.Year() == now.Year():
-		return t.Format("Jan 2")
-	default:
-		return t.Format("Jan 2006")
-	}
 }
 
 // dateGroup buckets a conversation's last-activity time into a sidebar section
@@ -421,28 +269,6 @@ func (h *Handler) listModels(ctx context.Context, selected string) []modelVM {
 			label = label + " (" + pl + ")"
 		}
 		out = append(out, modelVM{Value: val, Label: label, Selected: val == selected})
-	}
-	return out
-}
-
-// listProfiles returns the caller's directly-usable profiles for the
-// new-conversation picker. Parent-only profiles are templates, not chat
-// personas, so they are excluded.
-func (h *Handler) listProfiles(ctx context.Context) []profileVM {
-	if h.profiles == nil {
-		return nil
-	}
-	resp, err := h.profiles.ListProfiles(ctx, connect.NewRequest(&psmithv1.ListProfilesRequest{}))
-	if err != nil {
-		h.logger.Warn("web: list profiles failed", "err", err)
-		return nil
-	}
-	out := make([]profileVM, 0, len(resp.Msg.GetProfiles()))
-	for _, p := range resp.Msg.GetProfiles() {
-		if p.GetParentOnly() {
-			continue
-		}
-		out = append(out, profileVM{ID: p.GetId(), Name: p.GetName(), Description: p.GetDescription(), IsDefault: p.GetIsDefault()})
 	}
 	return out
 }

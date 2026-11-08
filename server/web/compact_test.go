@@ -70,15 +70,23 @@ func TestCompactFlow_E2E(t *testing.T) {
 	streamRec := do(h.handleCompactStream, streamReq)
 
 	body := streamRec.Body.String()
-	if !strings.Contains(body, "Summary of the chat so far.") {
+	if !strings.Contains(body, "event: summary") || !strings.Contains(body, "Summary of the chat so far.") {
 		t.Fatalf("compaction stream missing summary text; body:\n%s", body)
 	}
-	if !strings.Contains(body, "/c/"+fx.convID.String()+"/promote") {
-		t.Fatalf("compaction stream missing promote form; body:\n%s", body)
+	if !strings.Contains(body, "event: done\ndata: /c/"+fx.convID.String()) {
+		t.Fatalf("compaction stream missing done with the next page; body:\n%s", body)
 	}
-	m := regexp.MustCompile(`name="message_id" value="([^"]+)"`).FindStringSubmatch(body)
+
+	// The conversation now shows the review card, bound to the summary.
+	pageReq := httptest.NewRequest("GET", "/c/"+fx.convID.String(), nil).WithContext(userCtx)
+	pageReq.SetPathValue("id", fx.convID.String())
+	page := do(h.handleConversation, pageReq).Body.String()
+	if !strings.Contains(page, "Summary ready for review") {
+		t.Fatalf("no review card after the run; body:\n%s", page)
+	}
+	m := regexp.MustCompile(`name="message_id" value="([^"]+)"`).FindStringSubmatch(page)
 	if m == nil {
-		t.Fatalf("no message_id in promote form; body:\n%s", body)
+		t.Fatalf("no message_id in review card; body:\n%s", page)
 	}
 	summaryMsgID := m[1]
 
@@ -158,23 +166,23 @@ func TestPendingCompression_GatesComposer(t *testing.T) {
 	pageReq.SetPathValue("id", fx.convID.String())
 	pageRec := do(h.handleConversation, pageReq)
 	body := pageRec.Body.String()
-	if !strings.Contains(body, "Compression awaiting review") {
+	if !strings.Contains(body, "Summary ready for review") {
 		t.Fatalf("pending page missing review bar; body:\n%s", body)
 	}
 	if strings.Contains(body, `id="composer"`) {
 		t.Fatal("pending page still renders the composer")
 	}
-	m := regexp.MustCompile(`/message/([^/]+)/delete`).FindStringSubmatch(body)
+	m := regexp.MustCompile(`name="message_id" value="([^"]+)"`).FindStringSubmatch(body)
 	if m == nil {
-		t.Fatalf("no delete action in review bar; body:\n%s", body)
+		t.Fatalf("no discard action in review card; body:\n%s", body)
 	}
 	summaryMsgID := m[1]
 
-	// Delete the summary via the new route; the composer returns.
-	delReq := httptest.NewRequest("POST", "/c/"+fx.convID.String()+"/message/"+summaryMsgID+"/delete", nil).WithContext(userCtx)
+	// Discarding the summary gives the composer back.
+	delReq := httptest.NewRequest("POST", "/c/"+fx.convID.String()+"/summary/discard", strings.NewReader(url.Values{"message_id": {summaryMsgID}}.Encode())).WithContext(userCtx)
+	delReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	delReq.SetPathValue("id", fx.convID.String())
-	delReq.SetPathValue("mid", summaryMsgID)
-	delRec := do(h.handleMessageDelete, delReq)
+	delRec := do(h.handleSummaryDiscard, delReq)
 	if delRec.Code != http.StatusSeeOther {
 		t.Fatalf("delete status=%d; body:\n%s", delRec.Code, delRec.Body.String())
 	}
@@ -183,7 +191,7 @@ func TestPendingCompression_GatesComposer(t *testing.T) {
 	pageReq2.SetPathValue("id", fx.convID.String())
 	pageRec2 := do(h.handleConversation, pageReq2)
 	body2 := pageRec2.Body.String()
-	if strings.Contains(body2, "Compression awaiting review") {
+	if strings.Contains(body2, "Summary ready for review") {
 		t.Fatal("review bar still present after deleting the summary")
 	}
 	if !strings.Contains(body2, `id="composer"`) {

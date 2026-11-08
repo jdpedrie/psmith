@@ -65,7 +65,7 @@ func TestSend_WithAttachment(t *testing.T) {
 
 	rec := do(h.handleSend, req)
 	out := rec.Body.String()
-	if !strings.Contains(out, `class="attachment"`) {
+	if !strings.Contains(out, `class="img-tile one"`) {
 		t.Fatalf("response missing rendered attachment; body:\n%s", out)
 	}
 	if !strings.Contains(out, "/files/") {

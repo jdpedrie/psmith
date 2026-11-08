@@ -24,7 +24,7 @@ import (
 
 func TestAbbrevTokens(t *testing.T) {
 	t.Parallel()
-	cases := map[int32]string{500: "500", 1000: "1K", 200000: "200K", 1000000: "1M", 1500000: "1.5M"}
+	cases := map[int32]string{500: "500", 1000: "1k", 200000: "200k", 1000000: "1M", 1500000: "1.5M"}
 	for in, want := range cases {
 		if got := abbrevTokens(in); got != want {
 			t.Errorf("abbrevTokens(%d) = %q want %q", in, got, want)
@@ -69,16 +69,15 @@ func TestModelPicker_RendersGroupedAndSelects(t *testing.T) {
 	fx := seedSendable(t, q, "http://unused")
 	userCtx := auth.ContextWithUser(context.Background(), auth.User{ID: fx.userID, Username: "u"})
 
-	// Render the picker (htmx overlay).
+	// The picker opens in the inspector.
 	req := httptest.NewRequest("GET", "/c/"+fx.convID.String()+"/model", nil).WithContext(userCtx)
-	req.Header.Set("HX-Request", "true")
 	req.SetPathValue("id", fx.convID.String())
 	rec := do(h.handleModelPicker, req)
 	body := rec.Body.String()
 	if rec.Code != 200 {
 		t.Fatalf("status=%d; body:\n%s", rec.Code, body)
 	}
-	for _, want := range []string{"Claude Fake", "modal-backdrop", "model-row", "/c/" + fx.convID.String() + "/model"} {
+	for _, want := range []string{"Claude Fake", "pick-body", "pick-row", "Use the profile's model", `action="/c/` + fx.convID.String() + `/model"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("picker missing %q", want)
 		}
@@ -89,14 +88,10 @@ func TestModelPicker_RendersGroupedAndSelects(t *testing.T) {
 	form := url.Values{"model": {value}}
 	postReq := httptest.NewRequest("POST", "/c/"+fx.convID.String()+"/model", strings.NewReader(form.Encode())).WithContext(userCtx)
 	postReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	postReq.Header.Set("HX-Request", "true")
 	postReq.SetPathValue("id", fx.convID.String())
 	postRec := do(h.handleSetModel, postReq)
-	if postRec.Code != 200 {
+	if postRec.Code != 303 {
 		t.Fatalf("set model status=%d", postRec.Code)
-	}
-	if out := postRec.Body.String(); !strings.Contains(out, "composer-model-chip") || !strings.Contains(out, `id="modal"`) {
-		t.Errorf("set-model response missing chip/oob-close; body:\n%s", out)
 	}
 
 	// The conversation now stores that default.
@@ -107,5 +102,17 @@ func TestModelPicker_RendersGroupedAndSelects(t *testing.T) {
 	s := got.Msg.GetConversation().GetSettings()
 	if s.GetDefaultProviderId() != fx.providerID.String() || s.GetDefaultModelId() != fx.modelID {
 		t.Errorf("default model = %s|%s want %s|%s", s.GetDefaultProviderId(), s.GetDefaultModelId(), fx.providerID, fx.modelID)
+	}
+
+	// An empty pick goes back to the profile's model.
+	clearReq := httptest.NewRequest("POST", "/c/"+fx.convID.String()+"/model", strings.NewReader("model=")).WithContext(userCtx)
+	clearReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	clearReq.SetPathValue("id", fx.convID.String())
+	if rec := do(h.handleSetModel, clearReq); rec.Code != 303 {
+		t.Fatalf("clear model status=%d", rec.Code)
+	}
+	got, _ = convos.GetConversation(userCtx, connect.NewRequest(&psmithv1.GetConversationRequest{Id: fx.convID.String()}))
+	if m := currentSettingsModel(got.Msg.GetConversation()); m != "" {
+		t.Errorf("model after clearing = %q, want none", m)
 	}
 }

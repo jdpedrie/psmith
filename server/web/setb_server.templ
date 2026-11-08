@@ -1,0 +1,220 @@
+package web
+
+// --- Embedder ---
+
+templ embedderScreen(n snavVM, vm sbEmbedderVM) {
+	@settingsScreen("Embedder", n) {
+		<form class="spage-form" method="post" action="/settings/embedder">
+			<div class="spage-scroll">
+				<div class="spage-inner">
+					<div>
+						@sbCrumbs("Settings", "/settings", "Embedder")
+						<div class="page-title">
+							<h2>Embedder</h2>
+							<button class="btn raised" type="submit" formaction="/settings/embedder/test" formnovalidate data-needs-saved if vm.Dirty > 0 { aria-disabled="true" }>Test connection</button>
+						</div>
+						<p class="sb-lede">Embeds every message so the memory plugin can pull older context back into long conversations. Off by default. Keys are encrypted at rest.</p>
+						<p class="sb-lede sm" data-needs-saved-note hidden?={ vm.Dirty == 0 }>Save your changes to test them.</p>
+						@sbStatus(vm.Status)
+					</div>
+					<section aria-labelledby="emconn">
+						<h3 id="emconn" class="sec-title">Connection</h3>
+						<div class="group sb-g">
+							<div class="grow">
+								<label for="emtype" class="lbl">Driver</label>
+								@sbSelect("emtype", "type", false, false, vm.TypeOpts)
+							</div>
+							<div class="grow">
+								<label for="emurl" class="lbl">Base URL</label>
+								<input id="emurl" name="base_url" class="field wide mono" value={ vm.BaseURL } placeholder="https://api.openai.com/v1"/>
+							</div>
+							<div class="grow">
+								<label for="emmodel" class="lbl">Model</label>
+								<input id="emmodel" name="model" class={ "field sb-w240 mono", templ.KV("sb-dirty", vm.Model != vm.ModelOrig) } value={ vm.Model } data-orig={ vm.ModelOrig }/>
+								@changedFrom("emmodel", vm.ModelOrig, vm.Model != vm.ModelOrig)
+							</div>
+							<div class="grow">
+								<span class="lbl">Dimensions</span>
+								<span class="sb-fixed">Psmith stores 768-dimension vectors. The model has to return that many.</span>
+								<span class="sb-fixed-val tnum">768</span>
+							</div>
+							<div class="grow">
+								<label for="emkey" class="lbl">API key</label>
+								<input id="emkey" name="api_key" type="password" class="field wide mono" autocomplete="off" placeholder={ keyPlaceholder(vm.KeySet, "Leave empty for Ollama") }/>
+							</div>
+						</div>
+						<p class="foot-note warn" data-changed-for="emmodel" hidden?={ vm.Model == vm.ModelOrig }>Saving a new model deletes the stored vectors. Every message embeds again with it, oldest first.</p>
+						<p class="foot-note">The openai driver works with OpenAI, Ollama, Voyage, Together, or any OpenAI-compatible API. nomic-embed-text and embeddinggemma return 768 dimensions.</p>
+					</section>
+					<section aria-labelledby="emstate">
+						<h3 id="emstate" class="sec-title">State</h3>
+						<div class="group sb-g">
+							@sbSwitchRow("emon", "enabled", "Use this embedder", "The memory plugin can only search what has been embedded.", vm.Enabled)
+							<div class="grow">
+								<span class="lbl fill">Messages waiting<span class="sb-sub">Embedded in the background, oldest first.</span></span>
+								<span class="sb-count tnum">{ orDefault(vm.Waiting, "0") }</span>
+								if vm.Active {
+									<span class="sb-pill ok">Worker active</span>
+								} else {
+									<span class="sb-pill">Worker idle</span>
+								}
+							</div>
+						</div>
+					</section>
+					<section aria-labelledby="emremove">
+						<h3 id="emremove" class="sec-title">Remove</h3>
+						@sbConfirm(vm.Remove)
+					</section>
+				</div>
+			</div>
+			@saveBar(vm.Dirty)
+		</form>
+	}
+}
+
+templ changedFrom(id, orig string, show bool) {
+	<span class="changed" data-changed-for={ id } hidden?={ !show }>{ "Changed from " + orDefault(orig, "empty") }</span>
+}
+
+// --- Langfuse ---
+
+templ langfuseScreen(n snavVM, vm sbLangfuseVM) {
+	@settingsScreen("Langfuse", n) {
+		<form class="spage-form" method="post" action="/settings/langfuse">
+			<div class="spage-scroll">
+				<div class="spage-inner">
+					<div>
+						@sbCrumbs("Settings", "/settings", "Langfuse")
+						<div class="page-title">
+							<h2>Langfuse</h2>
+							<button class="btn raised" type="submit" formaction="/settings/langfuse/test" formnovalidate data-needs-saved if vm.Dirty > 0 { aria-disabled="true" }>Send test trace</button>
+						</div>
+						<p class="sb-lede">Mirrors every assistant turn into your Langfuse instance for observability and cost tracking. Off by default. Credentials are encrypted at rest.</p>
+						<p class="sb-lede sm" data-needs-saved-note hidden?={ vm.Dirty == 0 }>Save your changes to test them.</p>
+						@sbStatus(vm.Status)
+					</div>
+					<section aria-labelledby="lfconn">
+						<h3 id="lfconn" class="sec-title">Connection</h3>
+						<div class="group sb-g">
+							<div class="grow">
+								<label for="lfhost" class="lbl">Host</label>
+								<input id="lfhost" name="host" class="field wide mono" value={ vm.Host } placeholder="https://cloud.langfuse.com"/>
+							</div>
+							<div class="grow">
+								<label for="lfpk" class="lbl">Public key</label>
+								<input id="lfpk" name="public_key" class="field wide mono" value={ vm.PublicKey } placeholder="pk-lf-…"/>
+							</div>
+							@secretField("lfsk", "secret_key", "Secret key", "sk-lf-…", vm.SecretSet, vm.Replace, "/settings/langfuse?replace=1", "")
+						</div>
+						<p class="foot-note">Both keys are in Langfuse under Settings, API Keys. The server never sends the secret back.</p>
+					</section>
+					<section aria-labelledby="lfstate">
+						<h3 id="lfstate" class="sec-title">State</h3>
+						<div class="group sb-g">
+							@sbSwitchRow("lfon", "enabled", "Send traces to Langfuse", "Every assistant turn becomes a trace with its cost and latency.", vm.Enabled)
+							<div class="grow">
+								<span class="lbl">Last successful emit</span>
+								<span class="sb-val tnum">{ vm.LastEmit }</span>
+							</div>
+						</div>
+					</section>
+					<section aria-labelledby="lfremove">
+						<h3 id="lfremove" class="sec-title">Remove</h3>
+						@sbConfirm(vm.Remove)
+					</section>
+				</div>
+			</div>
+			@saveBar(vm.Dirty)
+		</form>
+	}
+}
+
+// secretField is a write-only credential: masked with Replace once stored,
+// an input until then or while replacing. removeAction, when set, adds a
+// Remove that clears it.
+templ secretField(id, name, label, placeholder string, set, replace bool, replaceHref, removeAction string) {
+	<div class="grow" data-setb-secret>
+		if set && !replace {
+			<span class="lbl">{ label }</span>
+			<span class="sb-val mono">{ maskedSecret }</span>
+			<a class="btn h32 sb-n" href={ templ.SafeURL(replaceHref) } data-setb-replace={ id }>Replace</a>
+			if removeAction != "" {
+				<button class="btn h32 ghost sb-n sb-red" type="submit" formaction={ templ.SafeURL(removeAction) } formnovalidate>Remove</button>
+			}
+			<input id={ id } name={ name } type="password" class="field wide mono" autocomplete="off" placeholder={ placeholder } hidden/>
+		} else {
+			<label for={ id } class="lbl">{ label }</label>
+			<input id={ id } name={ name } type="password" class="field wide mono" autocomplete="off" placeholder={ placeholder }/>
+		}
+	</div>
+}
+
+// --- Speech ---
+
+templ speechScreen(n snavVM, vm sbSpeechVM) {
+	@settingsScreen("Speech", n) {
+		<form class="spage-form" method="post" action="/settings/speech">
+			<div class="spage-scroll">
+				<div class="spage-inner">
+					<div>
+						@sbCrumbs("Settings", "/settings", "Speech")
+						<div class="page-title">
+							<h2>Speech</h2>
+							<button class="btn raised" type="submit" formaction="/settings/speech/test" formnovalidate data-needs-saved if vm.Dirty > 0 { aria-disabled="true" }>Test synthesis</button>
+						</div>
+						<p class="sb-lede">Reads assistant replies aloud. Keys are encrypted at rest and audio is never stored.</p>
+						<p class="sb-lede sm" data-needs-saved-note hidden?={ vm.Dirty == 0 }>Save your changes to test them.</p>
+						@sbStatus(vm.Status)
+					</div>
+					<section aria-labelledby="spsynth">
+						<h3 id="spsynth" class="sec-title">Synthesis</h3>
+						<div class="group sb-g">
+							<div class="grow">
+								<label for="spkind" class="lbl">Kind</label>
+								@sbSelect("spkind", "kind", false, false, vm.KindOpts)
+							</div>
+							<div class="grow">
+								<label for="spvoice" class="lbl">Voice</label>
+								<input id="spvoice" name="voice" class="field wide mono" value={ vm.Voice } placeholder="The provider's voice id"/>
+							</div>
+							<div class="grow">
+								<label for="spmodel" class="lbl">Model</label>
+								<input id="spmodel" name="model" class="field wide mono" value={ vm.Model } placeholder="Optional"/>
+							</div>
+							<div class="grow">
+								<label for="spspeed" class="lbl">Speed</label>
+								<span class="sb-range">
+									<input id="spspeed" name="speed" type="range" min="0.7" max="1.5" step="0.1" value={ vm.Speed } data-setb-output="spspeed-out"/>
+									<output id="spspeed-out" for="spspeed" class="tnum">{ vm.Speed + "×" }</output>
+								</span>
+							</div>
+						</div>
+						if vm.Note != "" {
+							<p class="foot-note">{ vm.Note }</p>
+						}
+					</section>
+					<section aria-labelledby="spconn">
+						<h3 id="spconn" class="sec-title">Connection</h3>
+						<div class="group sb-g">
+							<div class="grow">
+								<label for="spurl" class="lbl">Base URL</label>
+								<input id="spurl" name="base_url" class="field wide mono" value={ vm.BaseURL } placeholder="Leave empty for OpenAI"/>
+							</div>
+							@secretField("spkey", "api_key", "API key", "Optional when a provider key is reused", vm.KeySet, vm.Replace, "/settings/speech?replace=1", "/settings/speech/key/delete")
+							<div class="grow">
+								<label for="spref" class="lbl">Reuse provider key</label>
+								@sbSelect("spref", "provider_ref", false, false, vm.ProviderOpts)
+							</div>
+						</div>
+						<p class="foot-note">The driver appends /v1/audio/speech. A saved key wins over a reused provider key, so remove it to bill synthesis to a provider instead.</p>
+					</section>
+					<section aria-labelledby="spreset">
+						<h3 id="spreset" class="sec-title">Reset</h3>
+						@sbConfirm(vm.Reset)
+					</section>
+				</div>
+			</div>
+			@saveBar(vm.Dirty)
+		</form>
+	}
+}

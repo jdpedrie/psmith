@@ -1,0 +1,147 @@
+package web
+
+import "strconv"
+
+type userRowVM struct {
+	ID, Name, Login, Initial, Added string
+	Admin, Self                     bool
+	Mode                            string // "", "reset" or "confirm"
+	Menu                            bool   // the row's menu is open
+}
+
+type usersVM struct {
+	Server  string
+	Rows    []userRowVM
+	NewOpen bool
+	NewUser struct {
+		Login, Name string
+		Admin       bool
+	}
+	Result *testVM
+}
+
+templ usersActions(u usersVM) {
+	<div class="ptacts">
+		if u.NewOpen {
+			<button class="btn h36 primary wide" type="button" aria-expanded="true" aria-controls="newuser" disabled>
+				@saIcon("plus12")
+				New user
+			</button>
+		} else {
+			<a class="btn h36 primary wide" href="/settings/users?new=1#newuser" aria-expanded="false">
+				@saIcon("plus12")
+				New user
+			</a>
+		}
+	</div>
+}
+
+templ usersScreen(n snavVM, u usersVM) {
+	@settingsScreen("Users", n) {
+		<div class="spage-scroll seta">
+			<div class="spage-inner">
+				@saPageHead(saHead{Crumbs: []saCrumb{{"Settings", "/settings"}}, Title: "Users", Actions: usersActions(u),
+					Lede: "Everyone on " + u.Server + " signs in with their own password and keeps their own conversations, profiles and providers. Only admins see this page."}) {
+					@saResult(u.Result)
+				}
+				<section aria-labelledby="users">
+					<h3 id="users" class="sec-title">{ "Users · " + strconv.Itoa(len(u.Rows)) }</h3>
+					<div class="group tbl-wrap">
+						<table class="tbl users">
+							<thead>
+								<tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Added</th><th scope="col"><span class="sr-only">Actions</span></th></tr>
+							</thead>
+							<tbody>
+								if u.NewOpen {
+									<tr class="newrow">
+										<td colspan="4">
+											<form id="newuser" aria-label="New user" class="rowform" method="post" action="/settings/users">
+												<input name="username" aria-label="Username" class="field sm mono w130" value={ u.NewUser.Login } autocomplete="off" required autofocus/>
+												<input name="display_name" aria-label="Display name" class="field sm w130" value={ u.NewUser.Name }/>
+												<input name="password" aria-label="Password" type="password" class="field sm w150" autocomplete="new-password" required/>
+												<label class="ck"><input type="checkbox" name="admin" value="on" checked?={ u.NewUser.Admin }/>Admin</label>
+												<span class="fill"></span>
+												<a class="btn h32 ghost" href="/settings/users">Cancel</a>
+												<button class="btn h32 primary" type="submit">Create user</button>
+											</form>
+										</td>
+									</tr>
+								}
+								for _, r := range u.Rows {
+									@saUserRow(r)
+								}
+							</tbody>
+						</table>
+					</div>
+					<p class="foot-note">Delete a user from their row’s menu; the row asks you to confirm.</p>
+				</section>
+			</div>
+		</div>
+	}
+}
+
+templ saUserCell(r userRowVM) {
+	<td><span class="ucell"><span class="avatar" aria-hidden="true">{ r.Initial }</span><span><b>{ r.Name }</b><span class="id">{ r.Login }</span></span></span></td>
+}
+
+templ saUserRow(r userRowVM) {
+	<tr id={ "u-" + r.ID }>
+		@saUserCell(r)
+		switch r.Mode {
+			case "reset":
+				<td colspan="3" class="rowform-cell">
+					<form class="rowform end" method="post" action={ templ.SafeURL("/settings/users/" + r.ID + "/password") } aria-label={ "Reset password for " + r.Name }>
+						<span class="fill txt">{ "New password for " + r.Name }</span>
+						<input name="password" type="password" class="field sm w180" aria-label={ "New password for " + r.Name } autocomplete="new-password" placeholder="New password" required autofocus/>
+						<a class="btn h32 ghost" href="/settings/users" hx-get="/settings/users" hx-select={ "#u-" + r.ID } hx-target={ "#u-" + r.ID } hx-swap="outerHTML">Cancel</a>
+						<button class="btn h32 primary" type="submit">Set password</button>
+					</form>
+				</td>
+			case "confirm":
+				<td colspan="3" class="rowform-cell">
+					<form class="rowform end" method="post" action={ templ.SafeURL("/settings/users/" + r.ID + "/delete") } aria-label={ "Delete " + r.Name }>
+						<span class="fill txt">{ "Delete " + r.Name + "? Their conversations, profiles and providers go too." }</span>
+						<a class="btn h32 ghost" href="/settings/users" hx-get="/settings/users" hx-select={ "#u-" + r.ID } hx-target={ "#u-" + r.ID } hx-swap="outerHTML">Cancel</a>
+						<button class="btn h32 destructive" type="submit">Delete user</button>
+					</form>
+				</td>
+			default:
+				<td>
+					if r.Self {
+						{ saRoleName(r.Admin) }
+					} else {
+						<form method="post" action={ templ.SafeURL("/settings/users/" + r.ID + "/role") } data-autosubmit>
+							<select name="role" class="field role" aria-label={ "Role for " + r.Name }>
+								<option value="member" selected?={ !r.Admin }>Member</option>
+								<option value="admin" selected?={ r.Admin }>Admin</option>
+							</select>
+						</form>
+					}
+				</td>
+				<td class="tnum">{ r.Added }</td>
+				<td class="acts">
+					if r.Self {
+						<span class="you">You</span>
+					} else {
+						<a class="btn h32" href={ templ.SafeURL("/settings/users?reset=" + r.ID) } hx-get={ "/settings/users?reset=" + r.ID } hx-select={ "#u-" + r.ID } hx-target={ "#u-" + r.ID } hx-swap="outerHTML">Reset password</a>
+						{ " " }
+						<details class="rmenu" data-menu open?={ r.Menu }>
+							<summary aria-label={ "More for " + r.Login } aria-haspopup="menu">
+								@saIcon("more")
+							</summary>
+							<div class="menu" role="menu">
+								<a class="danger" role="menuitem" href={ templ.SafeURL("/settings/users?delete=" + r.ID) } hx-get={ "/settings/users?delete=" + r.ID } hx-select={ "#u-" + r.ID } hx-target={ "#u-" + r.ID } hx-swap="outerHTML">Delete user</a>
+							</div>
+						</details>
+					}
+				</td>
+		}
+	</tr>
+}
+
+func saRoleName(admin bool) string {
+	if admin {
+		return "Admin"
+	}
+	return "Member"
+}

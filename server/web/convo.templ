@@ -1,0 +1,1119 @@
+package web
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+// appScreen is the three-column app: list, a main column, and (optionally)
+// the inspector. Every app screen goes through it so the shell is one thing.
+templ appScreen(title string, l listVM) {
+	@page(title) {
+		<div class="app" hx-ext="sse" sse-connect="/events" data-list-query={ l.listQuery() }>
+			@listColumn(l)
+			{ children... }
+		</div>
+	}
+}
+
+templ conversationScreen(l listVM, c convVM) {
+	@appScreen(c.Title+" · Psmith", l) {
+		<main class="main" id="main" data-conv={ c.ID }>
+			@convHead(c)
+			@transcript(c)
+			@composerSlot(c)
+		</main>
+		if c.ShowInsp {
+			@inspector(c)
+		}
+	}
+}
+
+templ convHead(c convVM) {
+	if c.Rename {
+		@renameHead(c)
+	} else {
+		<header class="conv-head" id="conv-head">
+			<a class="menu-btn" href="/chats" aria-label="Conversations">
+				@icon("menu")
+			</a>
+			<div class="title">
+				<h1><a class="title-link" href={ templ.SafeURL("/c/" + c.ID + "?rename=1") } hx-get={ "/c/" + c.ID + "/head?rename=1" } hx-target="#conv-head" hx-swap="outerHTML" title="Rename">{ c.Title }</a></h1>
+				<a class="sub" href={ templ.SafeURL("/c/" + c.ID + "?tab=info") } title="Conversation info">
+					<span class={ "dot", "s7", pc(c.Color) }></span>
+					<span class="sub-text">
+						{ c.Profile }
+						@headSub(c)
+					</span>
+				</a>
+			</div>
+			<a
+				class={ "head-btn model-btn", templ.KV("bound", c.Harness != nil) }
+				href={ templ.SafeURL("/c/" + c.ID + "/model") }
+				data-key="m"
+				aria-label={ modelBtnLabel(c) }
+				if c.Harness != nil {
+					aria-haspopup="menu"
+					aria-expanded={ strconv.FormatBool(c.ShowInsp && c.Inspector.Tab == "settings") }
+				}
+			>
+				{ c.Model.Name }
+				if c.Harness != nil {
+					<small>
+						@convIcon("lock")
+						{ c.Harness.ProviderLabel }
+					</small>
+				} else if c.Model.Provider != "" {
+					<small>{ c.Model.Provider }</small>
+				}
+				@icon("caret")
+			</a>
+			<a class={ "gauge", c.Gauge.State } href={ templ.SafeURL("/c/" + c.ID + "?tab=context") } aria-label={ gaugeLabel(c.Gauge) }>
+				@icon("gauge")
+				{ c.Gauge.Label }
+			</a>
+			<button class="insp-toggle" type="button" data-key="i" data-toggle-inspector aria-pressed={ strconv.FormatBool(c.ShowInsp) } aria-label={ inspLabel(c.ShowInsp) }>
+				@icon("panel")
+			</button>
+		</header>
+	}
+}
+
+// headSub finishes the header's second line: the council's voices, the
+// harness, or which context this is.
+templ headSub(c convVM) {
+	if c.Personas != "" {
+		{ " · " + c.Personas }
+	} else if c.Harness != nil {
+		{ " · runs in " + c.Harness.ProviderLabel }
+	} else if c.CtxLabel != "" {
+		if n, of, ok := strings.Cut(c.CtxLabel, " of "); ok {
+			{ " · " + n }
+			<span class="ctx-of">{ " of " + of }</span>
+		} else {
+			{ " · " + c.CtxLabel }
+		}
+	}
+}
+
+func modelBtnLabel(c convVM) string {
+	if c.Harness != nil {
+		return "Model: " + c.Model.Name + " in " + c.Harness.ProviderLabel + ". Change model"
+	}
+	return "Model: " + c.Model.Name + ". Change model"
+}
+
+templ renameHead(c convVM) {
+	<header class="conv-head" id="conv-head">
+		<a class="menu-btn" href="/chats" aria-label="Conversations">
+			@icon("menu")
+		</a>
+		<form
+			class="rename"
+			method="post"
+			action={ templ.SafeURL("/c/" + c.ID + "/rename") }
+			hx-post={ "/c/" + c.ID + "/rename" }
+			hx-target="#conv-head"
+			hx-swap="outerHTML"
+			aria-label="Rename conversation"
+			data-escape={ "/c/" + c.ID + "/head" }
+		>
+			<label for="conv-title" class="sr-only">Conversation title</label>
+			<input id="conv-title" name="title" value={ c.Title } autocomplete="off" autofocus/>
+			<button class="gen-title" type="submit" formaction={ templ.SafeURL("/c/" + c.ID + "/title/generate") } hx-post={ "/c/" + c.ID + "/title/generate" }>
+				@convIcon("sparkle")
+				Generate title
+			</button>
+			<span class="spacer"></span>
+			<span class="head-rename-hint"><kbd>Enter</kbd> saves · <kbd>Esc</kbd> cancels</span>
+			<a class="rename-cancel" href={ templ.SafeURL("/c/" + c.ID) } hx-get={ "/c/" + c.ID + "/head" } hx-target="#conv-head" hx-swap="outerHTML">Cancel</a>
+			<button class="rename-save" type="submit">Save</button>
+		</form>
+	</header>
+}
+
+func gaugeLabel(g gaugeVM) string {
+	s := fmt.Sprintf("Context %s tokens", g.Label)
+	if g.Window > 0 {
+		s += " of " + abbrevTokens(int32(g.Window))
+	}
+	switch g.State {
+	case "warn":
+		s += ", past your warning level"
+	case "over":
+		s += ", nearly full"
+	}
+	return s
+}
+
+func inspLabel(open bool) string {
+	if open {
+		return "Hide inspector (I)"
+	}
+	return "Show inspector (I)"
+}
+
+// transcript is the scrolling transcript in a frame that doesn't scroll, so
+// the drop overlay covers the visible area wherever the reader is.
+templ transcript(c convVM) {
+	<div class="transcript-frame">
+		<section class="transcript" id="transcript" aria-label="Transcript">
+			<div
+				class="transcript-inner"
+				id="messages"
+				hx-get={ "/c/" + c.ID + "/partials/messages" }
+				hx-trigger={ "sse:conversation-changed-" + c.ID }
+				hx-select="#messages"
+				hx-swap="outerHTML"
+			>
+				for _, m := range c.Items {
+					@msgRow(m)
+				}
+				if c.RunID != "" {
+					@liveReply(c.ID, c.RunID, c.Live)
+				}
+			</div>
+		</section>
+		if c.Harness == nil || !c.Harness.NoAttachments {
+			<div class="drop-zone" id="drop-zone" hidden?={ !c.Dropping }>
+				<div class="drop-tint" aria-hidden="true"></div>
+				<div class="drop-ring" role="status">
+					<span class="drop-icon">
+						@convIcon("drop")
+					</span>
+					<span class="drop-title">Drop to attach</span>
+					<span class="drop-note">{ c.DropNote }</span>
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// msgRow draws one transcript row in its current state. Every row's outer
+// element carries id m-<id>, so a state change swaps the row in place.
+templ msgRow(m msgItem) {
+	switch  {
+		case m.Role == "strip":
+			<div class="strip">
+				{ m.Strip }
+				if m.StripLink != "" {
+					{ " · " }
+					<a href={ templ.SafeURL(m.StripLink) }>Read summary</a>
+				}
+			</div>
+		case m.Role == "start":
+			@startStrip(m)
+		case m.Role == "harness":
+			@harnessStrip(m)
+		case m.State == "delete":
+			@deleteConfirm(m)
+		case m.State == "edit":
+			@editForm(m)
+		case m.Role == "user":
+			@userRow(m)
+		case m.Error != "":
+			@failedReply(m)
+		case m.Persona != "":
+			@personaReply(m)
+		default:
+			@reply(m)
+	}
+}
+
+func msgURL(m msgItem, state string) string {
+	u := "/c/" + m.ConvID + "/message/" + m.ID
+	if state != "" {
+		u += "?s=" + state
+	}
+	return u
+}
+
+func pageStateURL(m msgItem, state string) templ.SafeURL {
+	if state == "" {
+		return templ.SafeURL("/c/" + m.ConvID + "#m-" + m.ID)
+	}
+	return templ.SafeURL("/c/" + m.ConvID + "?m=" + m.ID + "&s=" + state + "#m-" + m.ID)
+}
+
+templ startStrip(m msgItem) {
+	<div class={ "start", templ.KV("open", m.Start.Open) } id="start">
+		<div class="strip">
+			{ m.Strip + " · " }
+			<a
+				class="start-toggle"
+				href={ templ.SafeURL(startHref(m)) }
+				role="button"
+				data-start-toggle
+				aria-expanded={ strconv.FormatBool(m.Start.Open) }
+				aria-controls="context-start"
+			>
+				<span class="when-shut">Read summary</span>
+				<span class="when-open">
+					Hide
+					@convIcon("collapse")
+				</span>
+			</a>
+		</div>
+		<section id="context-start" class="start-body" aria-label="What this context started from" hidden?={ !m.Start.Open }>
+			if m.Start.Prompt != "" || m.Start.PromptID != "" {
+				<div class="start-part">
+					<div class="start-head">
+						<h3>System prompt</h3>
+						if m.Start.PromptFrom != "" {
+							<span>{ "from " + m.Start.PromptFrom }</span>
+						}
+						<span class="spacer"></span>
+						if m.Start.PromptID != "" && m.Start.Editing != m.Start.PromptID {
+							<a class="start-edit" href={ templ.SafeURL("/c/" + m.ConvID + "?start=1&m=" + m.Start.PromptID + "&s=edit#start") }>
+								@convIcon("edit13")
+								Edit
+							</a>
+						}
+					</div>
+					if m.Start.Editing != "" && m.Start.Editing == m.Start.PromptID {
+						@startEdit(m.ConvID, m.Start.PromptID, m.Start.EditText)
+					} else {
+						<div class="md">
+							@templ.Raw(m.Start.Prompt)
+						</div>
+					}
+				</div>
+			}
+			if m.Start.SummaryID != "" {
+				<div class="start-part">
+					<div class="start-head">
+						<h3>{ m.Start.SummaryTitle }</h3>
+						<span>{ m.Start.SummaryMeta }</span>
+						<span class="spacer"></span>
+						if m.Start.Editing != m.Start.SummaryID {
+							<a class="start-edit" href={ templ.SafeURL("/c/" + m.ConvID + "?start=1&m=" + m.Start.SummaryID + "&s=edit#start") }>
+								@convIcon("edit13")
+								Edit
+							</a>
+						}
+					</div>
+					if m.Start.Editing != "" && m.Start.Editing == m.Start.SummaryID {
+						@startEdit(m.ConvID, m.Start.SummaryID, m.Start.EditText)
+					} else {
+						<div class="md">
+							@templ.Raw(m.Start.Summary)
+						</div>
+					}
+				</div>
+			}
+		</section>
+	</div>
+}
+
+func startHref(m msgItem) string {
+	if m.Start.Open {
+		return "/c/" + m.ConvID
+	}
+	return "/c/" + m.ConvID + "?start=1#start"
+}
+
+templ startEdit(convID, mid, text string) {
+	<form class="start-form" method="post" action={ templ.SafeURL("/c/" + convID + "/message/" + mid + "/edit") }>
+		<label for={ "edit-" + mid } class="sr-only">Text</label>
+		<textarea id={ "edit-" + mid } name="content" rows="5" autofocus>{ text }</textarea>
+		<div class="edit-bar">
+			<span class="spacer"></span>
+			<a class="btn-flat" href={ templ.SafeURL("/c/" + convID + "?start=1#start") }>Cancel</a>
+			<button class="btn-accent" type="submit">Save</button>
+		</div>
+	</form>
+}
+
+templ harnessStrip(m msgItem) {
+	<div class="strip">
+		<span class="harness-note">
+			@convIcon("lock")
+			{ harnessNote(m.Harness) }
+			<a href={ templ.SafeURL("/c/" + m.ConvID + "?tab=settings") }>Why</a>
+		</span>
+	</div>
+}
+
+func harnessNote(h *harnessVM) string {
+	s := "Runs in " + h.ProviderLabel
+	if h.FrozenPrompt {
+		s += " · system prompt fixed"
+	}
+	if h.NoAttachments {
+		s += " · no attachments"
+	}
+	return s + " · "
+}
+
+templ userRow(m msgItem) {
+	<div class={ "turn-user", templ.KV("nav", m.Branch != nil), templ.KV("solo", m.Branch == nil && !m.Edited && len(m.Images)+len(m.Files) == 0) } id={ "m-" + m.ID }>
+		<span class="user-acts">
+			<button class="icon-btn" type="button" aria-label="Copy message" data-copy>
+				@icon("copy")
+			</button>
+			<a class="icon-btn" href={ pageStateURL(m, "edit") } hx-get={ msgURL(m, "edit") } hx-target={ "#m-" + m.ID } hx-swap="outerHTML" aria-label="Edit message">
+				@icon("edit")
+			</a>
+			<a class="icon-btn" href={ pageStateURL(m, "delete") } hx-get={ msgURL(m, "delete") } hx-target={ "#m-" + m.ID } hx-swap="outerHTML" aria-label="Delete message">
+				@icon("trash")
+			</a>
+		</span>
+		if m.Edited {
+			<span class="edited">edited</span>
+		}
+		if m.Branch != nil {
+			@branchNav(m, false)
+		}
+		if len(m.Images) > 0 || len(m.Files) > 0 {
+			<div class="user-col">
+				@attachments(m)
+				@userBubble(m)
+			</div>
+		} else {
+			@userBubble(m)
+		}
+	</div>
+}
+
+templ userBubble(m msgItem) {
+	<div class="bubble" id={ "b-" + m.ID } data-text={ m.Text }>
+		<div class="md">
+			@templ.Raw(m.HTML)
+		</div>
+	</div>
+}
+
+templ attachments(m msgItem) {
+	if len(m.Images) == 1 {
+		@imageTile(m.ConvID, m.Images[0], "one")
+	} else if len(m.Images) > 1 {
+		<div class="att-row">
+			for _, a := range m.Images {
+				@imageTile(m.ConvID, a, "")
+			}
+		</div>
+	}
+	for _, f := range m.Files {
+		<a class="file-chip" href={ templ.SafeURL(fileHref(f)) } download={ f.Name }>
+			<span class={ "file-icon", templ.KV("pdf", f.Kind == "PDF") }>
+				@convIcon("file")
+			</span>
+			<span>
+				<span class="file-name">{ f.Name }</span>
+				<span class="file-meta">{ fileMeta(f) }</span>
+			</span>
+		</a>
+	}
+}
+
+func fileHref(f attachVM) string {
+	if f.URL != "" {
+		return f.URL
+	}
+	return "#"
+}
+
+func fileMeta(f attachVM) string {
+	if f.Size == "" {
+		return f.Kind
+	}
+	return f.Kind + " · " + f.Size
+}
+
+templ imageTile(convID string, a attachVM, size string) {
+	<a class={ "img-tile", size } href={ templ.SafeURL("/c/" + convID + "/file/" + a.ID) } aria-label={ "Open image " + a.Name }>
+		@icon("image")
+		<span>{ a.Name }</span>
+		if a.URL != "" {
+			<img src={ a.URL } alt="" loading="lazy"/>
+		}
+	</a>
+}
+
+// branchNav steps between versions of a turn. User turns fork when edited and
+// resent; replies fork when regenerated.
+templ branchNav(m msgItem, reply bool) {
+	<span class={ "branch-nav", templ.KV("bn-reply", reply) }>
+		<form method="post" action={ templ.SafeURL("/c/" + m.ConvID + "/branch") } class="inline" hx-post={ "/c/" + m.ConvID + "/branch" } hx-target="#messages" hx-select="#messages" hx-swap="outerHTML">
+			<input type="hidden" name="message_id" value={ m.Branch.PrevID }/>
+			<button type="submit" aria-label={ branchWord(reply, "Previous") } disabled?={ m.Branch.PrevID == "" }>‹</button>
+		</form>
+		{ fmt.Sprintf("%d of %d", m.Branch.Index, m.Branch.Count) }
+		<form method="post" action={ templ.SafeURL("/c/" + m.ConvID + "/branch") } class="inline" hx-post={ "/c/" + m.ConvID + "/branch" } hx-target="#messages" hx-select="#messages" hx-swap="outerHTML">
+			<input type="hidden" name="message_id" value={ m.Branch.NextID }/>
+			<button type="submit" aria-label={ branchWord(reply, "Next") } disabled?={ m.Branch.NextID == "" }>›</button>
+		</form>
+	</span>
+}
+
+func branchWord(reply bool, dir string) string {
+	if reply {
+		return dir + " reply"
+	}
+	return dir + " version"
+}
+
+// replyChips are the thinking and tool chips above a reply, each disclosing
+// its panel. Panels sit in the same wrapping row at full width, so an open
+// thinking panel splits the chips the way the boards draw it.
+templ replyChips(m msgItem) {
+	if m.Thinking != nil || len(m.Tools) > 0 {
+		<div class="reply-chips">
+			if m.Thinking != nil {
+				<button class="rchip" type="button" aria-expanded={ strconv.FormatBool(m.Thinking.Open) } aria-controls={ "think-" + m.ID } data-disclose>
+					@discloseIcon()
+					{ m.Thinking.Label }
+				</button>
+				<div class="think-panel md" id={ "think-" + m.ID } hidden?={ !m.Thinking.Open }>
+					if m.Thinking.HTML != "" {
+						@templ.Raw(m.Thinking.HTML)
+					} else {
+						<p>The provider kept this reasoning private.</p>
+					}
+				</div>
+			}
+			for i, t := range m.Tools {
+				<button class={ "rchip", templ.KV("failed", t.Error != "") } type="button" aria-expanded={ strconv.FormatBool(t.Open) } aria-controls={ toolPanelID(m.ID, i) } data-disclose>
+					@discloseIcon()
+					<span class="mono">{ t.Name }</span>
+					if t.Error != "" {
+						{ "failed · " + t.Dur }
+					} else {
+						if t.Summary != "" {
+							<span class="tsum">{ t.Summary + " · " }</span>
+						}
+						{ t.Dur }
+					}
+				</button>
+			}
+			for i, t := range m.Tools {
+				<section class="tool-panel" id={ toolPanelID(m.ID, i) } aria-label={ "Tool call " + t.Name } hidden?={ !t.Open } data-text={ t.Output }>
+					<div class="tool-head">
+						<span class="mono">{ t.Name }</span>
+						if t.Error != "" {
+							<span class="tool-status bad"><span class="dot"></span>Failed</span>
+						} else {
+							<span class="tool-status"><span class="dot"></span>Succeeded</span>
+						}
+						<span class="spacer"></span>
+						<span class="tnum">{ t.Dur }</span>
+						<button type="button" data-copy>Copy</button>
+					</div>
+					if t.Input != "" {
+						<div>
+							<h3>Input</h3>
+							<pre>{ t.Input }</pre>
+						</div>
+					}
+					if t.Error != "" {
+						<div>
+							<h3>Error</h3>
+							<pre>{ t.Error }</pre>
+						</div>
+					} else if t.Output != "" {
+						<div>
+							<h3>Output</h3>
+							<pre>{ t.Output }</pre>
+						</div>
+					}
+				</section>
+			}
+		</div>
+	}
+}
+
+templ discloseIcon() {
+	<span class="dis-shut">
+		@icon("disclose")
+	</span>
+	<span class="dis-open">
+		@convIcon("disclosed")
+	</span>
+}
+
+func toolPanelID(mid string, i int) string {
+	return fmt.Sprintf("tool-%s-%d", mid, i)
+}
+
+// replyBody is the reply's text, or its plugin fragments when it has any.
+templ replyBody(m msgItem) {
+	if len(m.Parts) > 0 {
+		for _, p := range m.Parts {
+			@fragment(m, p)
+		}
+	} else {
+		<div class="md">
+			@templ.Raw(m.HTML)
+		</div>
+	}
+	if len(m.Images) > 0 || len(m.Files) > 0 {
+		<div class="reply-atts">
+			@attachments(m)
+		</div>
+	}
+}
+
+templ reply(m msgItem) {
+	<article class="reply" id={ "m-" + m.ID } aria-label="Reply" data-text={ m.Text }>
+		@replyChips(m)
+		@replyBody(m)
+		if !m.HideActions {
+			@replyActions(m)
+		}
+		if m.Usage != nil {
+			@usageDetail(m)
+		}
+	</article>
+}
+
+templ personaReply(m msgItem) {
+	<article class={ "reply", "persona", personaClass(m.PersonaN) } id={ "m-" + m.ID } aria-label={ "Said by " + m.Persona } data-text={ m.Text }>
+		<div class="rail" aria-hidden="true"><span class="avatar-q">{ initial(m.Persona) }</span><span class="rail-line"></span></div>
+		<div class="pbody">
+			<b class="pname">{ m.Persona }</b>
+			@replyChips(m)
+			@replyBody(m)
+			if !m.HideActions {
+				@replyActions(m)
+			}
+			if m.Usage != nil {
+				@usageDetail(m)
+			}
+		</div>
+	</article>
+}
+
+func personaClass(n int) string {
+	if n < 0 {
+		n = 0
+	}
+	return "q" + strconv.Itoa(n%5+1)
+}
+
+func initial(s string) string {
+	for _, r := range s {
+		return strings.ToUpper(string(r))
+	}
+	return ""
+}
+
+templ replyActions(m msgItem) {
+	<div class="actions">
+		if m.Branch != nil {
+			@branchNav(m, true)
+		}
+		<button class="icon-btn" type="button" aria-label="Copy reply" data-copy>
+			@icon("copy")
+		</button>
+		if m.ParentID != "" {
+			<form method="post" action={ templ.SafeURL("/c/" + m.ConvID + "/regenerate") } class="inline" hx-post={ "/c/" + m.ConvID + "/regenerate" } hx-target="#messages" hx-select="#messages" hx-swap="outerHTML">
+				<input type="hidden" name="parent_message_id" value={ m.ParentID }/>
+				<button class="icon-btn" type="submit" aria-label="Regenerate">
+					@icon("regen")
+				</button>
+			</form>
+		}
+		<a class="icon-btn a-edit" href={ pageStateURL(m, "edit") } hx-get={ msgURL(m, "edit") } hx-target={ "#m-" + m.ID } hx-swap="outerHTML" aria-label="Edit">
+			@icon("edit")
+		</a>
+		<a class="icon-btn a-delete" href={ pageStateURL(m, "delete") } hx-get={ msgURL(m, "delete") } hx-target={ "#m-" + m.ID } hx-swap="outerHTML" aria-label="Delete">
+			@icon("trash")
+		</a>
+		<span class="more-wrap">
+			<a
+				class={ "icon-btn", "more-btn", templ.KV("on", m.State == "menu" || m.State == "regen") }
+				href={ moreHref(m) }
+				hx-get={ msgURL(m, moreState(m)) }
+				hx-target={ "#m-" + m.ID }
+				hx-swap="outerHTML"
+				aria-label="More actions"
+				aria-haspopup="menu"
+				aria-expanded={ strconv.FormatBool(m.State == "menu" || m.State == "regen") }
+			>
+				@convIcon("more")
+			</a>
+			if m.State == "menu" || m.State == "regen" {
+				@moreMenu(m)
+			}
+		</span>
+		<span class="spacer"></span>
+		if m.Usage != nil {
+			<button class="usage-btn" type="button" aria-expanded={ strconv.FormatBool(m.Usage.Open) } aria-controls={ "usage-" + m.ID } data-disclose>
+				<span class="u-long">{ m.Usage.Model }</span>
+				<span class="u-long">{ m.Usage.Tokens }</span>
+				if m.Usage.Cached != "" {
+					<span class="cached u-long"><span class="dot"></span>{ m.Usage.Cached }</span>
+				}
+				if m.Usage.Cost != "" {
+					<span class="tnum u-long">{ m.Usage.Cost }</span>
+				}
+				<span class="u-short">
+					if m.Usage.Cached != "" {
+						<span class="dot"></span>
+					}
+					{ usageShort(m.Usage) }
+				</span>
+			</button>
+		}
+	</div>
+}
+
+func usageShort(u *usageVM) string {
+	var parts []string
+	if u.Cached != "" {
+		parts = append(parts, u.Cached)
+	}
+	if u.Cost != "" {
+		parts = append(parts, u.Cost)
+	}
+	if len(parts) == 0 {
+		return u.Tokens
+	}
+	return strings.Join(parts, " · ")
+}
+
+func moreState(m msgItem) string {
+	if m.State == "menu" || m.State == "regen" {
+		return ""
+	}
+	return "menu"
+}
+
+func moreHref(m msgItem) templ.SafeURL {
+	return pageStateURL(m, moreState(m))
+}
+
+templ moreMenu(m msgItem) {
+	<div class="msg-menu" role="menu" aria-label="Reply actions">
+		<button role="menuitem" type="button" data-copy data-close-menu>
+			<span class="mi-icon">
+				@convIcon("markdown")
+			</span>
+			<span class="mi-label">Copy as Markdown</span>
+		</button>
+		<button role="menuitem" type="button" data-copy-text data-close-menu>
+			<span class="mi-icon">
+				@convIcon("text")
+			</span>
+			<span class="mi-label">Copy text</span>
+		</button>
+		if m.ParentID != "" {
+			<a
+				role="menuitem"
+				class={ templ.KV("on", m.State == "regen") }
+				href={ pageStateURL(m, "regen") }
+				hx-get={ msgURL(m, "regen") }
+				hx-target={ "#m-" + m.ID }
+				hx-swap="outerHTML"
+				aria-haspopup="menu"
+				aria-expanded={ strconv.FormatBool(m.State == "regen") }
+			>
+				<span class="mi-icon">
+					@icon("regen")
+				</span>
+				<span class="mi-label">Regenerate with another model</span>
+				<span class="mi-chev">
+					@icon("disclose")
+				</span>
+			</a>
+		}
+		<div role="separator"></div>
+		<a role="menuitem" class="danger" href={ pageStateURL(m, "delete") } hx-get={ msgURL(m, "delete") } hx-target={ "#m-" + m.ID } hx-swap="outerHTML">
+			<span class="mi-icon">
+				@icon("trash")
+			</span>
+			<span class="mi-label">Delete</span>
+		</a>
+		if m.State == "regen" {
+			<form
+				class="msg-menu sub"
+				role="menu"
+				aria-label="Regenerate with"
+				method="post"
+				action={ templ.SafeURL("/c/" + m.ConvID + "/regenerate") }
+				hx-post={ "/c/" + m.ConvID + "/regenerate" }
+				hx-target="#messages"
+				hx-select="#messages"
+				hx-swap="outerHTML"
+			>
+				<input type="hidden" name="parent_message_id" value={ m.ParentID }/>
+				for i, g := range m.Regen {
+					if i > 0 {
+						<div role="separator"></div>
+					}
+					<div class="mi-group">{ g.Label }</div>
+					for _, mod := range g.Models {
+						if mod.Value == m.ModelValue {
+							<button role="menuitem" type="button" aria-disabled="true" class="current">
+								<span class="mi-label">{ mod.DisplayName }</span>
+								<span class="mi-current">
+									current
+									<span class="mi-check">
+										@convIcon("check")
+									</span>
+								</span>
+							</button>
+						} else {
+							<button role="menuitem" type="submit" name="model" value={ mod.Value } disabled?={ mod.Disabled }>
+								<span class="mi-label">{ mod.DisplayName }</span>
+								<span class="mi-prov">{ g.Label }</span>
+							</button>
+						}
+					}
+				}
+				<div role="separator"></div>
+				<a role="menuitem" href={ templ.SafeURL("/c/" + m.ConvID + "/model") }>
+					<span class="mi-label">All models</span>
+					<kbd>M</kbd>
+				</a>
+			</form>
+		}
+	</div>
+}
+
+templ usageDetail(m msgItem) {
+	<div class="usage-detail" id={ "usage-" + m.ID } hidden?={ !m.Usage.Open }>
+		<section>
+			<h3>Model</h3>
+			<dl>
+				<dt>Model</dt>
+				<dd>{ orDash(m.Usage.ModelName) }</dd>
+				<dt>Provider</dt>
+				<dd>{ orDash(m.Usage.Provider) }</dd>
+				<dt>Stop reason</dt>
+				<dd>{ orDash(m.Usage.Stop) }</dd>
+				<dt>Sent</dt>
+				<dd>{ orDash(m.Usage.Sent) }</dd>
+			</dl>
+		</section>
+		<section>
+			<h3>Tokens</h3>
+			<dl>
+				<dt>Input</dt>
+				<dd>{ m.Usage.Input }</dd>
+				<dt>Cache read</dt>
+				<dd>{ m.Usage.CacheR }</dd>
+				<dt>Cache write</dt>
+				<dd>{ m.Usage.CacheW }</dd>
+				<dt>Output</dt>
+				<dd>{ m.Usage.Output }</dd>
+				<dt>Reasoning</dt>
+				<dd>{ m.Usage.Reason }</dd>
+			</dl>
+		</section>
+		<section>
+			<h3>Cost</h3>
+			<dl>
+				<dt>Input</dt>
+				<dd>{ m.Usage.InCost }</dd>
+				<dt>Cache read</dt>
+				<dd>{ m.Usage.CacheRC }</dd>
+				<dt>Cache write</dt>
+				<dd>{ m.Usage.CacheWC }</dd>
+				<dt>Output</dt>
+				<dd>{ m.Usage.OutCost }</dd>
+				<dt class="total">Total</dt>
+				<dd class="total">{ orDash(m.Usage.Total) }</dd>
+			</dl>
+		</section>
+		if m.Usage.Saved != "" {
+			<p class="usage-saved"><span class="dot s7"></span>{ fmt.Sprintf("%d%% of the prompt came from the cache, which saved about ", m.Usage.CachedPct) }<b class="tnum">{ m.Usage.Saved }</b>{ " on this reply." }</p>
+		}
+	</div>
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
+}
+
+templ failedReply(m msgItem) {
+	<article class="reply failed" id={ "m-" + m.ID } aria-label="Failed reply" data-text={ m.Text }>
+		<div class="fail-head">
+			<span class="fail-icon">
+				@convIcon("warn")
+			</span>
+			<b>Failed</b>
+			<span class="spacer"></span>
+			<span class="fail-model">{ m.ModelLabel }</span>
+		</div>
+		<p class="fail-msg">{ m.Error }</p>
+		if strings.TrimSpace(m.Text) != "" {
+			<div>
+				<button class="rchip" type="button" aria-expanded="false" aria-controls={ "partial-" + m.ID } data-disclose>
+					@discloseIcon()
+					Partial output before the failure
+				</button>
+			</div>
+			<div class="md partial" id={ "partial-" + m.ID } hidden>
+				@templ.Raw(m.HTML)
+			</div>
+		}
+		if m.ParentID != "" {
+			<div class="fail-foot">
+				<span>Retry runs this turn again as a new branch. The failed one stays.</span>
+				<form method="post" action={ templ.SafeURL("/c/" + m.ConvID + "/regenerate") } class="inline" hx-post={ "/c/" + m.ConvID + "/regenerate" } hx-target="#messages" hx-select="#messages" hx-swap="outerHTML">
+					<input type="hidden" name="parent_message_id" value={ m.ParentID }/>
+					<button class="retry-btn" type="submit">
+						@convIcon("retry")
+						Retry
+					</button>
+				</form>
+			</div>
+		}
+	</article>
+}
+
+templ deleteConfirm(m msgItem) {
+	<form
+		class={ "del-confirm", templ.KV("mine", m.Role == "user") }
+		id={ "m-" + m.ID }
+		method="post"
+		action={ templ.SafeURL("/c/" + m.ConvID + "/message/" + m.ID + "/delete") }
+		hx-post={ "/c/" + m.ConvID + "/message/" + m.ID + "/delete" }
+		hx-target="#messages"
+		hx-select="#messages"
+		hx-swap="outerHTML"
+		aria-label="Delete this message"
+		data-escape={ msgURL(m, "") }
+	>
+		<p class="dc-title">Delete this message?</p>
+		<p class="dc-text">{ "“" + snippet(m.Text, 48) + "” goes. Its replies attach to the message before it." }</p>
+		<div class="dc-btns">
+			<a class="btn-flat" href={ pageStateURL(m, "") } hx-get={ msgURL(m, "") } hx-target={ "#m-" + m.ID } hx-swap="outerHTML">Cancel</a>
+			<button class="btn-destructive" type="submit">Delete</button>
+		</div>
+	</form>
+}
+
+func snippet(s string, n int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	r := []rune(s)
+	if len(r) > n {
+		return strings.TrimSpace(string(r[:n])) + "…"
+	}
+	return s
+}
+
+templ editForm(m msgItem) {
+	<form
+		class={ "edit-form", templ.KV("mine", m.Role == "user") }
+		id={ "m-" + m.ID }
+		method="post"
+		action={ templ.SafeURL("/c/" + m.ConvID + "/message/" + m.ID + "/edit") }
+		hx-post={ "/c/" + m.ConvID + "/message/" + m.ID + "/edit" }
+		hx-target="#messages"
+		hx-select="#messages"
+		hx-swap="outerHTML"
+		aria-label={ editLabel(m) }
+		data-escape={ msgURL(m, "") }
+	>
+		<div class="conv-seg" role="radiogroup" aria-label="Role">
+			<label><input type="radio" name="role" value="user" checked?={ m.Role == "user" }/>User</label>
+			<label><input type="radio" name="role" value="assistant" checked?={ m.Role != "user" }/>Assistant</label>
+		</div>
+		<label for={ "edit-" + m.ID } class="sr-only">{ editTextLabel(m) }</label>
+		<textarea id={ "edit-" + m.ID } name="content" rows="4" autofocus>{ m.Text }</textarea>
+		<div class="edit-bar">
+			<span class="hint"><kbd>Esc</kbd> cancels · <kbd>⌘</kbd> <kbd>Enter</kbd> saves</span>
+			<a class="btn-flat" href={ pageStateURL(m, "") } hx-get={ msgURL(m, "") } hx-target={ "#m-" + m.ID } hx-swap="outerHTML">Cancel</a>
+			<button class="btn-fill" type="submit">Save</button>
+			<button class="btn-accent resend" type="submit" name="resend" value="1">Save and resend</button>
+		</div>
+	</form>
+}
+
+func editLabel(m msgItem) string {
+	if m.Role == "user" {
+		return "Edit message"
+	}
+	return "Edit reply"
+}
+
+func editTextLabel(m msgItem) string {
+	if m.Role == "user" {
+		return "Message text"
+	}
+	return "Reply text"
+}
+
+templ liveChips(chips []liveChipVM) {
+	for _, c := range chips {
+		if c.Thinking && c.Live {
+			<button class="rchip live think" type="button" aria-expanded="false" aria-label={ "Thinking, " + c.Secs + " so far" }>
+				@icon("disclose")
+				Thinking
+				<span class="tnum" data-since={ c.Since }>{ c.Secs }</span>
+			</button>
+		} else if c.Live {
+			<span class="rchip live">
+				<span class="dot s6"></span>
+				if c.Name != "" {
+					<span class="mono">{ c.Name }</span>
+				}
+				{ c.Label }
+				if c.Secs != "" {
+					<span class="tnum" data-since={ c.Since }>{ c.Secs }</span>
+				}
+			</span>
+		} else {
+			<span class="rchip">
+				if c.Name != "" {
+					<span class="mono">{ c.Name }</span>
+				}
+				{ c.Label }
+			</span>
+		}
+	}
+}
+
+// liveReply opens the run's stream. `message` events replace the body,
+// `chips` the chip row, `elicit` drops a prompt in, and `done` closes the
+// stream; the conversation-changed event that follows refreshes the
+// transcript with the stored reply.
+templ liveReply(convID, runID string, init liveInit) {
+	<!--
+		Every sse-swap target sets hx-swap itself: htmx inherits hx-swap from
+		ancestors, and #messages declares outerHTML for its own refresh. An
+		inherited outerHTML replaced the body element with the first chunk,
+		leaving later chunks no target.
+	-->
+	<article
+		class="reply live"
+		aria-label="Reply in progress"
+		aria-busy="true"
+		hx-ext="sse"
+		sse-connect={ "/c/" + convID + "/stream?run=" + runID }
+		sse-close="done"
+		data-run={ runID }
+	>
+		<div class="reply-chips" sse-swap="chips" hx-swap="innerHTML">
+			@liveChips(init.Chips)
+		</div>
+		<div class="md" sse-swap="message" hx-swap="innerHTML">
+			if init.HTML != "" {
+				@templ.Raw(init.HTML)
+			} else {
+				<p><span class="caret"></span></p>
+			}
+		</div>
+		<div class="elicit-host" sse-swap="elicit" hx-swap="innerHTML"></div>
+	</article>
+}
+
+templ composer2(c convVM) {
+	if c.ContinueID != "" && c.RunID == "" {
+		<div class="council-next">
+			<form method="post" action={ templ.SafeURL("/c/" + c.ID + "/continue") } hx-post={ "/c/" + c.ID + "/continue" } hx-target="#messages" hx-select="#messages" hx-swap="outerHTML">
+				<input type="hidden" name="parent_message_id" value={ c.ContinueID }/>
+				<button class="continue-btn" type="submit">
+					@convIcon("continue")
+					Continue the discussion
+				</button>
+			</form>
+		</div>
+	}
+	<form
+		id="composer"
+		class="composer"
+		method="post"
+		enctype="multipart/form-data"
+		action={ templ.SafeURL("/c/" + c.ID + "/send") }
+		hx-post={ "/c/" + c.ID + "/send" }
+		hx-target="#messages"
+		hx-swap="beforeend"
+		hx-encoding="multipart/form-data"
+		data-live?={ c.RunID != "" }
+		data-uploading?={ c.Uploading > 0 }
+		data-upload={ "/c/" + c.ID + "/upload" }
+	>
+		<a id="jump-latest" class="jump" href="#latest" hidden?={ !c.JumpShown }>
+			<span class="dot s6"></span>
+			Jump to latest
+			@convIcon("down")
+		</a>
+		<input type="hidden" name="model" value={ c.Model.Value }/>
+		<div class="pending" id="pending" hidden?={ len(c.Pending) == 0 }>
+			for _, a := range c.Pending {
+				@pendChip(a)
+			}
+		</div>
+		<label for="composer-text" class="sr-only">{ c.Placeholder }</label>
+		<textarea id="composer-text" name="message" rows="2" placeholder={ c.Placeholder }>{ c.Draft }</textarea>
+		<div class="composer-bar">
+			if c.Harness == nil || !c.Harness.NoAttachments {
+				<label class="attach-btn" aria-label="Attach files">
+					@icon("attach")
+					<input type="file" name="file" multiple/>
+				</label>
+			}
+			<a class="cmodel" href={ templ.SafeURL("/c/" + c.ID + "/model") } aria-label={ "Model: " + c.Model.Name + ". Change model" }>
+				{ c.Model.Name }
+				@icon("caret")
+			</a>
+			<span class="hint">
+				if c.Uploading > 0 {
+					<span class="h-up">{ uploadingHint(c.Uploading) }</span>
+				} else {
+					<span class="h-idle"><kbd>Enter</kbd> sends · <kbd>Shift</kbd> <kbd>Enter</kbd> new line</span>
+					<span class="h-live"><kbd>Shift</kbd> <kbd>Enter</kbd> new line · <kbd>Esc</kbd> stops</span>
+				}
+			</span>
+			<button class="stop-btn" type="button" data-stop={ "/c/" + c.ID + "/stop" } aria-label="Stop reply"><i></i><span>Stop</span></button>
+			<button class="send-btn csend" type="submit" aria-label="Send">
+				<span class="lbl">Send</span>
+				@icon("send")
+			</button>
+		</div>
+	</form>
+}
+
+func uploadingHint(n int) string {
+	if n == 1 {
+		return "Uploading 1 file. Send waits for it."
+	}
+	return fmt.Sprintf("Uploading %d files. Send waits for them.", n)
+}
+
+// pendChip is one attachment waiting in the composer: uploading (with its
+// progress) or stored and riding along as a hidden attachment id.
+templ pendChip(a attachVM) {
+	<span class={ "pend", templ.KV("up", a.Pct > 0) } data-file={ a.ID }>
+		if a.Kind == "PDF" {
+			<span class="thumb pdf">
+				@convIcon("file12")
+			</span>
+		} else if a.Kind == "" || isImageKind(a.Kind) {
+			<span class="thumb">
+				@icon("image")
+			</span>
+		} else {
+			<span class="thumb doc">
+				@convIcon("file12")
+			</span>
+		}
+		<span class="pname">{ a.Name }</span>
+		if a.Pct > 0 {
+			<span class="size tnum" role="progressbar" aria-label={ "Uploading " + a.Name } aria-valuenow={ strconv.Itoa(a.Pct) } aria-valuemin="0" aria-valuemax="100">{ fmt.Sprintf("%d%% of %s", a.Pct, a.Size) }</span>
+			<button type="button" aria-label={ "Cancel upload of " + a.Name } data-unpend>×</button>
+			<span class="bar" aria-hidden="true" style={ fmt.Sprintf("width:%d%%", a.Pct) }></span>
+		} else {
+			<span class="size">{ a.Size }</span>
+			<button type="button" aria-label={ "Remove " + a.Name } data-unpend>×</button>
+			if a.ID != "" {
+				<input type="hidden" name="attachment" value={ a.ID }/>
+			}
+		}
+	</span>
+}
+
+func isImageKind(k string) bool {
+	switch k {
+	case "PNG", "JPG", "JPEG", "GIF", "WEBP", "HEIC", "SVG":
+		return true
+	}
+	return false
+}

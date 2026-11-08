@@ -1,0 +1,183 @@
+package web
+
+import "strconv"
+
+// providerPageVM is one provider's page: connection, its models, and the
+// call-setting defaults every model under it inherits.
+type providerPageVM struct {
+	ID         string
+	Type       string
+	Name       string
+	KeyMasked  string
+	KeyEditing bool // the key row is an input for a replacement
+	Test       *testVM
+	Models     []providerModelVM
+	NewCount   int // discoverable models not yet enabled
+	MaxTokens  string
+	MaxChanged string // previous value when the field is dirty
+	Temp       string
+	NoCache    bool // the driver has no prompt-cache switch
+	Caching    bool
+	Dirty      int
+	Confirming bool // Remove provider is waiting for its confirm
+	Error      string
+}
+
+type providerModelVM struct {
+	Name, ID, Context, Cost string
+	Caps                    []string
+	On                      bool
+}
+
+func (p providerPageVM) url(suffix string) templ.SafeURL {
+	return templ.SafeURL("/settings/providers/" + p.ID + suffix)
+}
+
+templ providerActions(p providerPageVM) {
+	<div class="ptacts">
+		<button class="btn raised" type="submit" formaction={ p.url("/test") }>Test connection</button>
+		<a class="btn danger phone" href={ p.url("?remove=1#premove") }>Remove</a>
+	</div>
+}
+
+templ providerScreen(n snavVM, p providerPageVM) {
+	@settingsScreen(p.Name, n) {
+		<form class="spage-form seta" method="post" action={ p.url("") }>
+			<div class="spage-scroll">
+				<div class="spage-inner">
+					@saPageHead(saHead{Crumbs: []saCrumb{{"Providers", "/settings/providers"}}, Title: p.Name, Actions: providerActions(p)}) {
+						@saResult(p.Test)
+						if p.Error != "" {
+							<p role="alert" class="result bad"><span class="dot"></span>{ p.Error }</p>
+						}
+					}
+					<section aria-labelledby="conn">
+						<h3 id="conn" class="sec-title">Connection</h3>
+						<div class="group">
+							<div class="grow">
+								<label for="pname" class="lbl">Name</label>
+								<input id="pname" name="label" class="field wide" value={ p.Name }/>
+							</div>
+							if p.KeyEditing {
+								<div class="grow">
+									<label for="pkey" class="lbl">API key</label>
+									<input id="pkey" name="api_key" type="password" class="field wide" autocomplete="off" placeholder="Paste the new key" autofocus/>
+									<a class="btn h32 ghost" href={ p.url("") }>Cancel</a>
+								</div>
+							} else {
+								<div class="grow keyrow">
+									<span class="lbl">API key</span>
+									<span class="secret">{ saKeyHead(p.KeyMasked) }<span class="wide-only">{ saKeyWide(p.KeyMasked) }</span>{ saKeyTail(p.KeyMasked) }</span>
+									<a class="btn h32" href={ p.url("?key=1") }>Replace</a>
+								</div>
+							}
+						</div>
+						<p class="foot-note">The key stays on this server. Browsers and apps never see it.</p>
+					</section>
+					<section aria-labelledby="models">
+						<div class="sec-bar">
+							<h3 id="models" class="sec-title">{ "Models · " + strconv.Itoa(len(p.Models)) + " on" }</h3>
+							<label class="filter">
+								@icon("search13")
+								<input aria-label="Filter models" placeholder="Filter" data-filter="#model-rows"/>
+							</label>
+							<a class="btn h32 primary" href={ p.url("/discover") }>
+								<span>Discover<span class="wide-only">{ " models" }</span></span>
+								if p.NewCount > 0 {
+									<span class="badge-count">{ strconv.Itoa(p.NewCount) + " new" }</span>
+								}
+							</a>
+						</div>
+						<div class="group tbl-wrap">
+							<table class="tbl mtbl">
+								<thead>
+									<tr><th scope="col">Model</th><th scope="col">Context</th><th scope="col">Cost</th><th scope="col">Can do</th><th scope="col">On</th></tr>
+								</thead>
+								<tbody id="model-rows">
+									for _, m := range p.Models {
+										<tr class={ templ.KV("off", !m.On) }>
+											<td class="mname"><a class="name" href={ p.url("/models/" + saModelPath(m.ID)) }>{ m.Name }</a><span class="id">{ m.ID }</span></td>
+											<td class="tnum mctx">{ m.Context }</td>
+											<td class="mcost">{ m.Cost }</td>
+											<td class="mcaps">
+												<span class="tags">
+													for _, c := range m.Caps {
+														<span>{ c }</span>
+													}
+												</span>
+											</td>
+											<td class="mon"><button class="switch" type="submit" role="switch" aria-checked={ strconv.FormatBool(m.On) } aria-label={ m.Name + " on" } name="model_id" value={ m.ID } formaction={ p.url("/disable") }></button></td>
+										</tr>
+									}
+								</tbody>
+							</table>
+							if len(p.Models) == 0 {
+								<p class="tbl-empty">No models on yet. Discover models to turn some on.</p>
+							}
+						</div>
+					</section>
+					<section aria-labelledby="defaults">
+						<h3 id="defaults" class="sec-title">Defaults for this provider</h3>
+						<div class="group">
+							<div class="grow">
+								<label for="maxtok" class="lbl">Max output tokens</label>
+								<input id="maxtok" name="max_output_tokens" class={ "field", "num", templ.KV("is-changed", p.MaxChanged != "") } value={ p.MaxTokens } inputmode="numeric" placeholder="Model default"/>
+								if p.MaxChanged != "" {
+									<span class="changed">{ "Changed from " + p.MaxChanged }</span>
+								}
+							</div>
+							<div class="grow">
+								<label for="temp" class="lbl">Temperature</label>
+								<input id="temp" name="temperature" class="field num" placeholder="Model default" value={ p.Temp } inputmode="decimal"/>
+							</div>
+							if !p.NoCache {
+								<div class="grow swrow">
+									<span id="cache" class="lbl fill">Prompt caching</span>
+									<button class="switch" type="button" role="switch" aria-checked={ strconv.FormatBool(p.Caching) } aria-labelledby="cache" data-switch="cache_enabled"></button>
+									<input type="hidden" name="cache_enabled" value={ strconv.FormatBool(p.Caching) }/>
+								</div>
+							}
+							<a class="glink" href={ p.url("/defaults") }><span>{ "All call settings for " + p.Name }</span>@saIcon("chev")</a>
+						</div>
+						<p class="foot-note">Profiles and conversations can override any of these.</p>
+					</section>
+					<section id="premove" aria-labelledby="premove-t">
+						<h3 id="premove-t" class="sec-title">Remove</h3>
+						<div class={ "group", templ.KV("confirming", p.Confirming) }>
+							<div class="grow">
+								if p.Confirming {
+									<span class="lbl fill">{ "Remove " + p.Name + "?" }<span class="sub">Its models leave every picker. Conversations keep their messages. This can’t be undone.</span></span>
+									<a class="btn h36" href={ p.url("") } hx-get={ string(p.url("")) } hx-select="#premove" hx-target="#premove" hx-swap="outerHTML">Cancel</a>
+									<button class="btn h36 destructive" type="submit" formaction={ p.url("/delete") }>Remove provider</button>
+								} else {
+									<span class="lbl fill">Remove provider<span class="sub">Its models leave every picker. Conversations keep their messages.</span></span>
+									<a class="btn h36 danger" href={ p.url("?remove=1#premove") } hx-get={ string(p.url("?remove=1")) } hx-select="#premove" hx-target="#premove" hx-swap="outerHTML">Remove</a>
+								}
+							</div>
+						</div>
+					</section>
+				</div>
+			</div>
+			@saveBar(p.Dirty)
+		</form>
+	}
+}
+
+// saveBar is the explicit-save bar. It shows once a field changes; the
+// server renders it open when a page arrives already dirty.
+templ saveBar(dirty int) {
+	<div class="savebar" role="region" aria-label="Unsaved changes" data-savebar data-initial={ strconv.Itoa(dirty) } hidden?={ dirty == 0 }>
+		<div>
+			<span class="msg" data-dirty-count>{ dirtyLabel(dirty) }</span>
+			<button class="btn ghost" type="reset">Revert</button>
+			<button class="btn primary" type="submit">Save<kbd>⌘S</kbd></button>
+		</div>
+	</div>
+}
+
+func dirtyLabel(n int) string {
+	if n == 1 {
+		return "1 unsaved change"
+	}
+	return strconv.Itoa(n) + " unsaved changes"
+}

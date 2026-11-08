@@ -2,10 +2,8 @@ package web
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -47,38 +45,6 @@ type triFieldVM struct {
 	Inherited string // "on"/"off"/"" — shown in the Inherit option label
 }
 
-type convSettingsVM struct {
-	ConvID     string
-	Title      string
-	Tab        string // "call" | "plugins"
-	DriverType string // active provider type, gates the provider-extras section
-	// Set once a stateful harness has answered here; several fields below are
-	// inert when it is.
-	Harness *harnessVM
-
-	// Call settings
-	Temperature     callFieldVM
-	TopP            callFieldVM
-	MaxOutputTokens callFieldVM
-	TopK            callFieldVM
-	StopSequences   callFieldVM // comma-joined
-	ThinkingEffort  enumFieldVM
-	ExplicitCache   triFieldVM
-	IncludeThinking triFieldVM
-
-	// Provider extras (active provider only)
-	AnthCacheEnabled triFieldVM
-	OAISeed          callFieldVM
-	OAIFreqPenalty   callFieldVM
-	OAIPresPenalty   callFieldVM
-	OAIParallelTools triFieldVM
-	GoogCandidates   callFieldVM
-
-	// Plugins
-	Plugins []convPluginRowVM
-	Addable []pluginOptVM
-}
-
 type convPluginRowVM struct {
 	Name     string
 	Display  string
@@ -88,59 +54,14 @@ type convPluginRowVM struct {
 	Form     pluginConfigForm
 }
 
-// handleConvSettings renders the conversation settings page (call settings or
-// plugins tab).
+// handleConvSettings is the old settings page's URL; settings live in the
+// inspector's Settings and Plugins tabs now.
 func (h *Handler) handleConvSettings(w http.ResponseWriter, r *http.Request) {
-	convID := r.PathValue("id")
-	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID}))
-	if err != nil {
-		http.Error(w, "conversation not found", http.StatusNotFound)
-		return
+	tab := "settings"
+	if r.URL.Query().Get("tab") == "plugins" {
+		tab = "plugins"
 	}
-	conv := getResp.Msg.GetConversation()
-
-	tab := r.URL.Query().Get("tab")
-	if tab != "plugins" {
-		tab = "call"
-	}
-	vm := convSettingsVM{
-		ConvID:  convID,
-		Title:   convoTitle(conv),
-		Tab:     tab,
-		Harness: harnessVMFrom(conv.GetHarness()),
-	}
-
-	own := conv.GetSettings().GetCallSettings()
-	inherited := h.inheritedCallSettings(r.Context(), conv)
-	vm.DriverType = h.activeDriverType(r.Context(), conv)
-	fillCallFields(&vm, own, inherited, conv.GetSettings(), h.inheritedConvSettings(r.Context(), conv))
-
-	if tab == "plugins" {
-		vm.Plugins, vm.Addable = h.convPlugins(r.Context(), convID)
-	}
-	h.render(w, r, http.StatusOK, convSettingsPage(vm))
-}
-
-func fillCallFields(vm *convSettingsVM, own, inh *psmithv1.CallSettings, ownConv, inhConv *psmithv1.ConversationSettings) {
-	vm.Temperature = floatField("temperature", own.GetTemperature(), own != nil && own.Temperature != nil, inh.GetTemperature(), inh != nil && inh.Temperature != nil)
-	vm.TopP = floatField("top_p", own.GetTopP(), own != nil && own.TopP != nil, inh.GetTopP(), inh != nil && inh.TopP != nil)
-	vm.MaxOutputTokens = intField("max_output_tokens", own.GetMaxOutputTokens(), own != nil && own.MaxOutputTokens != nil, inh.GetMaxOutputTokens(), inh != nil && inh.MaxOutputTokens != nil)
-	vm.TopK = intField("top_k", own.GetTopK(), own != nil && own.TopK != nil, inh.GetTopK(), inh != nil && inh.TopK != nil)
-	vm.StopSequences = callFieldVM{Name: "stop_sequences", Value: strings.Join(own.GetStopSequences(), ", "), Inherited: strings.Join(inh.GetStopSequences(), ", ")}
-
-	vm.ThinkingEffort = thinkingEffortField(own.GetThinking().GetEffort(), inh.GetThinking().GetEffort())
-	vm.ExplicitCache = makeTri("explicit_cache", explicitCache(own), explicitCache(inh))
-	vm.IncludeThinking = makeTri("include_thinking_in_history", includeThinking(ownConv), includeThinking(inhConv))
-
-	ownA, inhA := own.GetAnthropic(), inh.GetAnthropic()
-	vm.AnthCacheEnabled = makeTri("anth_cache_enabled", anthCache(ownA), anthCache(inhA))
-	ownO, inhO := own.GetOpenai(), inh.GetOpenai()
-	vm.OAISeed = intField("oai_seed", ownO.GetSeed(), ownO != nil && ownO.Seed != nil, inhO.GetSeed(), inhO != nil && inhO.Seed != nil)
-	vm.OAIFreqPenalty = floatField("oai_frequency_penalty", ownO.GetFrequencyPenalty(), ownO != nil && ownO.FrequencyPenalty != nil, inhO.GetFrequencyPenalty(), inhO != nil && inhO.FrequencyPenalty != nil)
-	vm.OAIPresPenalty = floatField("oai_presence_penalty", ownO.GetPresencePenalty(), ownO != nil && ownO.PresencePenalty != nil, inhO.GetPresencePenalty(), inhO != nil && inhO.PresencePenalty != nil)
-	vm.OAIParallelTools = makeTri("oai_parallel_tool_calls", oaiParallel(ownO), oaiParallel(inhO))
-	ownG, inhG := own.GetGoogle(), inh.GetGoogle()
-	vm.GoogCandidates = intField("goog_candidate_count", ownG.GetCandidateCount(), ownG != nil && ownG.CandidateCount != nil, inhG.GetCandidateCount(), inhG != nil && inhG.CandidateCount != nil)
+	http.Redirect(w, r, "/c/"+r.PathValue("id")+"?tab="+tab, http.StatusSeeOther)
 }
 
 // thinkingEffortOptions are the levels in ascending order, labelled for the
@@ -154,159 +75,11 @@ var thinkingEffortOptions = []enumOption{
 	{Value: string(providers.ThinkingEffortXHigh), Label: "Extra high"},
 }
 
-func thinkingEffortField(own, inh psmithv1.ThinkingEffort) enumFieldVM {
-	f := enumFieldVM{Name: "thinking_effort", Options: thinkingEffortOptions}
-	f.Value = string(protoconv.ThinkingEffort(own))
-	if inhWord := string(protoconv.ThinkingEffort(inh)); inhWord != "" {
-		for _, o := range thinkingEffortOptions {
-			if o.Value == inhWord {
-				f.Inherited = o.Label
-			}
-		}
-	}
-	return f
-}
-
-// enumInheritLabel renders the resolved lower-layer choice inside the
-// Inherit option, matching triInheritLabel's shape.
-func enumInheritLabel(inherited string) string {
-	if inherited == "" {
-		return ""
-	}
-	return " (" + strings.ToLower(inherited) + ")"
-}
-
-// nil-safe pointer accessors for nested optional bools (proto getters return
-// the message pointer, which can be nil; reaching the field would panic).
-func explicitCache(cs *psmithv1.CallSettings) *bool {
-	if cs == nil {
-		return nil
-	}
-	return cs.ExplicitCache
-}
-func includeThinking(s *psmithv1.ConversationSettings) *bool {
-	if s == nil {
-		return nil
-	}
-	return s.IncludeThinkingInHistory
-}
-func anthCache(a *psmithv1.AnthropicExtras) *bool {
-	if a == nil {
-		return nil
-	}
-	return a.CacheEnabled
-}
-func oaiParallel(o *psmithv1.OpenAIExtras) *bool {
-	if o == nil {
-		return nil
-	}
-	return o.ParallelToolCalls
-}
-
-func floatField(name string, v float64, set bool, inh float64, inhSet bool) callFieldVM {
-	f := callFieldVM{Name: name}
-	if set {
-		f.Value = strconv.FormatFloat(v, 'f', -1, 64)
-	}
-	if inhSet {
-		f.Inherited = strconv.FormatFloat(inh, 'f', -1, 64)
-	}
-	return f
-}
-
-func intField(name string, v int32, set bool, inh int32, inhSet bool) callFieldVM {
-	f := callFieldVM{Name: name}
-	if set {
-		f.Value = strconv.Itoa(int(v))
-	}
-	if inhSet {
-		f.Inherited = strconv.Itoa(int(inh))
-	}
-	return f
-}
-
-func makeTri(name string, own, inh *bool) triFieldVM {
-	f := triFieldVM{Name: name}
-	if own != nil {
-		f.State = boolWord(*own)
-	}
-	if inh != nil {
-		f.Inherited = boolWord(*inh)
-	}
-	return f
-}
-
 func boolWord(b bool) string {
 	if b {
 		return "on"
 	}
 	return "off"
-}
-
-// inheritedCallSettings resolves the call settings below the conversation:
-// provider defaults < model defaults < resolved profile defaults. Higher layers
-// win per scalar field; this is what an unset conversation field falls back to.
-func (h *Handler) inheritedCallSettings(ctx context.Context, conv *psmithv1.Conversation) *psmithv1.CallSettings {
-	out := &psmithv1.CallSettings{}
-	providerID, modelID := resolvedModel(conv)
-
-	if providerID != "" && h.models != nil {
-		if resp, err := h.models.ListAllUserModels(ctx, connect.NewRequest(&psmithv1.ListAllUserModelsRequest{})); err == nil {
-			for _, e := range resp.Msg.GetEntries() {
-				if e.GetProvider().GetId() != providerID {
-					continue
-				}
-				out = mergeCall(out, e.GetProvider().GetDefaultSettings()) // provider layer
-				if e.GetModel().GetModelId() == modelID {
-					out = mergeCall(out, e.GetModel().GetDefaultSettings()) // model layer
-				}
-			}
-		}
-	}
-	if h.profiles != nil {
-		if prof, err := h.profiles.GetProfile(ctx, connect.NewRequest(&psmithv1.GetProfileRequest{Id: conv.GetProfileId(), Resolve: true})); err == nil {
-			out = mergeCall(out, prof.Msg.GetProfile().GetDefaultSettings().GetCallSettings()) // profile layer (top of inherited)
-		}
-	}
-	return out
-}
-
-func (h *Handler) inheritedConvSettings(ctx context.Context, conv *psmithv1.Conversation) *psmithv1.ConversationSettings {
-	out := &psmithv1.ConversationSettings{}
-	if h.profiles != nil {
-		if prof, err := h.profiles.GetProfile(ctx, connect.NewRequest(&psmithv1.GetProfileRequest{Id: conv.GetProfileId(), Resolve: true})); err == nil {
-			if d := prof.Msg.GetProfile().GetDefaultSettings(); d != nil {
-				out.IncludeThinkingInHistory = d.IncludeThinkingInHistory
-			}
-		}
-	}
-	return out
-}
-
-// resolvedModel returns the conversation's effective provider/model: its own
-// override if set, else the profile default (caller resolves further if blank).
-func resolvedModel(conv *psmithv1.Conversation) (providerID, modelID string) {
-	if s := conv.GetSettings(); s != nil {
-		return s.GetDefaultProviderId(), s.GetDefaultModelId()
-	}
-	return "", ""
-}
-
-func (h *Handler) activeDriverType(ctx context.Context, conv *psmithv1.Conversation) string {
-	pid, _ := resolvedModel(conv)
-	if pid == "" || h.models == nil {
-		return ""
-	}
-	resp, err := h.models.ListAllUserModels(ctx, connect.NewRequest(&psmithv1.ListAllUserModelsRequest{}))
-	if err != nil {
-		return ""
-	}
-	for _, e := range resp.Msg.GetEntries() {
-		if e.GetProvider().GetId() == pid {
-			return e.GetProvider().GetType()
-		}
-	}
-	return ""
 }
 
 // mergeCall overlays higher onto lower for the scalar fields the web form
@@ -449,8 +222,9 @@ func (h *Handler) handleConvSettingsSave(w http.ResponseWriter, r *http.Request)
 	if e := protoconv.ThinkingEffortProto(providers.ThinkingEffort(r.FormValue("thinking_effort"))); e != psmithv1.ThinkingEffort_THINKING_EFFORT_UNSPECIFIED {
 		cs.Thinking = &psmithv1.ThinkingSettings{Effort: e}
 	}
-	if ce := formTri(r, "anth_cache_enabled"); ce != nil {
-		cs.Anthropic = &psmithv1.AnthropicExtras{CacheEnabled: ce}
+	ce, ttl := formTri(r, "anth_cache_enabled"), formCacheTTL(r, "anth_cache_ttl")
+	if ce != nil || ttl != nil {
+		cs.Anthropic = &psmithv1.AnthropicExtras{CacheEnabled: ce, CacheTtl: ttl}
 	}
 	if seed, fp, pp, par := formInt(r, "oai_seed"), formFloat(r, "oai_frequency_penalty"), formFloat(r, "oai_presence_penalty"), formTri(r, "oai_parallel_tool_calls"); seed != nil || fp != nil || pp != nil || par != nil {
 		cs.Openai = &psmithv1.OpenAIExtras{Seed: seed, FrequencyPenalty: fp, PresencePenalty: pp, ParallelToolCalls: par}
@@ -465,7 +239,20 @@ func (h *Handler) handleConvSettingsSave(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/c/"+convID+"/settings", http.StatusSeeOther)
+	http.Redirect(w, r, "/c/"+convID+"?tab=settings", http.StatusSeeOther)
+}
+
+func formCacheTTL(r *http.Request, name string) *psmithv1.CacheTTL {
+	var v psmithv1.CacheTTL
+	switch r.FormValue(name) {
+	case "5m":
+		v = psmithv1.CacheTTL_CACHE_TTL_5M
+	case "1h":
+		v = psmithv1.CacheTTL_CACHE_TTL_1H
+	default:
+		return nil
+	}
+	return &v
 }
 
 func formFloat(r *http.Request, name string) *float64 {
@@ -517,61 +304,6 @@ func splitStops(s string) []string {
 }
 
 // --- conversation plugin overrides ---
-
-// convPlugins resolves the merged pipeline for display (with inherited/override
-// source badges) and lists catalog plugins not yet present for adding.
-func (h *Handler) convPlugins(ctx context.Context, convID string) (rows []convPluginRowVM, addable []pluginOptVM) {
-	pipe, err := h.convos.ResolveConversationPipeline(ctx, connect.NewRequest(&psmithv1.ResolveConversationPipelineRequest{ConversationId: convID}))
-	if err != nil {
-		return nil, nil
-	}
-	types := h.pluginTypesByName(ctx)
-	models := h.listModels(ctx, "")
-	display := func(name string) string {
-		if t := types[name]; t != nil {
-			return orName(t.GetDisplayName(), name)
-		}
-		return name
-	}
-	present := map[string]bool{}
-	for _, e := range pipe.Msg.GetEntries() {
-		present[e.GetPluginName()] = true
-		src := "Inherited"
-		if e.GetSource() == psmithv1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_CONVERSATION {
-			src = "Override"
-		}
-		rows = append(rows, convPluginRowVM{
-			Name:    e.GetPluginName(),
-			Display: display(e.GetPluginName()),
-			Ordinal: e.GetOrdinal(),
-			Source:  src,
-			Form:    h.buildPluginForm(ctx, types[e.GetPluginName()], e.GetConfig(), models),
-		})
-	}
-	// Conversation overrides that disable an inherited plugin don't appear in the
-	// resolved pipeline; surface them so they can be restored.
-	if ov, err := h.convos.GetConversationPlugins(ctx, connect.NewRequest(&psmithv1.GetConversationPluginsRequest{ConversationId: convID})); err == nil {
-		for _, p := range ov.Msg.GetPlugins() {
-			if p.GetDisabled() {
-				rows = append(rows, convPluginRowVM{
-					Name:     p.GetPluginName(),
-					Display:  display(p.GetPluginName()),
-					Source:   "Override",
-					Disabled: true,
-				})
-			}
-		}
-	}
-	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Ordinal < rows[j].Ordinal })
-
-	for name, t := range types {
-		if !present[name] {
-			addable = append(addable, pluginOptVM{Name: name, DisplayName: orName(t.GetDisplayName(), name), Description: t.GetDescription()})
-		}
-	}
-	sort.Slice(addable, func(i, j int) bool { return addable[i].DisplayName < addable[j].DisplayName })
-	return rows, addable
-}
 
 // handleConvPluginOverride upserts a conversation plugin override (config edit,
 // add, disable inherited) or removes one (restore / remove override), then
@@ -626,7 +358,7 @@ func (h *Handler) handleConvPluginOverride(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/c/"+convID+"/settings?tab=plugins", http.StatusSeeOther)
+	http.Redirect(w, r, "/c/"+convID+"?tab=plugins", http.StatusSeeOther)
 }
 
 // currentConfigFor returns the existing override config for a plugin, or nil.
@@ -682,42 +414,4 @@ func orName(a, b string) string {
 		return a
 	}
 	return b
-}
-
-// orPlaceholder is the number-field placeholder: the inherited value, or a
-// neutral dash when nothing is inherited.
-func orPlaceholder(inherited string) string {
-	if inherited != "" {
-		return inherited
-	}
-	return "—"
-}
-
-// sliderStart picks the range input's initial position: the override if set,
-// else the inherited value, else the midpoint of [min, max].
-func sliderStart(f callFieldVM, min, max string) string {
-	if f.Value != "" {
-		return f.Value
-	}
-	if f.Inherited != "" {
-		return f.Inherited
-	}
-	lo, err1 := strconv.ParseFloat(min, 64)
-	hi, err2 := strconv.ParseFloat(max, 64)
-	if err1 != nil || err2 != nil {
-		return min
-	}
-	return strconv.FormatFloat((lo+hi)/2, 'f', -1, 64)
-}
-
-// triInheritLabel annotates the Inherit option with the resolved value.
-func triInheritLabel(inherited string) string {
-	switch inherited {
-	case "on":
-		return " (on)"
-	case "off":
-		return " (off)"
-	default:
-		return ""
-	}
 }

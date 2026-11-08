@@ -1,0 +1,168 @@
+/* settings-b area styles: profiles, plugins, MCP servers, embedder, Langfuse,
+   speech. Shared parts live in app.css; values come from the boards. */
+
+/* page head */
+.sb-lede{margin:10px 0 0;font-size:13px;color:var(--t2)}
+.sb-lede a,.sb-link,.foot-note a{color:var(--accentInk);text-decoration:none}
+.sb-lede.sm{margin-top:6px;font-size:12.5px;color:var(--t3)}
+.sb-mono-sub{margin:6px 0 0;font:13px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--t3)}
+.page-title h2.sb-ph{display:flex;align-items:center;gap:12px}
+.page-title .btn[aria-disabled="true"]{color:var(--t3)}
+.btn.sb-g7{gap:7px}.btn.sb-g6{gap:6px}
+.btn.sb-n{font-weight:400}
+.btn.sb-p14{padding:0 14px}
+.btn.sb-h34{height:34px}
+.btn.sb-red{color:var(--red)}
+.dot.sb-d10{width:10px;height:10px;border-radius:5px}
+.dot.sb-d12{width:12px;height:12px;border-radius:6px}
+.dot.bad{--dot:var(--red)}
+
+.sb-tabs{display:flex;width:fit-content;height:34px;margin-top:16px;border-radius:9px;background:var(--fill);padding:3px;box-sizing:border-box}
+.sb-tabs a{display:flex;align-items:center;padding:0 16px;border-radius:7px;color:var(--t2);text-decoration:none;font-size:13px}
+.sb-tabs a[aria-current]{background:var(--raise);color:var(--t1);font-weight:600;box-shadow:0 1px 2px var(--shadow)}
+
+/* groups: every child after the first gets the hairline the boards draw */
+.sb-g > :not(input) ~ :not(input){border-top:1px solid var(--line)}
+.group.sb-pad{padding:12px}
+.group.sb-danger{background:var(--redFill)}
+.grow .sb-sub{display:block;margin-top:2px;font-size:12.5px;color:var(--t3)}
+.grow .sb-note{font-size:13px;color:var(--t3)}
+.grow .sb-hint,.sb-ctl .sb-hint{font-size:12.5px;color:var(--t3)}
+.sb-ctl .sb-hint{display:block;margin-top:6px}
+.grow .sb-val{flex:1;min-width:200px;color:var(--t1)}
+.grow .sb-val.mono{font-size:13px}
+.sb-t2{color:var(--t2)}.sb-t3,.grow .sb-val.sb-t3{color:var(--t3)}
+.grow .field.mono{font:13px ui-monospace,SFMono-Regular,Menlo,monospace}
+.grow .field.sb-w240{width:240px}
+.sb-dirty{box-shadow:inset 0 0 0 1.5px var(--accent)}
+.grow.sb-confirm{min-height:60px}
+.sb-ask strong{display:block;font-weight:600;color:var(--t1)}
+.grow > .sb-ask{color:var(--t1)}
+
+/* rows that align to the top: label, then a control with its hint below */
+.grow.sb-top{align-items:flex-start;padding:12px 16px}
+.grow.sb-top > .lbl{padding-top:8px}
+.sb-ctl{flex:1;min-width:200px}
+.sb-ctl .field.sb-block,.sb-ctl .sb-block{display:block;width:100%}
+.sb-req{color:var(--red);margin-left:3px}
+.sb-secret{display:flex;gap:8px}
+.sb-secret .field{flex:1;min-width:200px}
+.sb-boolrow{display:flex;min-height:34px;align-items:center}
+
+/* select with the boards' caret */
+.sb-select{flex:1;min-width:200px;position:relative;display:flex}
+.sb-select.narrow{flex:none;width:240px;min-width:0}
+.sb-select select{flex:1;min-width:0;height:34px;box-sizing:border-box;padding:0 30px 0 10px;border:0;border-radius:8px;background:var(--fill);color:var(--t1);font-size:14px;outline:0;appearance:none;-webkit-appearance:none}
+.sb-select select:focus{box-shadow:0 0 0 2px var(--accent)}
+.sb-select svg{position:absolute;right:12px;top:14px;color:var(--t2);pointer-events:none}
+
+/* segmented radios */
+.sb-seg{display:flex;height:34px;border-radius:9px;background:var(--fill);padding:3px;box-sizing:border-box}
+.sb-seg.inline{display:inline-flex}
+.sb-seg label{display:flex;align-items:center;padding:0 14px;border-radius:7px;color:var(--t2);font-size:13px;cursor:pointer}
+.sb-seg label:has(:checked){background:var(--raise);color:var(--t1);font-weight:600;box-shadow:0 1px 2px var(--shadow)}
+.sb-seg label:has(:focus-visible){outline:2px solid var(--accent);outline-offset:1px}
+.sb-radios{flex:1;min-width:200px;display:flex;flex-wrap:wrap;gap:8px 20px}
+.sb-radios label{display:flex;align-items:center;gap:8px;color:var(--t1)}
+.sb-radios input{margin:0;accent-color:var(--accent)}
+
+/* text areas */
+.sb-ta{flex:1;min-width:200px;box-sizing:border-box;padding:8px 10px;border:0;border-radius:8px;background:var(--fill);color:var(--t1);font-size:14px;line-height:1.5;outline:0;resize:vertical}
+.sb-ta.mono{font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace}
+.sb-ta:focus,.sb-prompt:focus{box-shadow:0 0 0 2px var(--accent)}
+.grow.sb-tarow{align-items:flex-start;padding:10px 16px}
+.sb-prompt{display:block;width:100%;box-sizing:border-box;min-height:176px;padding:10px 12px;border:0;border-radius:8px;background:var(--fill);color:var(--t1);font-size:14px;line-height:1.55;outline:0;resize:vertical}
+.sb-meta{display:flex;align-items:center;gap:12px;margin-top:10px;font-size:12.5px;color:var(--t3)}
+.sb-meta span:first-child{flex:1}
+.btn.sb-reset{padding:0 10px;color:var(--t2);font-weight:400;gap:6px}
+
+/* profiles list */
+.sb-rows{position:relative}
+.sb-prow{position:relative;display:flex;align-items:center;gap:12px;min-height:64px;padding:10px 10px 10px 16px}
+.sb-prow.d1{padding-left:40px}.sb-prow.d2{padding-left:64px}.sb-prow.d3{padding-left:88px}
+.sb-elbow{color:var(--t3);flex:none;margin-top:-10px}
+.sb-pname{flex:1;min-width:0;color:var(--t1);text-decoration:none}
+.sb-pname .t{display:flex;align-items:center;gap:8px;font-weight:600}
+.sb-pname .sub{display:block;margin-top:3px;font-size:12.5px;color:var(--t3)}
+.sb-badge{font-size:11.5px;font-weight:600;padding:2px 7px;border-radius:5px;background:var(--hl);color:var(--accentInk)}
+.sb-pmodel{font-size:12.5px;color:var(--t3);white-space:nowrap}
+.sb-pconfirm{background:var(--redFill)}
+.sb-pconfirm .sb-ask{flex:1;min-width:0}
+.sb-pconfirm .sb-sub{display:block;margin-top:2px;font-size:12.5px;color:var(--t3)}
+.sb-more{position:static}
+.sb-more summary,.sb-addwrap summary{list-style:none}
+.sb-more summary::-webkit-details-marker,.sb-addwrap summary::-webkit-details-marker{display:none}
+.sb-more summary.icon-btn{color:var(--t2)}
+.sb-more[open] summary.icon-btn{background:var(--fill2);color:var(--t1)}
+.menu.sb-rowmenu{top:6px;right:10px;width:220px;box-sizing:border-box}
+.menu form{margin:0}
+
+/* plugin rows */
+.sb-plrow{display:flex;align-items:center;gap:12px;min-height:64px;padding:10px 12px 10px 16px}
+.sb-plbody{flex:1;min-width:0}
+.sb-plbody .t{display:block;font-weight:600;color:var(--t1)}
+.sb-plrow.off .sb-plbody .t{color:var(--t2)}
+.sb-plbody .d{display:block;margin-top:3px;font-size:12.5px;color:var(--t3)}
+.tags.sb-mt6{margin-top:6px}
+.tags .warn{background:var(--orangeFill);color:var(--orange);font-weight:600}
+.sb-num{width:22px;height:22px;flex:none;border-radius:6px;background:var(--fill);color:var(--t2);font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.icon-btn.sb-ic{color:var(--t2)}
+.sb-plgroup[data-removed] .sb-plrow{opacity:.45}
+.sb-plgroup[data-removed] .sb-plbody .t{text-decoration:line-through}
+.sb-plcfg{border-top:1px solid var(--line);background:var(--fill)}
+.sb-plcfg > .grow + .grow{border-top:1px solid var(--line)}
+.sb-addwrap{position:relative}
+.menu.sb-addmenu{right:0;top:40px;width:300px;box-sizing:border-box}
+.menu.sb-addmenu button{flex-direction:column;align-items:stretch;justify-content:center;height:auto;min-height:36px;padding:4px 10px;gap:0;box-sizing:border-box}
+.menu.sb-addmenu button span{font-size:12px;color:var(--t3)}
+
+/* tables */
+.tbl.sb-t560{min-width:560px}
+.tbl.sb-top tbody tr{vertical-align:top}
+.tbl td.sb-nowrap{white-space:nowrap}
+.tbl .sb-err{display:block;margin-top:4px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--red)}
+.sb-stat{display:inline-flex;align-items:center;gap:7px}
+.sb-stat.ok{color:var(--green)}.sb-stat.ok .dot{--dot:var(--green)}
+.sb-stat.bad{color:var(--red)}.sb-stat.bad .dot{--dot:var(--red)}
+.sb-stat.warn{color:var(--orange)}.sb-stat.warn .dot{--dot:var(--orange)}
+.sb-plain{text-decoration:none}
+
+/* share */
+.sb-block-row{padding:12px 16px}
+.sb-lockhead,.sb-lock{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--t2)}
+.sb-lock{gap:6px;font-size:12.5px;font-weight:400;color:var(--t3)}
+.sb-ul{margin:6px 0 0;padding:0 0 0 20px;font-size:13px;line-height:1.6;color:var(--t2)}
+.sb-file{flex:1;min-width:200px}
+.sb-file .mono{display:block;font-size:13px;color:var(--t1)}
+.sb-warn{display:flex;align-items:flex-start;gap:10px;padding:11px 16px;font-size:13.5px;color:var(--t1)}
+.sb-warn .dot{--dot:var(--t3);border-radius:4px;margin-top:6px}
+.sb-warn .dot.warn{--dot:var(--orange)}
+.sb-warn .dot.bad{--dot:var(--red)}
+.sb-warn strong{font-weight:600}
+.sb-filepick{position:relative;overflow:hidden}
+.sb-filepick input{position:absolute;inset:0;opacity:0;cursor:pointer}
+
+/* server detail */
+.sb-tools{margin:0;padding:12px 16px;list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px 16px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--t1)}
+.sb-tools span{color:var(--t3)}
+
+/* the add-server form shows the section for the chosen transport */
+.sb-mcpform:has([name=transport][value=http]:checked) :is(.sb-tr-stdio,.sb-tr-inproc),
+.sb-mcpform:has([name=transport][value=stdio]:checked) :is(.sb-tr-http,.sb-tr-inproc),
+.sb-mcpform:has([name=transport][value=inproc]:checked) :is(.sb-tr-http,.sb-tr-stdio){display:none}
+
+/* embedder, speech */
+.sb-count{color:var(--t1);font-weight:600}
+.sb-pill{font-size:12px;font-weight:600;padding:3px 9px;border-radius:10px;background:var(--fill2);color:var(--t2)}
+.sb-pill.ok{background:var(--greenFill);color:var(--green)}
+.sb-range{flex:1;min-width:200px;display:flex;align-items:center;gap:12px}
+.sb-range input{flex:1;min-width:0;margin:0;accent-color:var(--accent)}
+.sb-range output{width:44px;text-align:right;color:var(--t1)}
+
+/* The boards draw radios and the range in the light control style on both
+   appearances; WebKit's dark controls read as disabled on these grounds. */
+.sb-radios input,.sb-range input{color-scheme:light}
+.sb-fixed{flex:1;min-width:0;font-size:12.5px;color:var(--t3)}
+.sb-fixed-val{font-size:14px;color:var(--t1)}
+.foot-note.warn{color:var(--orange)}
+.foot-note.warn:not([hidden]) + .foot-note{margin-top:4px}
