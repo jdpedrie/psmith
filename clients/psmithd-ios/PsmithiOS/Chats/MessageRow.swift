@@ -2,318 +2,894 @@ import SwiftUI
 import PsmithKit
 import PsmithUI
 
-/// iOS message bubble. Phase 5f wires per-message actions:
-///
-///  - **Long-press** → MessageActionMenu: Edit, Reload (assistant
-///    only), Copy, Read aloud, Delete. Mirrors the Mac hover-pill
-///    set. A custom overlay, NOT `.contextMenu` — the system menu's
-///    lift portal renders the row upside down inside the inverted
-///    transcript (see MessageActionMenu for the mechanism).
-///  - **Edit-in-place**: Edit replaces the bubble's body with a
-///    TextField + Save / Cancel buttons. Save updates the message via
-///    `model.reloadFromMessage` (forks a new branch from the edit).
-///  - **Branch switcher**: chevrons + index ("1/2") rendered inline at
-///    the bubble's role-opposite edge. Always visible (iOS has no
-///    hover signal); tap to navigate siblings.
-///  - **Tap model chip** → `MessageUsageSheet` (`.medium` detent) with
-///    the per-turn token + cost + cache breakdown.
+/// One transcript message (boards Conversation, MessageStates,
+/// MessageUsage, Thinking, SelectText, SystemStrip, Attachments, Council,
+/// LongReply, Fragments). Your messages are tinted bubbles on the right;
+/// replies read as page text. The latest reply carries its action row;
+/// every message gets the rest from a long-press (MessageActionMenu).
+/// Delete and edit happen in place: the row turns into its own question
+/// or editor.
 struct MessageRow: View {
     let message: PsmithMessage
     /// Whoever spoke immediately before, so a repeated speaker's name can
-    /// collapse. nil means "no predecessor", which always shows the label.
+    /// collapse.
     var previousMessage: PsmithMessage? = nil
     let model: ConversationViewModel
-    /// This reply came from a different model than the reply before it
-    /// (see `ConversationViewModel.modelChangeMessageIDs`). Passed in
-    /// rather than computed here: the set is one pass over the whole
-    /// transcript, done once by the list, not once per row.
+    let ui: ConversationUIState
+    /// This reply came from a different model than the one before it.
     var modelChanged: Bool = false
     /// The conversation's first metered reply: nothing earlier could
     /// have warmed its cache, so a miss isn't worth a red dot.
     var isFirstMeteredReply: Bool = false
     @Environment(AppModel.self) private var app
-    @Environment(AppPreferences.self) private var prefs
     @Environment(\.theme) private var theme
     @Environment(\.chatPaneWidth) private var paneWidth
 
-    @State private var showUsageSheet: Bool = false
-    /// Pending choice text waiting on a fork confirmation. Set when
-    /// the user taps a `send:` choice on a non-tip message; cleared
-    /// when the confirmation alert resolves either way.
-    @State private var pendingForkText: String?
-
     private var isErrored: Bool { message.errorText != nil }
-
-    private var isEditing: Bool {
-        model.editingMessage?.id == message.id
-    }
-
-    /// User / assistant turns are editable + reloadable. System and
-    /// context rows are also editable (so the user can fix a typo
-    /// in their system message without re-editing the profile);
-    /// compression-summary stays read-only — its body is owned by
-    /// the compression flow.
-    private var isEditableRole: Bool {
-        switch message.role {
-        case .user, .assistant, .system, .context: return true
-        default: return false
-        }
-    }
-
-    /// System + context messages render as a collapsed header strip
-    /// by default — framing content the user reads once when setting
-    /// up a turn, not on every scroll-back. Tap the strip to expand;
-    /// tap the expanded bubble's role chip to collapse back.
-    private var isCollapsibleHeaderRole: Bool {
-        switch message.role {
-        case .system, .context: return true
-        default: return false
-        }
-    }
-
-    private var isHeaderExpanded: Bool {
-        model.expandedHeaderMessageIDs.contains(message.id)
-    }
-
-    private func toggleHeaderExpansion() {
-        if isHeaderExpanded {
-            model.expandedHeaderMessageIDs.remove(message.id)
-        } else {
-            model.expandedHeaderMessageIDs.insert(message.id)
-        }
-    }
-
-    private var isReloadable: Bool {
-        isEditableRole && !model.isStreaming
+    private var isEditing: Bool { model.editingMessage?.id == message.id }
+    private var isSelecting: Bool { model.selectingTextMessageID == message.id }
+    private var deleteRequest: ConversationUIState.DeleteRequest? {
+        ui.confirmingDelete?.messageID == message.id ? ui.confirmingDelete : nil
     }
 
     var body: some View {
-        roleAlignedContainer {
-            if isCollapsibleHeaderRole && !isHeaderExpanded {
-                collapsedHeaderBubble
-            } else if message.role == .assistant && !isErrored && !isEditing {
-                // Assistant turns drop the bubble — markdown content
-                // reads as page content, full-width. Errored / editing
-                // states keep the bubble for visual prominence.
-                assistantContent
+        Group {
+            if let req = deleteRequest {
+                IKConfirmCard(
+                    question: req.cascade ? "Delete from here?" : "Delete this message?",
+                    detail: deleteDetail(cascade: req.cascade),
+                    onCancel: { ui.cancelDelete() },
+                    onConfirm: { ui.confirmDelete(model: model) }
+                )
+            } else if isEditing {
+                MessageEditCard(message: message, model: model)
             } else {
-                bubble
+                content
             }
         }
-        // In-bubble text selection is OFF: the selection interaction's
-        // UIKit long-press wins over the action-menu gesture, making
-        // the menu unreachable anywhere on the message text (under the
-        // old `.contextMenu` the menu interaction preempted selection,
-        // so in-bubble long-press selection never worked here either).
-        // The menu's "Select text" action opens the full-document
-        // reader, which keeps selection enabled.
         .environment(\.markdownTextSelectable, false)
-        // Edit sheet is hoisted to ConversationView via
-        // `.sheet(item: $model.editingMessage)` so a single sheet
-        // owns the lifecycle. Per-row `.sheet(isPresented:)` with a
-        // computed binding raced with @Observable updates and
-        // produced an open/close loop on dismiss.
-        // Delete confirmations live inside MessageActionMenu (in-card
-        // morph) — the menu overlay dismisses on action, so an alert
-        // anchored here would present from a view mid-removal.
-        .alert(
-            "Submit choice on an earlier message?",
-            isPresented: Binding(
-                get: { pendingForkText != nil },
-                set: { if !$0 { pendingForkText = nil } }
-            ),
-            presenting: pendingForkText
-        ) { text in
-            Button("Fork & Send") {
-                Haptics.notify(.success)
-                Task { await model.sendForking(content: text, parentMessageID: message.id) }
-                pendingForkText = nil
-            }
-            Button("Cancel", role: .cancel) { pendingForkText = nil }
-        } message: { _ in
-            Text("This will fork the conversation from this message and submit your choice as a new branch — the current branch stays intact.")
-        }
-        .sheet(isPresented: $showUsageSheet) {
-            NavigationStack {
-                MessageUsageSheet(message: message, model: model)
-                    .navigationTitle("Usage")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button("Done") { showUsageSheet = false }
-                        }
-                    }
-            }
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-        }
     }
 
-    // MARK: - Role alignment + fork-switcher pill
-
     @ViewBuilder
-    private func roleAlignedContainer<Content: View>(
-        @ViewBuilder _ content: () -> Content
-    ) -> some View {
-        let cap: CGFloat = paneWidth > 0 ? paneWidth * 0.85 : 720
+    private var content: some View {
         switch message.role {
         case .user:
-            // Right-aligned bubble. Fork pill bumps out of the top-right
-            // corner — applied OUTSIDE the bubble's clipShape so the
-            // pill isn't trimmed to the rounded rect.
-            HStack(spacing: 0) {
-                Spacer(minLength: 0)
-                content()
-                    .frame(maxWidth: cap, alignment: .trailing)
-                    .overlay(alignment: .topTrailing) {
-                        forkPill.offset(x: -6, y: -10)
-                    }
-            }
-            // With role labels gone, a little air around each question
-            // marks the turn boundaries the labels used to.
-            .padding(.vertical, 6)
+            UserMessageRow(message: message, model: model, onLongPress: presentMenu)
         case .assistant:
-            // Full-width, no bubble. Fork pill floats above the role
-            // label in the top-right corner of the message region —
-            // gives the same affordance as the user bump-out without
-            // a chrome boundary to anchor against.
-            VStack(alignment: .trailing, spacing: 2) {
-                HStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    forkPill
-                }
-                // The rail is what the eye tracks when scrolling past a
-                // discussion quickly; it reads as a continuous stripe without
-                // being read. No-op when there is no speaker, so an ordinary
-                // conversation keeps its exact current layout.
-                content()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .personaRail(index: message.personaSlot)
+            if isErrored {
+                FailedReplyCard(message: message, model: model, onLongPress: presentMenu)
+            } else if let slot = message.personaSlot, let name = message.persona {
+                CouncilTurn(message: message, name: name, slot: slot,
+                            showsName: message.showsPersonaLabel(after: previousMessage),
+                            onLongPress: presentMenu)
+            } else {
+                AssistantReply(message: message, model: model, ui: ui,
+                               isFirstMeteredReply: isFirstMeteredReply,
+                               modelChanged: modelChanged,
+                               onLongPress: presentMenu)
             }
+        case .system, .context:
+            HeaderMessageStrip(message: message, model: model, onLongPress: presentMenu)
         default:
-            content()
+            MessageBody(message: message).messageActionsOnLongPress(presentMenu)
         }
     }
 
-    /// Fork-switcher pill — chevron-left / "N/M" / chevron-right in a
-    /// capsule. Always visible when the message has siblings; nil view
-    /// otherwise (no Spacer reservation, since we now position via
-    /// overlay rather than HStack).
-    @ViewBuilder
-    private var forkPill: some View {
-        if let info = model.branchInfo(for: message.id) {
-            HStack(spacing: 4) {
-                Button {
-                    let prevIdx = (info.index - 1 + info.siblingIDs.count) % info.siblingIDs.count
-                    Task { await model.switchToBranch(siblingID: info.siblingIDs[prevIdx]) }
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Previous branch")
+    private func deleteDetail(cascade: Bool) -> String {
+        if cascade {
+            let n = model.descendantCount(of: message.id)
+            return "This message and the \(n) repl\(n == 1 ? "y" : "ies") under it go."
+        }
+        let excerpt = Self.excerpt(message.displayContent ?? message.content)
+        return "“\(excerpt)” goes. Its replies attach to the message before it."
+    }
 
-                Text("\(info.index + 1)/\(info.siblingIDs.count)")
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+    static func excerpt(_ s: String, limit: Int = 40) -> String {
+        let flat = s.split(whereSeparator: \.isNewline).joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+        return flat.count > limit ? String(flat.prefix(limit)).trimmingCharacters(in: .whitespaces) + "…" : flat
+    }
 
-                Button {
-                    let nextIdx = (info.index + 1) % info.siblingIDs.count
-                    Task { await model.switchToBranch(siblingID: info.siblingIDs[nextIdx]) }
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
+    /// A new conversation's rows are a preview of what creating it will
+    /// seed; there is nothing on the server to act on yet.
+    private func presentMenu() {
+        guard !model.isDraft, !isSelecting else { return }
+        Haptics.impact(.medium)
+        withAnimation(.snappy(duration: 0.22)) { model.actionMenuMessage = message }
+    }
+
+    /// The cache key prewarm sites must match.
+    static func markdownKey(id: String, body: String) -> String {
+        "\(id):\(body.count):\(body.hashValue)"
+    }
+}
+
+// MARK: - Body text
+
+/// A message's markdown at the boards' 16pt. Past the inline budget it
+/// shows the head under a fade with "Show full text", which pushes the
+/// full-text page (LongReply).
+struct MessageBody: View {
+    let message: PsmithMessage
+    var size: CGFloat = 16
+    var limit: Int = MarkdownBudget.inlineLimit
+    var title: String = "Full text"
+    @Environment(\.openConversationPage) private var open
+    @Environment(\.theme) private var theme
+
+    private var text: String { message.displayContent ?? message.content }
+
+    /// A reply past the inline budget shows just its opening; the rest
+    /// is a page away.
+    static let previewLimit = 485
+
+    var body: some View {
+        let key = MessageRow.markdownKey(id: message.id, body: text)
+        Group {
+            if text.count > limit, let head = MarkdownBudget.head(text, limit: Self.previewLimit) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Group {
+                        if ProseText.isPlain(head) {
+                            ProseText(text: head, size: size)
+                        } else {
+                            ChunkedMarkdownText(head, cacheKey: key + ":head")
+                        }
+                    }
+                        .overlay(alignment: .bottom) {
+                            LinearGradient(colors: [theme.chrome.opacity(0), theme.chrome], startPoint: .top, endPoint: .bottom)
+                                .frame(height: 56)
+                                .allowsHitTesting(false)
+                        }
+                    FullTextButton(size: text.utf8.count) {
+                        open(.fullText(title: title, markdown: text))
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Next branch")
+            } else if ProseText.isPlain(text) {
+                ProseText(text: text, size: size, lineHeight: size == 16 ? 23 : 21, gap: size == 16 ? 14 : 8)
+            } else {
+                ChunkedMarkdownText(text, cacheKey: key)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Capsule().fill(.regularMaterial))
-            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
+        }
+        .environment(\.fontScale, Double(size) / 17)
+        // MarkdownUI's paragraphs inherit SwiftUI line spacing: the
+        // boards set 16pt type on 23pt lines.
+        .lineSpacing(size * 1.4375 - size * 1.193)
+        .foregroundStyle(IK.text)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Prose, simple lists and code fences, set the way the boards set them:
+/// exact line heights and gaps, which MarkdownUI's theme can't take.
+/// Inline emphasis, code and links still render. Anything richer
+/// (headings, quotes, tables, nesting) goes to MarkdownUI instead.
+struct ProseText: View {
+    let text: String
+    var size: CGFloat = 16
+    var lineHeight: CGFloat = 23
+    var gap: CGFloat = 14
+
+    enum Block {
+        case paragraph(String)
+        case list(ordered: Bool, items: [String])
+        case code(String)
+    }
+
+    static func isPlain(_ s: String) -> Bool { parse(s) != nil }
+
+    static func parse(_ s: String) -> [Block]? {
+        guard s.utf8.count < 6_000 else { return nil }
+        var blocks: [Block] = []
+        var para: [String] = []
+        var items: [String] = []
+        var ordered = false
+        var code: [String]?
+        func flushPara() { if !para.isEmpty { blocks.append(.paragraph(para.joined(separator: "\n"))); para = [] } }
+        func flushList() { if !items.isEmpty { blocks.append(.list(ordered: ordered, items: items)); items = [] } }
+        func marker(_ line: Substring) -> (Bool, Substring)? {
+            for m in ["- ", "* ", "+ "] where line.hasPrefix(m) { return (false, line.dropFirst(2)) }
+            if let dot = line.firstIndex(where: { $0 == "." || $0 == ")" }), dot > line.startIndex,
+               line[line.startIndex..<dot].allSatisfy(\.isNumber), line[line.index(after: dot)...].hasPrefix(" ") {
+                return (true, line[line.index(dot, offsetBy: 2)...])
+            }
+            return nil
+        }
+        for line in s.split(separator: "\n", omittingEmptySubsequences: false) {
+            if var c = code {
+                if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") { blocks.append(.code(c.joined(separator: "\n"))); code = nil }
+                else { c.append(String(line)); code = c }
+                continue
+            }
+            let t = line.trimmingCharacters(in: .whitespaces)
+            if t.hasPrefix("```") { flushPara(); flushList(); code = []; continue }
+            if t.isEmpty { flushPara(); flushList(); continue }
+            if t.hasPrefix("#") || t.hasPrefix(">") || t.hasPrefix("|") || t.hasPrefix("~~~") { return nil }
+            let indented = line.first == " " || line.first == "\t"
+            if !indented, let (isOrdered, rest) = marker(line) {
+                flushPara()
+                if !items.isEmpty && isOrdered != ordered { flushList() }
+                ordered = isOrdered
+                items.append(String(rest))
+            } else if indented && !items.isEmpty {
+                if marker(Substring(t)) != nil { return nil }
+                items[items.count - 1] += " " + t
+            } else {
+                if indented && marker(Substring(t)) != nil { return nil }
+                flushList()
+                para.append(String(line))
+            }
+        }
+        if code != nil { return nil }
+        flushPara(); flushList()
+        return blocks
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: gap) {
+            ForEach(Array((Self.parse(text) ?? [.paragraph(text)]).enumerated()), id: \.offset) { _, block in
+                switch block {
+                case .paragraph(let p):
+                    inline(p)
+                case .list(let ordered, let items):
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Array(items.enumerated()), id: \.offset) { n, item in
+                            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                                Text(ordered ? "\(n + 1)." : "•").font(.system(size: size))
+                                    .frame(width: 22, alignment: .leading)
+                                inline(item)
+                            }
+                        }
+                    }
+                case .code(let c):
+                    UnwrappedLines {
+                        Text(c).cssLines(size: 13.5, lineHeight: 19).fontDesign(.monospaced)
+                            .foregroundStyle(IK.strong)
+                            .fixedSize()
+                    }
+                    .clipped()
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(IK.wash(0.06)))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func inline(_ p: String) -> some View {
+        var a = (try? AttributedString(markdown: p, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+            ?? AttributedString(p)
+        // The boards' bold is semibold.
+        for run in a.runs where run.inlinePresentationIntent?.contains(.stronglyEmphasized) == true {
+            a[run.range].font = .system(size: size, weight: .semibold)
+        }
+        return Text(a)
+            .cssLines(size: size, lineHeight: lineHeight)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+struct FullTextButton: View {
+    let size: Int
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "doc.text").font(.system(size: 14))
+                Text("Show full text (\(UsageFormat.bytes(size)))").font(.system(size: 14))
+            }
+            .foregroundStyle(IK.strong)
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .background(Capsule().fill(IK.wash(0.08)))
+            .overlay(Capsule().strokeBorder(IK.ring(0.12), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Your message
+
+struct UserMessageRow: View {
+    let message: PsmithMessage
+    let model: ConversationViewModel
+    let onLongPress: () -> Void
+    @Environment(\.theme) private var theme
+    @Environment(\.chatPaneWidth) private var paneWidth
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            if !message.attachments.isEmpty {
+                MessageAttachments(message: message)
+            }
+            let text = message.displayContent ?? message.content
+            if !text.isEmpty {
+                UserBubble(text: text)
+                    .messageActionsOnLongPress(onLongPress)
+            }
+            if let info = model.branchInfo(for: message.id) {
+                BranchPill(info: info, model: model)
+                    .padding(.top, -2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+}
+
+/// Your words in the accent-tinted bubble, 80% of the pane at most.
+struct UserBubble: View {
+    let text: String
+    @Environment(\.theme) private var theme
+    @Environment(\.chatPaneWidth) private var paneWidth
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            Text(text)
+                .cssLines(size: 16, lineHeight: 22)
+                .foregroundStyle(IK.text)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(theme.bubble))
+                .frame(maxWidth: paneWidth > 0 ? (paneWidth - 32) * 0.8 : 300, alignment: .trailing)
+                // Ahead of the spacer, or the stack splits the row between them.
+                .layoutPriority(1)
+        }
+    }
+}
+
+/// "2 of 3" with chevrons: switches between sibling branches.
+struct BranchPill: View {
+    let info: (siblingIDs: [String], index: Int)
+    let model: ConversationViewModel
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button {
+                let i = (info.index - 1 + info.siblingIDs.count) % info.siblingIDs.count
+                Task { await model.switchToBranch(siblingID: info.siblingIDs[i]) }
+            } label: {
+                Image(systemName: "chevron.left").font(.system(size: 11, weight: .semibold)).frame(width: 32, height: 32)
+            }
+            .accessibilityLabel("Previous branch")
+            Text("\(info.index + 1) of \(info.siblingIDs.count)")
+                .font(.system(size: 13)).monospacedDigit()
+            Button {
+                let i = (info.index + 1) % info.siblingIDs.count
+                Task { await model.switchToBranch(siblingID: info.siblingIDs[i]) }
+            } label: {
+                Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).frame(width: 32, height: 32)
+            }
+            .accessibilityLabel("Next branch")
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(IK.secondary)
+        .frame(height: 32)
+        .background(Capsule().fill(IK.wash(0.06)))
+    }
+}
+
+// MARK: - A reply
+
+struct AssistantReply: View {
+    let message: PsmithMessage
+    let model: ConversationViewModel
+    let ui: ConversationUIState
+    var isFirstMeteredReply = false
+    var modelChanged = false
+    let onLongPress: () -> Void
+    @Environment(AppModel.self) private var app
+    @Environment(\.openConversationPage) private var open
+
+    private var isSelecting: Bool { model.selectingTextMessageID == message.id }
+    private var usageOpen: Bool { ui.usageExpanded.contains(message.id) }
+    private var isSpeaking: Bool {
+        app.speech.isPlaying(messageID: message.id) || app.speech.isLoading(messageID: message.id)
+    }
+
+    /// The reply that ends the transcript keeps its actions in view; any
+    /// other shows them only while something on it is live (reading
+    /// aloud, selecting, usage open).
+    private var showsActions: Bool {
+        // Hidden while something else holds the composer's place.
+        guard !model.isDraft, !model.isCompacting, !model.showingCompactView, !model.hasPendingCompression, !ui.trayOpen,
+              model.conversation.archivedAt == nil else { return false }
+        return message.id == model.messages.last?.id
+            || isSpeaking || isSelecting || usageOpen
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if modelChanged, let name = model.modelDisplayName(providerID: message.providerID, modelID: message.modelID) {
+                Label(name, systemImage: "cpu")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(IK.tertiary)
+            }
+            ReplyPills(message: message, model: model)
+            Group {
+                if isSelecting {
+                    SelectableMessageText(text: message.displayContent ?? message.content)
+                } else if !message.uiFragments.isEmpty {
+                    FragmentView(fragments: message.uiFragments, onAction: handleFragment)
+                } else if message.isWelcome && !model.welcomePlayed.contains(message.id) {
+                    WelcomeReveal(text: message.displayContent ?? message.content) {
+                        model.welcomePlayed.insert(message.id)
+                    }
+                    .font(.system(size: 16))
+                } else if !(message.displayContent ?? message.content).isEmpty {
+                    MessageBody(message: message)
+                }
+            }
+            .contentShape(Rectangle())
+            .messageActionsOnLongPress(onLongPress)
+            if let fork = ui.pendingFork, fork.messageID == message.id {
+                ForkConfirmCard(text: fork.text) { ui.pendingFork = nil } onConfirm: {
+                    ui.pendingFork = nil
+                    Haptics.notify(.success)
+                    Task { await model.sendForking(content: fork.text, parentMessageID: message.id) }
+                }
+            }
+            if showsActions {
+                ReplyActionRow(message: message, model: model, ui: ui, isFirstMeteredReply: isFirstMeteredReply)
+                if usageOpen {
+                    UsagePanel(message: message, model: model)
+                }
+            } else {
+                passiveFooter
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// An older reply still says what's worth noticing: its branches and
+    /// an unexpected stop.
+    @ViewBuilder
+    private var passiveFooter: some View {
+        let stop = message.unexpectedStopLabel
+        let branch = model.branchInfo(for: message.id)
+        if stop != nil || branch != nil {
+            HStack(spacing: 8) {
+                if let stop {
+                    Text(stop).font(.system(size: 12.5)).foregroundStyle(IK.orange)
+                }
+                Spacer(minLength: 0)
+                if let branch { BranchPill(info: branch, model: model) }
+            }
         }
     }
 
-    // MARK: - Collapsed header (system / context)
-
-    /// One-row strip rendered in place of the full bubble for system
-    /// and context messages. Shows the role label, the first line of
-    /// the content as a preview, plus a chevron. Tap to expand into
-    /// the regular bubble. Long-press still surfaces the action menu
-    /// (edit/delete/copy) so the user can act on the message without
-    /// expanding it.
-    @ViewBuilder
-    private var collapsedHeaderBubble: some View {
-        // Tap/long-press via explicit gestures, NOT a Button: a
-        // Button claims the whole touch and fires its action on
-        // release even after a long hold (sim-verified — the strip
-        // expanded instead of opening the action menu), whereas
-        // side-by-side tap + long-press gestures disambiguate on
-        // hold duration.
-        HStack(spacing: 10) {
-            Image(systemName: message.role == .system ? "gear" : "tray.full")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(roleLabel)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text(previewLine)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+    private func handleFragment(_ action: FragmentAction) {
+        switch action {
+        case .compose(let text):
+            model.draft = model.draft.isEmpty ? text : model.draft + "\n" + text
+        case .send(let text):
+            // Off the tip, auto-submitting would append onto a stale
+            // branch: confirm a fork off this message in place instead.
+            if let latest = model.latestAssistantMessageID, latest != message.id {
+                ui.pendingFork = (message.id, text)
+            } else {
+                model.draft = text
+                Task { await model.send() }
             }
+        case .external(let url):
+            UIApplication.shared.open(url)
+        case .plugin:
+            // Only meaningful inside the panel that rendered it.
+            break
+        }
+    }
+}
+
+/// Confirm in place for a fragment choice on an earlier message
+/// (Fragments board).
+struct ForkConfirmCard: View {
+    let text: String
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Submit choice on an earlier message?").font(.system(size: 15, weight: .semibold)).foregroundStyle(IK.text)
+            Text("This forks the conversation here and sends “\(MessageRow.excerpt(text, limit: 30))” as a new branch. The current branch stays as it is.")
+                .cssLines(size: 13, lineHeight: 18).foregroundStyle(IK.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 2)
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                Button("Cancel", action: onCancel).ikButton()
+                Button("Fork and Send", action: onConfirm).ikButton(.primary)
+            }
+            .padding(.top, 10)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(RoundedRectangle(cornerRadius: 14).fill(theme.accent.opacity(0.10)))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.accent.opacity(0.4), lineWidth: 1))
+    }
+}
+
+/// Copy, read aloud, regenerate, usage; the cache grade or time at the
+/// right.
+struct ReplyActionRow: View {
+    let message: PsmithMessage
+    let model: ConversationViewModel
+    let ui: ConversationUIState
+    var isFirstMeteredReply = false
+    @Environment(AppModel.self) private var app
+    @Environment(\.clipboard) private var clipboard
+    @Environment(\.theme) private var theme
+
+    private var usageOpen: Bool { ui.usageExpanded.contains(message.id) }
+    private var isSelecting: Bool { model.selectingTextMessageID == message.id }
+    private var speaking: Bool {
+        app.speech.isPlaying(messageID: message.id) || app.speech.isLoading(messageID: message.id)
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            iconButton("doc.on.doc", label: "Copy") {
+                Haptics.impact(.light)
+                clipboard.write(message.displayContent ?? message.content)
+            }
+            if speaking {
+                Button(action: toggleSpeech) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "speaker.wave.2.fill").font(.system(size: 14))
+                            .symbolEffect(.variableColor.iterative, options: .repeating)
+                        Text("Reading").font(.system(size: 13.5, weight: .medium))
+                        Image(systemName: "stop.fill").font(.system(size: 10))
+                    }
+                    .foregroundStyle(theme.accentInk)
+                    .padding(.horizontal, 12)
+                    .frame(height: 36)
+                    .background(Capsule().fill(theme.accent.opacity(0.18)))
+                    .overlay(Capsule().strokeBorder(theme.accent.opacity(0.45), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 4)
+                .accessibilityLabel("Stop reading aloud")
+            } else {
+                iconButton("speaker.wave.2", label: "Read aloud", action: toggleSpeech)
+                    .disabled(model.isStreaming)
+            }
+            iconButton("arrow.clockwise", label: "Regenerate") {
+                Task { await model.reloadFromMessage(id: message.id) }
+            }
+            .disabled(model.isStreaming || model.sending)
+            iconButton("info.circle", label: usageOpen ? "Hide usage and cost" : "Usage and cost", on: usageOpen) {
+                withAnimation(.snappy(duration: 0.2)) { ui.toggleUsage(message.id) }
+            }
+            if isSelecting {
+                Button {
+                    model.selectingTextMessageID = nil
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "character.cursor.ibeam").font(.system(size: 13, weight: .semibold))
+                        Text("Done selecting").font(.system(size: 13.5, weight: .semibold))
+                    }
+                    .foregroundStyle(theme.accentInk)
+                    .padding(.horizontal, 12)
+                    .frame(height: 36)
+                    .background(Capsule().fill(theme.accent.opacity(0.18)))
+                    .overlay(Capsule().strokeBorder(theme.accent.opacity(0.45), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 4)
+            }
+            Spacer(minLength: 4)
+            if let branch = model.branchInfo(for: message.id) {
+                BranchPill(info: branch, model: model).padding(.trailing, 6)
+            }
+            trailing.padding(.trailing, 10)
+        }
+        .padding(.horizontal, -10)
+    }
+
+    @ViewBuilder
+    private var trailing: some View {
+        if usageOpen {
+            if let t = UsageFormat.time(message.createdAt) {
+                Text(t).font(.system(size: 12.5)).foregroundStyle(IK.tertiary)
+            }
+        } else if let stop = message.unexpectedStopLabel {
+            Text(stop).font(.system(size: 12.5)).foregroundStyle(IK.orange).lineLimit(1)
+        } else if let u = message.usage, let g = CacheGrade.grade(u, isFirstMetered: isFirstMeteredReply) {
+            HStack(spacing: 6) {
+                Circle().fill(g.color).frame(width: 7, height: 7)
+                Text("\(g.percent)% cached").font(.system(size: 12.5)).foregroundStyle(IK.tertiary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(g.label) cache hit, \(g.percent)% of the prompt served from cache")
+        }
+    }
+
+    private func iconButton(_ symbol: String, label: String, on: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 16))
+                .foregroundStyle(on ? theme.accentInk : IK.secondary)
+                .frame(width: 44, height: 36)
+                .background(RoundedRectangle(cornerRadius: 12).fill(on ? theme.accent.opacity(0.18) : .clear))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(on ? theme.accent.opacity(0.45) : .clear, lineWidth: 1))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    private func toggleSpeech() {
+        Haptics.impact(.light)
+        app.speech.toggle(messageID: message.id, content: message.displayContent ?? message.content)
+    }
+}
+
+/// Usage and cost, opened under the reply (MessageUsage).
+struct UsagePanel: View {
+    let message: PsmithMessage
+    let model: ConversationViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "cpu").font(.system(size: 13))
+                Text(headline).font(.system(size: 13.5)).lineLimit(1)
+            }
+            .foregroundStyle(IK.strong)
+            if let u = message.usage {
+                let tiles = tiles(u)
+                if !tiles.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(tiles, id: \.1) { value, label in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(value).font(.system(size: 15, weight: .semibold)).monospacedDigit().foregroundStyle(IK.text)
+                                Text(label).font(.system(size: 12)).foregroundStyle(IK.secondary)
+                            }
+                            .lineLimit(1)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 9)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 10).fill(IK.wash(0.04)))
+                        }
+                    }
+                    .padding(.top, 10)
+                }
+                VStack(spacing: 0) {
+                    if let v = u.inputCostUsd, v > 0 { kv("Input", UsageFormat.price(v)) }
+                    if let v = u.cacheReadCostUsd, v > 0 { kv("Cache read", UsageFormat.price(v)) }
+                    if let v = u.cacheWriteCostUsd, v > 0 { kv("Cache write", UsageFormat.price(v)) }
+                    if let v = u.outputCostUsd, v > 0 { kv("Output", UsageFormat.price(v)) }
+                    if let v = u.toolCostUsd, v > 0 { kv("Tools", UsageFormat.price(v)) }
+                    if let v = u.totalCostUsd { kv("Total", UsageFormat.price(v), weight: .semibold, color: IK.text) }
+                    if let saved = savedByCache(u), saved >= 0.005 {
+                        kv("Saved by the cache", String(format: "$%.2f", saved), color: IK.green, valueColor: IK.green)
+                    }
+                    if let attached = u.explicitCacheAttached {
+                        kv("Explicit cache", attached ? "Attached" : "Not attached")
+                    }
+                }
+                .padding(.top, 8)
+            } else {
+                Text("No usage was reported for this reply.").font(.system(size: 13.5)).foregroundStyle(IK.secondary)
+                    .padding(.top, 8)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14).fill(IK.wash(0.04)))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(IK.ring(0.07), lineWidth: 1))
+    }
+
+    private var headline: String {
+        let name = model.modelDisplayName(providerID: message.providerID, modelID: message.modelID) ?? "Unknown model"
+        if let pid = message.providerID, let label = model.providerLabels[pid] { return "\(name) · \(label)" }
+        return name
+    }
+
+    private func tiles(_ u: PsmithMessageUsage) -> [(String, String)] {
+        var out: [(String, String)] = []
+        if let n = u.inputTokens { out.append((UsageFormat.tokens(n), "Input")) }
+        if let n = u.cacheReadTokens, n > 0 { out.append((UsageFormat.tokens(n), "Cached")) }
+        if let n = u.outputTokens { out.append((UsageFormat.tokens(n), "Output")) }
+        if let n = u.reasoningTokens, n > 0 { out.append((UsageFormat.tokens(n), "Reasoning")) }
+        return out
+    }
+
+    /// What the cached tokens would have cost at the input price, less
+    /// what reading them did cost.
+    private func savedByCache(_ u: PsmithMessageUsage) -> Double? {
+        guard let read = u.cacheReadTokens, read > 0,
+              let price = model.modelInfo(providerID: message.providerID, modelID: message.modelID)?.pricing?.inputPerMillion
+        else { return nil }
+        return Double(read) * price / 1_000_000 - (u.cacheReadCostUsd ?? 0)
+    }
+
+    private func kv(_ label: String, _ value: String, weight: Font.Weight = .regular,
+                    color: Color = IK.secondary, valueColor: Color = IK.text) -> some View {
+        HStack {
+            Text(label).foregroundStyle(color).fontWeight(weight)
             Spacer(minLength: 8)
-            Image(systemName: "chevron.down")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            Text(value).foregroundStyle(valueColor).fontWeight(weight == .regular ? .medium : weight).monospacedDigit()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .font(.system(size: 13.5))
+        .frame(height: 22)
+    }
+}
+
+extension PsmithMessage {
+    /// A stop that wasn't a clean finish ("Stopped: max tokens"); nil
+    /// for the ordinary ones.
+    var unexpectedStopLabel: String? {
+        guard let raw = finishReason?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+        switch raw.lowercased() {
+        case "stop", "end_turn", "tool_use", "tool_calls": return nil
+        default: return "Stopped: " + raw.replacingOccurrences(of: "_", with: " ").lowercased()
+        }
+    }
+}
+
+// MARK: - Council
+
+/// A named speaker's turn: a rail in its color, its name above the
+/// words (Council).
+struct CouncilTurn: View {
+    let message: PsmithMessage
+    let name: String
+    let slot: Int
+    var showsName = true
+    let onLongPress: () -> Void
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            RoundedRectangle(cornerRadius: 2).fill(theme.personaColor(slot).opacity(0.55)).frame(width: 3)
+            VStack(alignment: .leading, spacing: 4) {
+                if showsName {
+                    HStack(spacing: 6) {
+                        Circle().fill(theme.personaColor(slot)).frame(width: 7, height: 7)
+                        Text(name).font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(theme.personaColor(slot))
+                }
+                MessageBody(message: message)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .onTapGesture { toggleHeaderExpansion() }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel("\(roleLabel), \(previewLine)")
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.primary.opacity(0.04))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .messageActionsOnLongPress { presentActionMenu() }
-        // Swipe-tray temporarily disabled — its DragGesture
-        // intercepted vertical scroll on long messages, making
-        // the chat unusable. The long-press action menu (above)
-        // still exposes the same actions. See MessageActionTray.swift
-        // for the implementation; re-enable once the gesture
-        // disambiguation is fixed.
+        .messageActionsOnLongPress(onLongPress)
+    }
+}
+
+// MARK: - Failed reply
+
+/// A reply that failed: the provider's error, the partial output folded
+/// away, Retry (MessageStates).
+struct FailedReplyCard: View {
+    let message: PsmithMessage
+    let model: ConversationViewModel
+    let onLongPress: () -> Void
+    @State private var showPartial = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 12)).foregroundStyle(IK.orange)
+                RoleCaps(text: "FAILED", color: IK.orange)
+                Spacer(minLength: 0)
+                if let name = model.modelDisplayName(providerID: message.providerID, modelID: message.modelID) {
+                    Text(name).font(.system(size: 12.5)).foregroundStyle(IK.tertiary).lineLimit(1)
+                }
+            }
+            if let err = message.errorText, !err.isEmpty {
+                Text(err).cssLines(size: 15, lineHeight: 21).foregroundStyle(IK.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 8)
+            }
+            if !(message.displayContent ?? message.content).isEmpty {
+                Button { withAnimation(.snappy(duration: 0.2)) { showPartial.toggle() } } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: showPartial ? "chevron.down" : "chevron.right").font(.system(size: 11, weight: .semibold))
+                        Text("Partial output before the failure").font(.system(size: 13.5))
+                    }
+                    .foregroundStyle(IK.secondary)
+                    .frame(height: 32)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+                if showPartial {
+                    MessageBody(message: message, size: 15).foregroundStyle(IK.secondary)
+                }
+            }
+            HStack {
+                Spacer(minLength: 0)
+                Button {
+                    Task { await model.reloadFromMessage(id: message.id) }
+                } label: {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                }
+                .ikButton(.primary)
+                .disabled(model.isStreaming || model.sending)
+            }
+            .padding(.top, 4)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(RoundedRectangle(cornerRadius: 14).fill(IK.orange.opacity(0.10)))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(IK.orange.opacity(0.55), lineWidth: 1.5))
+        .contentShape(Rectangle())
+        .messageActionsOnLongPress(onLongPress)
+    }
+}
+
+// MARK: - System and context messages
+
+/// System and context messages fold to a one-line strip; tap to read
+/// them in full (SystemStrip).
+struct HeaderMessageStrip: View {
+    let message: PsmithMessage
+    let model: ConversationViewModel
+    let onLongPress: () -> Void
+
+    private var expanded: Bool { model.expandedHeaderMessageIDs.contains(message.id) }
+    private var label: String { message.role == .system ? "SYSTEM" : "CONTEXT" }
+    private var symbol: String { message.role == .system ? "gearshape" : "tray.full" }
+
+    var body: some View {
+        Group {
+            if expanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Image(systemName: symbol).font(.system(size: 13))
+                        RoleCaps(text: label)
+                        Image(systemName: "chevron.up").font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundStyle(IK.secondary)
+                    .frame(height: 28)
+                    .padding(.top, -4)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: toggle)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityLabel("Fold the \(label.lowercased()) message")
+                    MessageBody(message: message, size: 15)
+                        .foregroundStyle(IK.strong)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 14).fill(IK.wash(0.04)))
+                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(IK.ring(0.06), lineWidth: 1))
+            } else {
+                HStack(spacing: 10) {
+                    Image(systemName: symbol).font(.system(size: 13)).foregroundStyle(IK.secondary)
+                    RoleCaps(text: label)
+                    Text(previewLine).font(.system(size: 13)).foregroundStyle(IK.tertiary).lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold)).foregroundStyle(IK.secondary)
+                }
+                .padding(.horizontal, 12)
+                .frame(minHeight: 44)
+                .background(RoundedRectangle(cornerRadius: 12).fill(IK.wash(0.04)))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(IK.ring(0.06), lineWidth: 1))
+                .contentShape(Rectangle())
+                .onTapGesture(perform: toggle)
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityLabel("Show the \(label.lowercased()) message, \(previewLine)")
+            }
+        }
+        .messageActionsOnLongPress(onLongPress)
     }
 
-    /// Presents the hoisted MessageActionMenu overlay for this row.
-    /// The haptic stands in for the system menu's lift bump.
-    private func presentActionMenu() {
-        // A new conversation's rows are a preview of what creating it
-        // will seed; there's nothing on the server to edit or delete.
-        guard !model.isDraft else { return }
-        Haptics.impact(.medium)
-        withAnimation(.snappy(duration: 0.22)) {
-            model.actionMenuMessage = message
+    private func toggle() {
+        withAnimation(.snappy(duration: 0.2)) {
+            if expanded { model.expandedHeaderMessageIDs.remove(message.id) } else { model.expandedHeaderMessageIDs.insert(message.id) }
         }
     }
 
-    /// First non-empty line of the message body, used as the
-    /// collapsed-header preview. Strips markdown leaders (`# `, `- `,
-    /// `* `, `> `) so a system message that opens with a heading
-    /// still reads like a sentence in the strip.
+    /// The first line, without a markdown leader, so a message that
+    /// opens with a heading reads like a sentence.
     private var previewLine: String {
         let raw = message.displayContent ?? message.content
         guard let first = raw.split(whereSeparator: \.isNewline).first else { return raw }
@@ -324,817 +900,168 @@ struct MessageRow: View {
         }
         return s.isEmpty ? "(empty)" : s
     }
-
-    // MARK: - Bubble body
-
-    /// Inner content shared by the bubble (user/errored/editing) and
-    /// the bare assistant rendering. Header + thinking + tool calls +
-    /// body + footer, no chrome.
-    @ViewBuilder
-    private var bubbleInner: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if headerHasContent {
-                headerRow
-            }
-
-            // Thinking disclosure for assistant turns that reasoned.
-            if message.role == .assistant, hasThinking {
-                ThinkingDisclosure(
-                    phase: .settled(durationSec: thinkingDurationSeconds),
-                    renderedText: message.thinkingRenderedText ?? "",
-                    isExpanded: thinkingExpandedBinding
-                )
-            }
-
-            // Tool calls — settled disclosures, one per call.
-            if message.role == .assistant, !message.toolCalls.isEmpty {
-                ForEach(Array(message.toolCalls.enumerated()), id: \.offset) { idx, call in
-                    ToolCallSettledDisclosure(
-                        call: call,
-                        isExpanded: toolCallExpandedBinding(index: idx)
-                    )
-                }
-            }
-
-            // Image attachments — show above the text content (matches
-            // the wire order drivers emit: image-block-then-text per
-            // Anthropic's multimodal grounding guidance). Non-image
-            // kinds (PDF / audio / video) render as compact chips
-            // below the image strip — same horizontal layout so a
-            // message with mixed kinds reads coherently.
-            if !imageAttachments.isEmpty {
-                attachmentStrip
-            }
-            if !nonImageAttachments.isEmpty {
-                nonImageAttachmentStrip
-            }
-
-            // Body — markdown / error text. Edit happens in a sheet
-            // (see ConversationView's hoisted `.sheet(item:)`), not
-            // in-place. Prefer `displayContent` (post-DisplayTransformer
-            // plugin pipeline output, e.g. with basic_grounding's
-            // `<grounding>` block stripped) and fall back to raw
-            // `content` for messages that haven't been routed through
-            // the transformer.
-            let bodyText = message.displayContent ?? message.content
-            if isErrored, let errText = message.errorText, !errText.isEmpty {
-                Text(errText)
-                    .font(.callout)
-                    .foregroundStyle(.red)
-                    .textSelection(.enabled)
-                if !bodyText.isEmpty {
-                    BoundedMarkdownText(bodyText, cacheKey: markdownCacheKey)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                if message.role == .assistant {
-                    HStack {
-                        Spacer()
-                        Button {
-                            Task { await model.reloadFromMessage(id: message.id) }
-                        } label: {
-                            Label("Retry", systemImage: "arrow.clockwise")
-                                .font(.callout)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                        .disabled(model.isStreaming || model.sending)
-                    }
-                    .padding(.top, 2)
-                }
-            } else if !message.uiFragments.isEmpty {
-                // Server's ContentRenderer pipeline produced a
-                // structured rendering — surface that instead of
-                // the markdown fallback. Same FragmentView the Mac
-                // bubble uses; both platforms share the renderer
-                // set in PsmithUI.
-                FragmentView(
-                    fragments: message.uiFragments,
-                    onAction: handleFragmentAction
-                )
-            } else if !bodyText.isEmpty {
-                if message.isWelcome && !model.welcomePlayed.contains(message.id) {
-                    // First render of a profile-welcome message in
-                    // this app session — animate the reveal. Mark
-                    // played when complete so scrolling/navigation
-                    // back doesn't replay.
-                    WelcomeReveal(text: bodyText) {
-                        model.welcomePlayed.insert(message.id)
-                    }
-                } else {
-                    // Bounded: the body renders whole as a stack of
-                    // capped MarkdownUI documents, with a preview-plus-
-                    // viewer valve only a turn near a large
-                    // max_output_tokens reaches (see MarkdownBudget).
-                    BoundedMarkdownText(bodyText, cacheKey: markdownCacheKey)
-                }
-            }
-
-            // Footer — cache-grade dot + token usage summary +
-            // timestamp. Always visible (matches Mac); tap opens the
-            // detail sheet for the full per-token breakdown. User
-            // turns get a slimmer footer (just timestamp) since they
-            // carry no usage data.
-            footer
-        }
-    }
-
-    @ViewBuilder
-    private var bubble: some View {
-        bubbleInner
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(10)
-            .background { bubbleBackground }
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(
-                        isErrored
-                            ? AnyShapeStyle(Color.orange.opacity(0.55))
-                            : (isEditing
-                               ? AnyShapeStyle(theme.accent.opacity(0.6))
-                               : AnyShapeStyle(Color.primary.opacity(0.06))),
-                        lineWidth: isErrored || isEditing ? 1.5 : 1
-                    )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .messageActionsOnLongPress { presentActionMenu() }
-            // Swipe-tray temporarily disabled — see other call site
-            // for rationale; the long-press action menu still
-            // exposes the same actions.
-    }
-
-    /// Image-kind attachments only — rendered as inline thumbnails.
-    private var imageAttachments: [PsmithMessageAttachment] {
-        message.attachments.filter { $0.kind == "image" }
-    }
-
-    /// Everything that isn't an image — documents, audio, video.
-    /// Rendered as icon-and-filename chips since there's nothing
-    /// thumbnailable.
-    private var nonImageAttachments: [PsmithMessageAttachment] {
-        message.attachments.filter { $0.kind != "image" }
-    }
-
-    /// Horizontal scroll of attachment thumbnails. Tap to expand
-    /// into a lightbox view (Phase-1 polish; deferred until users
-    /// ask for it — for now the thumbnail itself is the affordance).
-    @ViewBuilder
-    private var attachmentStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(imageAttachments) { att in
-                    MessageAttachmentImage(attachment: att)
-                }
-            }
-        }
-        .padding(.bottom, 2)
-    }
-
-    /// Horizontal scroll of icon chips for non-image attachments
-    /// (PDF / audio / video). No tap action wired yet — for now the
-    /// chip is informational so the user knows what was sent /
-    /// what the model saw.
-    @ViewBuilder
-    private var nonImageAttachmentStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(nonImageAttachments) { att in
-                    MessageAttachmentChip(attachment: att)
-                }
-            }
-        }
-        .padding(.bottom, 2)
-    }
-
-    /// Bare assistant rendering — no bubble chrome, full-width markdown.
-    /// The role-aligned container handles outer alignment and the fork
-    /// pill; this view just supplies the content with light vertical
-    /// padding so successive turns don't crowd each other.
-    @ViewBuilder
-    private var assistantContent: some View {
-        bubbleInner
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 4)
-            .contentShape(Rectangle())
-            .messageActionsOnLongPress { presentActionMenu() }
-            // Swipe-tray temporarily disabled — see other call site
-            // for rationale; the long-press action menu still
-            // exposes the same actions.
-    }
-
-    @ViewBuilder
-    private var bubbleBackground: some View {
-        if isErrored {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.orange.opacity(0.10))
-        } else if isEditing {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(theme.accent.opacity(0.10))
-        } else {
-            switch message.role {
-            case .user:
-                ThemedUserBubbleBackground(cornerRadius: 10)
-            case .assistant:
-                RoundedRectangle(cornerRadius: 10).fill(.regularMaterial)
-            default:
-                RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.04))
-            }
-        }
-    }
-
-    // MARK: - Header row (role label + model chip + tap-to-show-usage)
-
-    /// Who's speaking is already in the layout (your tinted bubble on the
-    /// right, replies full width), so the role label is a detail. Errors,
-    /// system/context collapse controls and council speakers keep theirs.
-    private var showsRoleLabel: Bool {
-        prefs.showTurnDetails || isErrored || isCollapsibleHeaderRole
-    }
-
-    private var showsModelLabel: Bool {
-        modelDisplayLabel != nil && (prefs.showTurnDetails || modelChanged)
-    }
-
-    private var hasPersonaLabel: Bool {
-        message.personaSlot != nil && message.persona != nil && !isErrored
-    }
-
-    private var headerHasContent: Bool {
-        showsRoleLabel || hasPersonaLabel || showsModelLabel || showsSpeakerAffordance
-    }
-
-    private var headerRow: some View {
-        HStack(spacing: 6) {
-            if isErrored {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                    .imageScale(.small)
-            }
-            // For collapsible-header roles (system / context), the role
-            // label doubles as a collapse affordance — tap to fold the
-            // bubble back into the strip header.
-            if isCollapsibleHeaderRole {
-                Button(action: toggleHeaderExpansion) {
-                    HStack(spacing: 4) {
-                        Text(roleLabel)
-                            .font(.caption2)
-                            .foregroundStyle(isErrored ? .orange : .secondary)
-                            .fontWeight(isErrored ? .semibold : .regular)
-                        Image(systemName: "chevron.up")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Collapse \(roleLabel.lowercased())")
-            } else if let slot = message.personaSlot, let name = message.persona, !isErrored {
-                // Collapsed to a bare dot when the same speaker continues, so
-                // the column of rails still reads as one voice.
-                // A named speaker replaces the generic role label rather than
-                // sitting beside it: "ASSISTANT · Skeptic" is noise when every
-                // message in the discussion is an assistant.
-                PersonaLabel(
-                    name: name,
-                    index: slot,
-                    showsName: message.showsPersonaLabel(after: previousMessage)
-                )
-            } else if showsRoleLabel {
-                Text(roleLabel)
-                    .font(.caption2)
-                    .foregroundStyle(isErrored ? .orange : .secondary)
-                    .fontWeight(isErrored ? .semibold : .regular)
-            }
-            if isErrored {
-                Text("FAILED")
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.orange)
-            }
-            Spacer(minLength: 6)
-            if showsModelLabel, let label = modelDisplayLabel {
-                Text(label)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            if showsSpeakerAffordance {
-                speakerButton
-            }
-        }
-    }
-
-    // MARK: - Read aloud
-
-    /// Inline speaker on the newest assistant turn (the one the user
-    /// most likely wants read back), and on any message currently
-    /// speaking/loading so there's always a visible stop control.
-    /// Older turns keep the action in the long-press menu.
-    private var showsSpeakerAffordance: Bool {
-        guard message.role == .assistant, !isErrored, !model.isStreaming else { return false }
-        return message.id == model.latestAssistantMessageID
-            || app.speech.isPlaying(messageID: message.id)
-            || app.speech.isLoading(messageID: message.id)
-    }
-
-    @ViewBuilder
-    private var speakerButton: some View {
-        Button {
-            toggleSpeech()
-        } label: {
-            if app.speech.isLoading(messageID: message.id) {
-                ProgressView()
-                    .controlSize(.mini)
-            } else if app.speech.isPlaying(messageID: message.id) {
-                Image(systemName: "speaker.wave.2.fill")
-                    .font(.caption)
-                    .foregroundStyle(theme.accent)
-                    .symbolEffect(.variableColor.iterative, options: .repeating)
-            } else {
-                Image(systemName: "speaker.wave.2")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(app.speech.isPlaying(messageID: message.id) ? "Stop speaking" : "Read aloud")
-    }
-
-    private func toggleSpeech() {
-        Haptics.impact(.light)
-        let text = message.displayContent ?? message.content
-        app.speech.toggle(messageID: message.id, content: text)
-    }
-
-    /// In-bubble footer — assistant turns get cache dot + token
-    /// summary + timestamp (whole footer is the tap target for the
-    /// usage sheet); user/system/context get just the timestamp.
-    @ViewBuilder
-    private var footer: some View {
-        if isEditing {
-            EmptyView()
-        } else if !prefs.showTurnDetails {
-            compactFooter
-        } else if message.role == .assistant, let usage = message.usage {
-            VStack(alignment: .leading, spacing: 0) {
-                Button {
-                    showUsageSheet = true
-                } label: {
-                    HStack(spacing: 5) {
-                        if let grade = cacheEfficiencyGrade(usage) {
-                            Circle()
-                                .fill(grade.color)
-                                .frame(width: 7, height: 7)
-                                .accessibilityLabel(grade.tooltip)
-                        }
-                        Text(usageSummary(usage))
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer(minLength: 4)
-                        if let stamp = formattedTimestamp {
-                            Text(stamp)
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Show usage details")
-
-                if let label = unexpectedFinishReasonLabel {
-                    Text(label)
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                        .lineLimit(1)
-                }
-            }
-            .padding(.top, 2)
-        } else if let stamp = formattedTimestamp {
-            HStack {
-                Spacer(minLength: 0)
-                Text(stamp)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.top, 2)
-        }
-    }
-
-    /// The default footer: only what's worth noticing. A cache dot when
-    /// the prompt was big enough for caching to matter (tap for the
-    /// full usage), and an unexpected stop reason. Nothing otherwise,
-    /// so an ordinary reply ends where its text ends.
-    @ViewBuilder
-    private var compactFooter: some View {
-        let grade = message.role == .assistant ? message.usage.flatMap(cacheEfficiencyGrade) : nil
-        let stop = message.role == .assistant ? unexpectedFinishReasonLabel : nil
-        if grade != nil || stop != nil {
-            HStack(spacing: 6) {
-                if let grade {
-                    Button {
-                        showUsageSheet = true
-                    } label: {
-                        Circle()
-                            .fill(grade.color)
-                            .frame(width: 7, height: 7)
-                            .padding(6)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(-6)
-                    .accessibilityLabel(grade.tooltip)
-                    .accessibilityHint("Shows usage details")
-                }
-                if let stop {
-                    Text(stop)
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.top, 2)
-        }
-    }
-
-    /// Returns a human-friendly label for the message's finish_reason
-    /// when it's NOT one of the "normal" terminations — clean stops
-    /// (`stop`, `end_turn`, `STOP`, empty/nil) return nil so the line
-    /// stays invisible on the overwhelming majority of turns.
-    /// Examples surfaced: "Stopped: max tokens", "Stopped: length",
-    /// "Stopped: content_filter", "Stopped: SAFETY".
-    private var unexpectedFinishReasonLabel: String? {
-        guard let raw = message.finishReason?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty else { return nil }
-        let normalized = raw.lowercased()
-        switch normalized {
-        case "stop", "end_turn", "tool_use", "tool_calls":
-            return nil
-        default:
-            let pretty = raw
-                .replacingOccurrences(of: "_", with: " ")
-                .lowercased()
-            return "Stopped: \(pretty)"
-        }
-    }
-
-
-    /// Routes a `FragmentAction` from a renderer into the right
-    /// per-conversation handler. `.compose` drops into the
-    /// composer for the user to edit + send; `.external` opens
-    /// a URL via the system browser. Mirrors the Mac handler in
-    /// ConversationView so both platforms have parity behaviour.
-    private func handleFragmentAction(_ action: FragmentAction) {
-        switch action {
-        case .compose(let text):
-            if model.draft.isEmpty {
-                model.draft = text
-            } else {
-                model.draft += "\n" + text
-            }
-        case .send(let text):
-            // If this row isn't the current tip, auto-submitting would
-            // append onto a stale branch. Confirm + fork off this
-            // message instead — the new user reply becomes a sibling
-            // under this assistant turn. On tip, behave as before:
-            // replace draft and submit so one tap resolves the choice.
-            if let latestID = model.latestAssistantMessageID, latestID != message.id {
-                pendingForkText = text
-            } else {
-                model.draft = text
-                Task { await model.send() }
-            }
-        case .external(let url):
-            UIApplication.shared.open(url)
-        case .plugin:
-            // A `plugin:` action is only meaningful inside the panel that
-            // rendered it, where the owning plugin is known. A fragment in the
-            // transcript carries no such owner, so there is nothing to
-            // dispatch to and ignoring it is correct rather than lossy.
-            break
-        }
-    }
-
-    // MARK: - Helpers
-
-    private var roleLabel: String {
-        switch message.role {
-        case .user: return "USER"
-        case .assistant: return "ASSISTANT"
-        case .system: return "SYSTEM"
-        case .context: return "CONTEXT"
-        case .compressionSummary: return "SUMMARY"
-        case .unknown: return "?"
-        @unknown default: return "?"
-        }
-    }
-
-    private var modelDisplayLabel: String? {
-        guard let mid = message.modelID, !mid.isEmpty else { return nil }
-        let pid = message.providerID
-        let providerLabel = pid.flatMap { model.providerLabels[$0] }
-        let modelDisplay = model.availableModels
-            .first(where: { $0.modelID == mid && (pid == nil || $0.providerID == pid) })?
-            .displayName
-        switch (providerLabel, modelDisplay) {
-        case let (p?, m?): return "\(p) \(m)"
-        case let (p?, nil): return "\(p) \(mid)"
-        case let (nil, m?): return m
-        case (nil, nil): return mid
-        }
-    }
-
-    /// Stable cache key for the message body's parsed MarkdownContent.
-    /// Content-hash keyed (NOT edited-at keyed): the rendered string
-    /// itself decides identity, so an edit invalidates automatically
-    /// AND the edit sheet can pre-warm the new content's parse off the
-    /// main thread BEFORE the server assigns the edit timestamp — with
-    /// the timestamp key, the post-edit render always missed the cache
-    /// and paid a synchronous main-thread parse (the "editing lags"
-    /// report). Settled messages share this key with every
-    /// realization, so scroll-back skips parsing entirely.
-    private var markdownCacheKey: String {
-        Self.markdownKey(id: message.id, body: message.displayContent ?? message.content)
-    }
-
-    /// Shared key builder — the prewarm sites (ConversationView's
-    /// count-change hook, EditMessageSheet's save) must produce the
-    /// exact key this row renders with.
-    static func markdownKey(id: String, body: String) -> String {
-        "\(id):\(body.count):\(body.hashValue)"
-    }
-
-    private var hasThinking: Bool {
-        if let txt = message.thinkingRenderedText, !txt.isEmpty { return true }
-        if let ms = message.thinkingDurationMs, ms > 0 { return true }
-        return false
-    }
-
-    private var thinkingDurationSeconds: Double? {
-        guard let ms = message.thinkingDurationMs else { return nil }
-        return Double(ms) / 1000.0
-    }
-
-    private var thinkingExpandedBinding: Binding<Bool> {
-        Binding(
-            get: { model.expandedThinkingMessageIDs.contains(message.id) },
-            set: { newValue in
-                if newValue {
-                    model.expandedThinkingMessageIDs.insert(message.id)
-                } else {
-                    model.expandedThinkingMessageIDs.remove(message.id)
-                }
-            }
-        )
-    }
-
-    private func toolCallExpandedBinding(index: Int) -> Binding<Bool> {
-        let key = "\(message.id):\(index)"
-        return Binding(
-            get: { model.expandedToolCallKeys.contains(key) },
-            set: { newValue in
-                if newValue {
-                    model.expandedToolCallKeys.insert(key)
-                } else {
-                    model.expandedToolCallKeys.remove(key)
-                }
-            }
-        )
-    }
-
-    // MARK: - Cache grade
-
-    /// Cache-efficiency dot rendered next to the usage summary. Same
-    /// heuristic the Mac uses (see Mac MessageRow.cacheEfficiencyGrade):
-    /// providers split on whether `inputTokens` includes cached tokens
-    /// or excludes them; if cache_read > input the source uses the
-    /// "separate" shape, otherwise "includes".
-    private func cacheEfficiencyGrade(_ u: PsmithMessageUsage) -> CacheGrade? {
-        guard let input = u.inputTokens, input > 0 else { return nil }
-        // No cache fields at all: the provider doesn't report caching.
-        guard u.cacheReadTokens != nil || u.cacheWriteTokens != nil else { return nil }
-        let cacheRead = u.cacheReadTokens ?? 0
-        if cacheRead == 0 && isFirstMeteredReply { return nil }
-        let totalPrompt: Int32 = (cacheRead > input) ? (cacheRead + input) : input
-        // Providers don't cache prompts under roughly 1-4k tokens, so a
-        // grade there is noise: a red dot on a 900-token exchange teaches
-        // you to ignore the red dot on a 90k one.
-        guard totalPrompt >= Self.cacheGradeFloorTokens else { return nil }
-        let ratio = Double(cacheRead) / Double(totalPrompt)
-        let pct = Int((ratio * 100).rounded())
-        let color: Color
-        let label: String
-        switch ratio {
-        case 0.8...:
-            color = .green;  label = "Excellent"
-        case 0.3..<0.8:
-            color = .yellow; label = "Partial"
-        default:
-            color = .red;    label = "Poor"
-        }
-        return CacheGrade(color: color, tooltip: "\(label) cache hit — \(pct)% of prompt served from cache")
-    }
-
-    /// Prompt size below which the cache dot isn't shown. Above every
-    /// major provider's minimum cacheable prefix.
-    static let cacheGradeFloorTokens: Int32 = 4_096
-
-    // MARK: - Usage summary
-
-    /// One-line summary mirroring Mac's format:
-    /// "in: 1,234 (920 cached)  out: 567  cost: $0.0023"
-    private func usageSummary(_ u: PsmithMessageUsage) -> String {
-        var parts: [String] = []
-        if let n = u.inputTokens {
-            var inputPart = "in: \(n.formatted())"
-            if let cr = u.cacheReadTokens, cr > 0 {
-                inputPart += " (\(cr.formatted()) cached)"
-            }
-            parts.append(inputPart)
-        }
-        if let cw = u.cacheWriteTokens, cw > 0 {
-            parts.append("cw: \(cw.formatted())")
-        }
-        if let n = u.outputTokens { parts.append("out: \(n.formatted())") }
-        if let c = u.totalCostUsd {
-            parts.append("$\(String(format: "%.4f", c))")
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    // MARK: - Timestamp
-
-    /// Locale-aware time / day label. Today → "3:47 PM"; yesterday →
-    /// "Yesterday 3:47 PM"; older → "Apr 2 · 3:47 PM"; unknown → nil.
-    private var formattedTimestamp: String? {
-        let stamp = message.createdAt
-        guard stamp.timeIntervalSince1970 > 0 else { return nil }
-        let calendar = Calendar.current
-        let now = Date()
-        let timeOnly = stamp.formatted(date: .omitted, time: .shortened)
-        if calendar.isDateInToday(stamp) {
-            return timeOnly
-        }
-        if calendar.isDateInYesterday(stamp) {
-            return "Yesterday \(timeOnly)"
-        }
-        return "\(stamp.formatted(date: .abbreviated, time: .omitted)) · \(timeOnly)"
-    }
 }
 
-// MARK: - Cache grade type
+// MARK: - Edit in place
 
-private struct CacheGrade {
-    let color: Color
-    let tooltip: String
-}
-
-
-/// Modal editor for a single message. Replaces the inline-bubble
-/// editor that used to swap into the row body. Hosting the input
-/// in a sheet means:
-///   - The chat scroll behind it stays put — no reflow when the
-///     keyboard opens.
-///   - The TextEditor scrolls naturally when content runs long.
-///   - Cancel / Save are never hidden behind the keyboard.
-///
-/// Presented from `ConversationView` via `.sheet(item: $model.editingMessage)`
-/// so a single sheet owns the lifecycle — the per-row computed-binding
-/// approach raced with @Observable updates and produced an open/close
-/// loop on dismiss. Drafts live in @State here (initialized from the
-/// message) and `.sheet(item:)` instantiates a fresh struct each time
-/// the message changes.
-struct EditMessageSheet: View {
+/// The message becomes its own editor (MessageStates). Your messages and
+/// replies can swap role; Save keeps the branch, Save and Resend forks
+/// a new one from the edit.
+struct MessageEditCard: View {
     let message: PsmithMessage
     let model: ConversationViewModel
-    @State private var editDraft: String
-    @State private var editRoleDraft: PsmithMessageRole
-    @Environment(\.dismiss) private var dismiss
-    @FocusState private var editorFocused: Bool
+    @State private var draft: String
+    @State private var role: PsmithMessageRole
+    @FocusState private var focused: Bool
+    @Environment(\.theme) private var theme
 
     init(message: PsmithMessage, model: ConversationViewModel) {
         self.message = message
         self.model = model
-        _editDraft = State(initialValue: message.content)
-        _editRoleDraft = State(initialValue: message.role)
+        _draft = State(initialValue: message.content)
+        _role = State(initialValue: message.role)
     }
+
+    private var swapsRole: Bool { message.role == .user || message.role == .assistant }
+    private var canResend: Bool { message.role == .user || message.role == .assistant }
+    private var empty: Bool { draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                if showsRolePicker {
-                    rolePicker
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                }
-                TextEditor(text: $editDraft)
-                    .focused($editorFocused)
-                    .scrollContentBackground(.hidden)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+        VStack(alignment: .leading, spacing: 10) {
+            if swapsRole {
+                RolePicker(role: $role)
             }
-            .navigationTitle(navTitle)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") {
-                        model.editingMessage = nil
-                    }
-                }
-                if message.role == .user {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Menu {
-                            Button("Save") { saveInPlace() }
-                            Button("Save & fork") { saveAndFork() }
-                        } label: {
-                            Text("Save").bold()
-                        }
-                        .disabled(trimmedEmpty)
-                    }
-                } else {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            saveInPlace()
-                        } label: {
-                            Text("Save").bold()
-                        }
-                        .disabled(trimmedEmpty)
-                    }
+            TextField("Message", text: $draft, axis: .vertical)
+                .font(.system(size: 16))
+                .lineSpacing(22 - 19.09)
+                .lineLimit(2...12)
+                .focused($focused)
+                .foregroundStyle(IK.text)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 10).fill(IK.well))
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                Button("Cancel") { model.editingMessage = nil }.ikButton(.text)
+                Button("Save") { save() }.ikButton().disabled(empty)
+                if canResend {
+                    Button("Save and Resend") { saveAndResend() }.ikButton(.primary).disabled(empty || model.isStreaming || model.sending)
                 }
             }
-            .onAppear {
-                // `.sheet(item:)` instantiates this view fresh each
-                // time the bound message changes, so editDraft is
-                // already correct from init — just grab focus.
-                editorFocused = true
-            }
         }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 14).fill(theme.accent.opacity(0.10)))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.accent.opacity(0.6), lineWidth: 1.5))
     }
 
-    private var navTitle: String {
-        switch message.role {
-        case .user: return "Edit user message"
-        case .assistant: return "Edit assistant message"
-        case .system: return "Edit system message"
-        case .context: return "Edit context message"
-        default: return "Edit message"
-        }
+    private var trimmed: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    func save() {
+        let text = trimmed
+        let newRole: PsmithMessageRole? = swapsRole && role != message.role ? role : nil
+        // The content-hash key makes the post-edit render a cache hit.
+        MarkdownCache.shared.prewarm([(key: MessageRow.markdownKey(id: message.id, body: text), source: text)])
+        let id = message.id
+        model.editingMessage = nil
+        Task { await model.editMessage(id: id, content: text, role: newRole) }
     }
 
-    /// Role flipping is only meaningful between user and assistant;
-    /// system / context / summary roles aren't interchangeable.
-    private var showsRolePicker: Bool {
-        message.role == .user || message.role == .assistant
-    }
-
-    private var rolePicker: some View {
-        HStack(spacing: 8) {
-            Text("Role")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Picker("Role", selection: $editRoleDraft) {
-                Text("User").tag(PsmithMessageRole.user)
-                Text("Assistant").tag(PsmithMessageRole.assistant)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-        }
-    }
-
-    private var trimmedEmpty: Bool {
-        editDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private func saveInPlace() {
-        let trimmed = editDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let roleChanged = showsRolePicker && editRoleDraft != message.role
-        // Pre-warm the edited body's parse off the main thread while
-        // the RPC is in flight — the content-hash cache key makes the
-        // post-edit render a guaranteed hit for the common case where
-        // no display transform rewrites the content, instead of a
-        // synchronous main-thread parse of the whole edited message.
-        MarkdownCache.shared.prewarm(
-            [(key: MessageRow.markdownKey(id: message.id, body: trimmed), source: trimmed)]
-        )
+    func saveAndResend() {
+        let text = trimmed
+        let msg = message
+        model.editingMessage = nil
         Task {
-            await model.editMessage(
-                id: message.id,
-                content: trimmed,
-                role: roleChanged ? editRoleDraft : nil
-            )
-            model.editingMessage = nil
+            if msg.role == .user {
+                await model.sendForking(content: text, parentMessageID: msg.parentID)
+            } else {
+                await model.editMessage(id: msg.id, content: text, role: nil)
+                await model.regenerateAssistant(parentMessageID: msg.id)
+            }
         }
     }
+}
 
-    private func saveAndFork() {
-        let trimmed = editDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parentID = message.parentID
-        Task {
-            await model.sendForking(content: trimmed, parentMessageID: parentID)
-            model.editingMessage = nil
+/// You / Assistant, the segmented role switch on an edited message.
+struct RolePicker: View {
+    @Binding var role: PsmithMessageRole
+
+    var body: some View {
+        HStack(spacing: 0) {
+            segment("You", .user)
+            segment("Assistant", .assistant)
         }
+        .padding(2)
+        .frame(width: 200, height: 30)
+        .background(RoundedRectangle(cornerRadius: 9).fill(IK.wash(0.07)))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Role")
+    }
+
+    private func segment(_ title: String, _ value: PsmithMessageRole) -> some View {
+        let on = role == value
+        return Button { role = value } label: {
+            Text(title)
+                .font(.system(size: 13, weight: on ? .semibold : .regular))
+                .foregroundStyle(on ? IK.text : IK.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RoundedRectangle(cornerRadius: 7).fill(on ? IK.wash(0.16) : .clear))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}
+
+// MARK: - Selection
+
+/// Select Text, in place: the reply's text as a read-only text view
+/// with the system's own handles and edit menu (SelectText).
+struct SelectableMessageText: UIViewRepresentable {
+    let text: String
+
+    func makeUIView(context: Context) -> UITextView {
+        let v = UITextView()
+        v.isEditable = false
+        v.isSelectable = true
+        v.isScrollEnabled = false
+        v.backgroundColor = .clear
+        v.textContainerInset = .zero
+        v.textContainer.lineFragmentPadding = 0
+        v.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return v
+    }
+
+    func updateUIView(_ v: UITextView, context: Context) {
+        // Paragraph spacing makes the gap; a blank line would double it.
+        var flat = text
+        while flat.contains("\n\n\n") { flat = flat.replacingOccurrences(of: "\n\n\n", with: "\n\n") }
+        flat = flat.replacingOccurrences(of: "\n\n", with: "\n")
+        let attributed = (try? AttributedString(
+            markdown: flat,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(text)
+        let ns = NSMutableAttributedString(attributed)
+        let style = NSMutableParagraphStyle()
+        style.minimumLineHeight = 23
+        style.maximumLineHeight = 23
+        style.paragraphSpacing = 14
+        let full = NSRange(location: 0, length: ns.length)
+        ns.addAttribute(.paragraphStyle, value: style, range: full)
+        ns.addAttribute(.foregroundColor, value: UIColor(IK.text), range: full)
+        ns.enumerateAttribute(.font, in: full) { value, range, _ in
+            let base = UIFont.systemFont(ofSize: 16)
+            if let f = value as? UIFont, let d = base.fontDescriptor.withSymbolicTraits(f.fontDescriptor.symbolicTraits) {
+                ns.addAttribute(.font, value: UIFont(descriptor: d, size: 16), range: range)
+            } else {
+                ns.addAttribute(.font, value: base, range: range)
+            }
+        }
+        if v.attributedText != ns { v.attributedText = ns }
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        let w = proposal.width ?? 320
+        let s = uiView.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude))
+        return CGSize(width: w, height: s.height)
     }
 }

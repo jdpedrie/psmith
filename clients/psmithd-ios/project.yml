@@ -12,6 +12,10 @@ options:
 packages:
   PsmithSwift:
     path: ../PsmithSwift
+  # Snapshot tests only (PsmithiOSSnapshotTests); the app never links it.
+  SnapshotTesting:
+    url: https://github.com/pointfreeco/swift-snapshot-testing
+    from: "1.17.0"
 
 # Single iOS app target. Xcode-managed signing on the free Personal
 # Team — provisioning profiles auto-rotate on rebuild (see the 7-day
@@ -103,3 +107,41 @@ targets:
         product: PsmithKit
       - package: PsmithSwift
         product: PsmithUI
+
+  # Renders the real views offscreen at several widths, in light and dark,
+  # against the redesign boards (docs/clients/ios-redesign/plan.md).
+  PsmithiOSSnapshotTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - PsmithiOSSnapshotTests
+      # Fixtures and stubs shared with the Mac snapshot suite.
+      - path: ../psmithd-mac/Tests/SnapshotHarness/Fixtures.swift
+      - path: ../psmithd-mac/Tests/SnapshotHarness/Stubs.swift
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+    dependencies:
+      - target: PsmithiOS
+      - package: SnapshotTesting
+        product: SnapshotTesting
+      - package: PsmithSwift
+        product: PsmithKit
+      - package: PsmithSwift
+        product: PsmithUI
+
+schemes:
+  PsmithiOS:
+    build:
+      targets:
+        PsmithiOS: all
+        PsmithiOSSnapshotTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - PsmithiOSSnapshotTests

@@ -205,23 +205,52 @@ public final class AccountManager {
         activeAccountID = store.loadActiveID()
     }
 
-    /// Sign out of the active account WITHOUT removing it from
-    /// the list. The account stays in the switcher with its
-    /// host/username intact so the user can sign back in with one
-    /// click. Equivalent to clearing the token + clearing the
-    /// active pointer if this was the last account.
+    /// Sign out of the active account WITHOUT removing it from the
+    /// list. See `signOut(id:)`.
     public func signOutActive() async {
-        guard let id = activeAccountID,
-              let model = appModelByAccount[id],
+        guard let id = activeAccountID else { return }
+        await signOut(id: id)
+    }
+
+    /// Sign one account out WITHOUT removing it from the list. It stays
+    /// in the switcher with its host and username so signing back in is
+    /// one step. The AppModel stays too: the same token store
+    /// authenticates again on the next login.
+    public func signOut(id: UUID) async {
+        guard let model = appModelByAccount[id],
               let account = accounts.first(where: { $0.id == id }) else { return }
         _ = try? await model.client.auth.logout()
-        let tokenStore = perAccountTokenStore(account: account)
-        try? tokenStore.clear()
-        // Local auth state flips to signed-out so the UI shows
-        // login when this account is selected. We don't tear down
-        // the AppModel — the same token store can authenticate
-        // again on next login.
+        try? perAccountTokenStore(account: account).clear()
         model.authState.clear()
+    }
+
+    /// Signed in as far as this Mac knows: confirmed by the server, or
+    /// not checked yet but holding a session token. The account menu's
+    /// "continue as" list uses the same rule.
+    public func isSignedIn(_ id: UUID) -> Bool {
+        guard let model = appModelByAccount[id], let account = accounts.first(where: { $0.id == id }) else { return false }
+        return Self.offersSwitch(phase: model.authState.phase, hasStoredSession: { hasStoredSession(account) })
+    }
+
+    /// The AppModel behind an account, signed in or not.
+    public func appModel(for id: UUID) -> AppModel? {
+        appModelByAccount[id]
+    }
+
+    /// Renames an account in menus on this Mac. Blank clears the name,
+    /// so the account shows as "username · host" again.
+    public func setDisplayLabel(_ label: String?, for id: UUID) {
+        guard let index = accounts.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = label?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let old = accounts[index]
+        accounts[index] = Account(
+            id: old.id,
+            host: old.host,
+            username: old.username,
+            displayLabel: trimmed.isEmpty ? nil : trimmed,
+            createdAt: old.createdAt
+        )
+        store.saveAccounts(accounts)
     }
 
     /// Bundle ids allowed to run the legacy import. The legacy token

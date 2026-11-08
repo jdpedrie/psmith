@@ -1,207 +1,97 @@
 import SwiftUI
 import PhotosUI
+import Photos
 import UniformTypeIdentifiers
 import PsmithKit
 import PsmithUI
 
-/// iOS composer: one floating Liquid Glass island mirroring the Mac
-/// composer's design — input field on top, a footer row of bare-glyph
-/// controls (attach / model chip / settings, Send trailing) inside the
-/// same rounded glass surface. No divider, no edge-to-edge band, no
-/// per-control fills: the island is the only chrome surface.
-///
-/// The model chip is always visible so the user knows what's about to
-/// be sent; the whole chip is the tap target for `ModelPickerSheet`
-/// (sheet attached here at the trigger view, not on ConversationView's
-/// body, because SwiftUI doesn't reliably dispatch multiple
-/// `.sheet(isPresented:)` modifiers from the same anchor). Send morphs
-/// into a red Stop circle while `model.isStreaming`.
+/// The composer (Conversation, Streaming, ComposerTray, Council,
+/// DraftStart, DraftNoProfile, Compacting): a glass card with the text
+/// on top and one row under it: "+" for the tray, the model chip, call
+/// settings, then send, stop or resend. "+" opens the tray in the
+/// keyboard's place rather than a menu or a sheet.
 struct Composer: View {
-    @Environment(\.theme) private var theme
     @Bindable var model: ConversationViewModel
+    let ui: ConversationUIState
+    /// Overrides for tests; nil runs the real send and stop.
+    var onSend: (() -> Void)?
+    var onStop: (() -> Void)?
+    /// The tray stands where the keyboard would; the screen sizes it.
+    var trayHeight: CGFloat = 282
     @Environment(AppModel.self) private var app
-    /// Bridge state for the UIKit-backed input: the wrapper writes
-    /// its first-responder status here and reads it back when the
-    /// composer wants to programmatically focus / blur (e.g.
-    /// dropping the keyboard after `triggerSend`). Replaces the
-    /// SwiftUI `@FocusState` we had on the old `TextField` —
-    /// `@FocusState` doesn't bind to a `UIViewRepresentable`.
-    @State private var draftFocused: Bool = false
-    /// Live-measured height of the text input. Lets the input
-    /// auto-grow from one line up to the cap (set in `draftField`)
-    /// the same way the previous SwiftUI `.lineLimit(1...8)` did.
-    @State private var draftFieldHeight: CGFloat = 36
+    @Environment(\.theme) private var theme
+    @Environment(\.openConversationPage) private var open
 
-    /// PhotosPicker binding. We rotate the selection back to empty
-    /// after each pick so re-tapping the paperclip + choosing the
-    /// same photo still triggers an upload (SwiftUI's
-    /// PhotosPickerItem identity is stable per asset, so without
-    /// the reset re-selecting wouldn't fire onChange).
+    @State private var focused = false
+    @State private var fieldHeight: CGFloat = 22
     @State private var pickedItems: [PhotosPickerItem] = []
-    /// Whether the system photos picker is presented. Separating
-    /// the trigger button from the picker via `.photosPicker(
-    /// isPresented:)` works around an iOS 26 quirk where the
-    /// inline `PhotosPicker { Label }` initializer renders as
-    /// zero-width inside a tight HStack.
     @State private var showingPhotosPicker = false
-    /// Whether the system file importer is presented (for PDFs,
-    /// audio, video — anything not in the Photos library).
     @State private var showingFileImporter = false
-    /// Which plugin panel is open, if any. Identifiable, so `.sheet(item:)`
-    /// rebuilds when the user picks a different one without a dismiss cycle.
-    @State private var openPanel: PsmithPluginType?
-    /// Whether the camera-capture sheet is presented. Separate
-    /// from the photos picker because they're distinct UX:
-    /// camera = "take a new photo right now", PhotosPicker =
-    /// "pick from history".
     @State private var showingCamera = false
+    @State private var openPanel: PsmithPluginType?
 
-    /// Lets the panel take another turn.
-    ///
-    /// A chip above the composer rather than a modal or an automatic loop:
-    /// continuing has to sit next to typing, because those are the two things
-    /// a user can do at that moment and neither should interrupt the other.
-    ///
-    /// Neutral chrome on purpose. It is not a speaker, and giving it a persona
-    /// color would read as a fourth voice in the discussion.
-    private var continueChip: some View {
-        HStack {
-            Button {
-                Task { await model.continueDiscussion() }
-            } label: {
-                Label("Continue the discussion", systemImage: "arrow.turn.down.right")
-                    .font(.caption.weight(.medium))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .glassEffect(in: .capsule)
-            .disabled(app.connectivity.state == .offline)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 4)
-    }
+    /// A council's voices each bring their own model, so the chip and
+    /// call settings have nothing to say there.
+    private var isCouncil: Bool { !model.councilVoices.isEmpty }
+    private var noProfile: Bool { model.isDraft && model.draftProfile == nil }
 
     var body: some View {
-        VStack(spacing: 4) {
-            if app.connectivity.state == .offline {
-                offlineBanner
-            }
-            if !model.pendingAttachments.isEmpty || model.attachmentUploadCount > 0 {
-                attachmentChips
-            }
+        VStack(spacing: 8) {
             if model.canContinueDiscussion {
                 continueChip
             }
-            // One floating glass surface: input on top, attach / model /
-            // settings + send on a footer row inside the same rounded
-            // rect — mirrors the Mac composer's island so the two
-            // platforms read as one design. No divider, no edge-to-edge
-            // band: the island floats, the inner controls are bare
-            // glyphs (the island is the only chrome surface).
-            GlassEffectContainer(spacing: 8) {
-                VStack(alignment: .leading, spacing: 8) {
-                    draftField
-                        .padding(.horizontal, 14)
-                        .padding(.top, 12)
-                    HStack(spacing: 12) {
-                        paperclipButton
-                        modelChip
-                            .layoutPriority(1)
-                        // Conversation settings edit a row that a
-                        // new conversation doesn't have until it sends.
-                        if !model.isDraft {
-                            settingsButton
-                        }
-                        if let warning = contextWarning {
-                            contextChip(warning)
-                        }
-                        Spacer(minLength: 0)
-                        sendButton
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 8)
-                }
-                .glassEffect(.regular, in: .rect(cornerRadius: 24))
+            card
+            if ui.trayOpen {
+                ComposerTray(model: model, ui: ui,
+                             attachments: attachmentAccess, height: trayHeight,
+                             onCamera: { showingCamera = true },
+                             onAllPhotos: { showingPhotosPicker = true },
+                             onFiles: { showingFileImporter = true },
+                             onPanel: { openPanel = $0 })
+                    .padding(.horizontal, -12)
+                    .padding(.top, 18)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 4)
         }
-        .onChange(of: model.draft) { _, newValue in
-            // Persist on every keystroke. UserDefaults writes are
-            // memory-mapped and cheap; debouncing would cost us
-            // freshness if the user backgrounds the app between
-            // their last keystroke and the would-be debounced
-            // flush. Trimming + empty-check happens inside the
-            // store so an empty draft removes the key cleanly.
-            DraftStore.save(conversationID: model.conversation.id, text: newValue)
+        .onChange(of: model.draft) { _, text in
+            DraftStore.save(conversationID: model.conversation.id, text: text)
+        }
+        .onChange(of: focused) { _, isFocused in
+            if isFocused, ui.trayOpen { withAnimation(.snappy(duration: 0.25)) { ui.trayOpen = false } }
         }
         .onChange(of: pickedItems) { _, items in
             guard !items.isEmpty else { return }
-            // Snapshot + clear so re-picking the same asset still
-            // triggers a new round.
+            // Cleared so picking the same asset again still uploads.
             let snapshot = items
             pickedItems = []
             for item in snapshot {
                 Task { @MainActor in
                     guard let data = try? await item.loadTransferable(type: Data.self) else { return }
-                    let filename = item.itemIdentifier // best-available label
-                    await model.attachImage(data: data, originalFilename: filename)
+                    await model.attachImage(data: data, originalFilename: item.itemIdentifier)
                 }
             }
         }
-        .sheet(item: $openPanel) { type in
+        // Panels are resolved per conversation.
+        .task(id: model.conversation.id) { await model.loadPanels() }
+        .navigationDestination(item: $openPanel) { type in
             if let panel = type.panel {
-                PluginPanelSheet(
-                    pluginName: type.name,
-                    panel: panel,
-                    conversationID: model.conversation.id,
-                    client: app.client,
-                    onCompose: { text in model.draft += text }
-                )
+                PluginPanelPage(pluginName: type.name, panel: panel, conversationID: model.conversation.id,
+                                client: app.client, onCompose: { model.draft += $0 })
             }
         }
-        // Panels are resolved per conversation, so this reloads when the user
-        // switches chats rather than once per app launch.
-        .task(id: model.conversation.id) {
-            await model.loadPanels()
-        }
-        .sheet(isPresented: $model.showingModelPicker) {
-            ModelPickerSheet(model: model)
-        }
-        .photosPicker(
-            isPresented: $showingPhotosPicker,
-            selection: $pickedItems,
-            maxSelectionCount: 6,
-            matching: .images,
-            preferredItemEncoding: .compatible
-        )
-        .fileImporter(
-            isPresented: $showingFileImporter,
-            allowedContentTypes: fileImporterTypes,
-            allowsMultipleSelection: true
-        ) { result in
-            switch result {
-            case .success(let urls):
-                for url in urls {
-                    Task { @MainActor in
-                        await model.attachFile(from: url)
-                    }
-                }
-            case .failure:
-                // System picker handles its own error UI; nothing to
-                // surface in-app for cancel-or-failure paths.
-                break
+        .photosPicker(isPresented: $showingPhotosPicker, selection: $pickedItems, maxSelectionCount: 6,
+                      matching: .images, preferredItemEncoding: .compatible)
+        .fileImporter(isPresented: $showingFileImporter, allowedContentTypes: fileImporterTypes,
+                      allowsMultipleSelection: true) { result in
+            if case .success(let urls) = result {
+                for url in urls { Task { @MainActor in await model.attachFile(from: url) } }
             }
         }
         .fullScreenCover(isPresented: $showingCamera) {
             CameraPicker(
                 onCapture: { data in
                     showingCamera = false
-                    Task { @MainActor in
-                        await model.attachImage(data: data, originalFilename: nil)
-                    }
+                    Task { @MainActor in await model.attachImage(data: data, originalFilename: nil) }
                 },
                 onCancel: { showingCamera = false }
             )
@@ -209,507 +99,526 @@ struct Composer: View {
         }
     }
 
-    /// Thin amber strip above the input controls when the server's
-    /// `/healthz` probe is failing. Doesn't grab focus or shift the
-    /// layout much — the disabled Send button already gives the
-    /// strongest signal; this just explains why.
-    private var offlineBanner: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "wifi.exclamationmark")
-                .font(.caption2)
-            Text("Server unreachable — viewing cached data")
-                .font(.caption2)
-                .lineLimit(1)
+    // MARK: Card
+
+    private var card: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if !model.pendingAttachments.isEmpty || model.attachmentUploadCount > 0 {
+                PendingAttachmentStrip(model: model)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 2)
+                    .padding(.bottom, 12)
+            }
+            field
+                .padding(.horizontal, 8)
+                .padding(.bottom, 10)
+                .opacity(model.isCompacting ? 0.5 : 1)
+            HStack(spacing: 4) {
+                // Stop stays at full strength while a compaction runs.
+                HStack(spacing: 4) {
+                    plusButton
+                    if !isCouncil { modelChip }
+                    if !model.isDraft && !isCouncil { callSettingsButton }
+                }
+                .opacity(model.isCompacting ? 0.5 : 1)
+                Spacer(minLength: 0)
+                trailingButton
+            }
+            .opacity(noProfile ? 0.45 : 1)
         }
-        .foregroundStyle(.orange)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 5)
-        .glassEffect(.regular.tint(.orange.opacity(0.18)), in: .capsule)
+        .padding(.top, 12)
+        .padding(.horizontal, 8)
+        .padding(.bottom, 8)
+        .ikGlass(in: RoundedRectangle(cornerRadius: 26, style: .continuous))
     }
 
-    // MARK: - Paperclip + attachment chip strip
+    private var placeholder: String {
+        if noProfile { return "Choose a profile to start" }
+        let name = model.draftProfile?.name ?? profileName
+        return name.map { "Message \($0)" } ?? "Message"
+    }
 
-    /// Paperclip menu. The system file picker doesn't show
-    /// camera-roll images (those go through Photos), and
-    /// PhotosPicker doesn't show files; users need both. Menu
-    /// items are gated by the active provider's per-kind capability
-    /// — Anthropic gets Photos + Files (PDFs); Google gets all
-    /// of Photos + Files (PDFs, audio, video); OpenAI gets Photos
-    /// only.
+    @Environment(ConversationsModel.self) private var convos
+    private var profileName: String? {
+        convos.profiles.first(where: { $0.id == model.conversation.profileID })?.name
+    }
+
+    private var field: some View {
+        ZStack(alignment: .topLeading) {
+            PasteAwareTextField(
+                text: $model.draft,
+                measuredHeight: $fieldHeight,
+                isFocused: $focused,
+                minHeight: 22,
+                maxHeight: 22 * 8,
+                onImagePaste: { data in Task { @MainActor in await model.attachImage(data: data, originalFilename: nil) } },
+                isEnabled: !noProfile && !model.isCompacting
+            )
+            if model.draft.isEmpty {
+                Text(placeholder).font(.system(size: 16)).foregroundStyle(IK.tertiary).allowsHitTesting(false)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Message")
+    }
+
+    // MARK: Row
+
+    private var plusButton: some View {
+        Button { toggleTray() } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 17, weight: .medium))
+                .rotationEffect(.degrees(ui.trayOpen ? 45 : 0))
+                .foregroundStyle(ui.trayOpen ? theme.accentInk : IK.strong)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(ui.trayOpen ? theme.accent.opacity(0.18) : IK.wash(0.08)))
+                .overlay(Circle().strokeBorder(ui.trayOpen ? theme.accent.opacity(0.45) : .clear, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .disabled(noProfile)
+        .accessibilityLabel(ui.trayOpen ? "Close the tray" : "Add photos, files and actions")
+    }
+
+    private var modelChip: some View {
+        Button {
+            ui.trayOpen = false
+            open(.models)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "cpu").font(.system(size: 13))
+                Text(modelLabel).font(.system(size: 14)).lineLimit(1).truncationMode(.middle)
+                if !noProfile {
+                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold))
+                }
+            }
+            .foregroundStyle(IK.strong)
+            .padding(.horizontal, 10)
+            .frame(height: 36)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(noProfile)
+        .layoutPriority(1)
+        .accessibilityLabel("Choose model")
+        .accessibilityValue(modelLabel)
+    }
+
+    private var modelLabel: String {
+        if noProfile { return "No model" }
+        if let name = model.modelDisplayName(providerID: model.selectedProviderID, modelID: model.selectedModelID) { return name }
+        return "Pick a model"
+    }
+
+    private var callSettingsButton: some View {
+        Button {
+            ui.trayOpen = false
+            open(.callSettings)
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 17))
+                .foregroundStyle(IK.strong)
+                .frame(width: 36, height: 36)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Call settings")
+    }
+
     @ViewBuilder
-    private var paperclipButton: some View {
-        let imageOK = activeModelAccepts(.image)
-        let docOK   = activeModelAccepts(.document)
-        let avOK    = activeModelAccepts(.audioVideo)
-        let cameraOK = imageOK && UIImagePickerController.isSourceTypeAvailable(.camera)
-        let anyOK   = imageOK || docOK || avOK
-        Menu {
-            if imageOK {
-                Button {
-                    showingPhotosPicker = true
-                } label: {
-                    Label("Photo Library", systemImage: "photo.on.rectangle")
+    private var trailingButton: some View {
+        // Stop covers a compaction too: it runs its own stream, and
+        // cancelStream targets whichever run is live.
+        if model.isStreaming || model.isCompacting {
+            Button { stop() } label: {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(IK.red)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(IK.red.opacity(0.18)))
+                    .overlay(Circle().strokeBorder(IK.red.opacity(0.5), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(model.isCompacting ? "Stop the compaction" : "Stop the reply")
+        } else if canResend {
+            Button {
+                Haptics.impact(.light)
+                Task { await model.reloadLastUser() }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(theme.accent))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Resend your last message")
+        } else {
+            Button { send() } label: {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(theme.accent))
+                    .opacity(canSend ? 1 : (noProfile ? 0.6 : 0.4))
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSend)
+            .accessibilityLabel(model.attachmentUploadCount > 0 ? "Send after the upload finishes" : "Send")
+        }
+    }
+
+    /// The reply to your last message never landed (it failed, or was
+    /// deleted): one tap asks again without retyping.
+    var canResend: Bool {
+        guard model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              model.pendingAttachments.isEmpty, !model.isDraft, !model.sending,
+              model.pendingUserText == nil, model.queuedEntries.isEmpty,
+              let last = model.messages.last(where: { $0.role == .user || $0.role == .assistant })
+        else { return false }
+        return last.role == .user || last.errorText != nil
+    }
+
+    var canSend: Bool {
+        let hasContent = !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !model.pendingAttachments.isEmpty
+        // Offline sends queue; an upload in flight would queue file ids
+        // that don't exist yet.
+        let draftReady = !model.isDraft
+            || (model.draftProfile != nil && model.selectedModelID != nil && !model.creatingConversation)
+        return hasContent && !model.sending && !model.isCompacting && model.attachmentUploadCount == 0 && draftReady
+    }
+
+    func send() {
+        guard canSend else { return }
+        Haptics.impact(.light)
+        focused = false
+        ui.trayOpen = false
+        if let onSend { onSend(); return }
+        Task { await model.send() }
+    }
+
+    func toggleTray() {
+        focused = false
+        withAnimation(.snappy(duration: 0.25)) { ui.trayOpen.toggle() }
+    }
+
+    func stop() {
+        Haptics.impact(.light)
+        if let onStop { onStop(); return }
+        model.cancelStream()
+    }
+
+    private var continueChip: some View {
+        HStack {
+            Button {
+                Task { await model.continueDiscussion() }
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "arrow.turn.down.right").font(.system(size: 13))
+                    Text("Continue the discussion").font(.system(size: 14))
+                }
+                .foregroundStyle(IK.strong)
+                .padding(.leading, 12)
+                .padding(.trailing, 14)
+                .frame(height: 36)
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .ikGlass(in: Capsule())
+            .disabled(app.connectivity.state == .offline)
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: Attachment capabilities
+
+    /// What the active provider takes. Mirrors what the server's drivers
+    /// translate: Anthropic images and PDFs, Google those plus audio and
+    /// video, OpenAI-compatible images only. A harness takes text only.
+    var attachmentAccess: ComposerTray.Access {
+        func accepts(_ kind: Int) -> Bool {
+            guard model.canAttachFiles, let pid = model.selectedProviderID else { return false }
+            switch (model.providerTypes[pid], kind) {
+            case ("anthropic", 0), ("anthropic", 1), ("google", 0), ("google", 1), ("google", 2), ("openai-compatible", 0):
+                return true
+            default:
+                return false
+            }
+        }
+        return .init(images: accepts(0), documents: accepts(1), audioVideo: accepts(2),
+                     camera: accepts(0) && UIImagePickerController.isSourceTypeAvailable(.camera))
+    }
+
+    private var fileImporterTypes: [UTType] {
+        var types: [UTType] = []
+        if attachmentAccess.documents { types.append(.pdf) }
+        if attachmentAccess.audioVideo { types.append(contentsOf: [.audio, .movie]) }
+        return types
+    }
+}
+
+// MARK: - Pending attachments
+
+/// What's about to be sent, above the text: image thumbnails, file chips
+/// and an uploading chip, each removable (ComposerTray).
+struct PendingAttachmentStrip: View {
+    let model: ConversationViewModel
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(model.pendingAttachments) { att in
+                    chip(att)
+                        .overlay(alignment: .topTrailing) { removeButton(att).offset(x: 6, y: -6) }
+                }
+                if model.attachmentUploadCount > 0 {
+                    HStack(spacing: 8) {
+                        IKSpinner()
+                        Text("Uploading").font(.system(size: 12.5)).foregroundStyle(IK.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(height: 56)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(IK.wash(0.04)))
+                    .accessibilityLabel("Uploading attachment")
                 }
             }
-            if cameraOK {
-                Button {
-                    showingCamera = true
-                } label: {
-                    Label("Take Photo", systemImage: "camera")
+            .padding(.top, 6)
+            .padding(.trailing, 6)
+        }
+        .padding(.top, -6)
+    }
+
+    @ViewBuilder
+    private func chip(_ att: PendingAttachment) -> some View {
+        if att.mimeType.hasPrefix("image/"), let image = UIImage(data: att.previewData) {
+            Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+        } else if att.mimeType.hasPrefix("image/") {
+            RoundedRectangle(cornerRadius: 10).fill(IK.wash(0.10))
+                .frame(width: 56, height: 56)
+                .overlay(Image(systemName: "photo").font(.system(size: 20)).foregroundStyle(IK.secondary))
+        } else {
+            HStack(spacing: 8) {
+                Image(systemName: icon(att.mimeType)).font(.system(size: 20)).foregroundStyle(IK.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(att.originalFilename ?? "File").font(.system(size: 13)).foregroundStyle(IK.text)
+                        .lineLimit(1).truncationMode(.middle)
+                    Text(UsageFormat.bytes(att.previewData.isEmpty ? 0 : att.previewData.count))
+                        .font(.system(size: 11.5)).foregroundStyle(IK.tertiary)
                 }
             }
-            if docOK || avOK {
-                Button {
-                    showingFileImporter = true
-                } label: {
-                    Label(filePickerLabel(docOK: docOK, avOK: avOK), systemImage: "folder")
+            .padding(.horizontal, 12)
+            .frame(height: 56)
+            .frame(maxWidth: 180, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 10).fill(IK.wash(0.06)))
+        }
+    }
+
+    private func removeButton(_ att: PendingAttachment) -> some View {
+        Button {
+            Haptics.impact(.light)
+            model.removePendingAttachment(fileID: att.fileID)
+        } label: {
+            Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(IK.strong)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(Color.dynamic(light: .hex("#F2F6FA"), dark: .hex("#0E161F"))))
+                .overlay(Circle().strokeBorder(IK.ring(0.18), lineWidth: 1))
+                .frame(width: 32, height: 32)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .padding(-5)
+        .accessibilityLabel("Remove attachment")
+    }
+
+    private func icon(_ mime: String) -> String {
+        if mime == "application/pdf" { return "doc.text" }
+        if mime.hasPrefix("audio/") { return "waveform" }
+        if mime.hasPrefix("video/") { return "film" }
+        return "doc"
+    }
+}
+
+// MARK: - Tray
+
+/// The tray "+" opens where the keyboard sits (ComposerTray): the camera
+/// and recent photos, the photo library and files, then this
+/// conversation's own actions and any plugin panels.
+struct ComposerTray: View {
+    struct Access {
+        var images: Bool
+        var documents: Bool
+        var audioVideo: Bool
+        var camera: Bool
+    }
+
+    let model: ConversationViewModel
+    let ui: ConversationUIState
+    let attachments: Access
+    var height: CGFloat = 282
+    let onCamera: () -> Void
+    let onAllPhotos: () -> Void
+    let onFiles: () -> Void
+    let onPanel: (PsmithPluginType) -> Void
+    @Environment(\.theme) private var theme
+    @Environment(\.openConversationPage) private var open
+
+    var body: some View {
+        // Scrolls when a short phone gives it less than its full height.
+        ScrollView(.vertical, showsIndicators: false) {
+        VStack(alignment: .leading, spacing: 12) {
+            if attachments.images {
+                HStack(spacing: 8) {
+                    tile("camera", "Camera", height: 84, action: onCamera)
+                        .frame(width: 84)
+                        .disabled(!attachments.camera)
+                    RecentPhotosStrip { data in
+                        Task { @MainActor in await model.attachImage(data: data, originalFilename: nil) }
+                    }
+                }
+                .padding(.trailing, -16)
+            }
+            if attachments.images || attachments.documents || attachments.audioVideo {
+                HStack(spacing: 8) {
+                    if attachments.images { wideTile("photo.on.rectangle", "All Photos", action: onAllPhotos) }
+                    if attachments.documents || attachments.audioVideo { wideTile("folder", "Files", action: onFiles) }
                 }
             }
-            // Plugin-contributed entries. The composer does not know what any
-            // of these are: it lists the titles the descriptors carry and
-            // opens a panel that renders whatever fragments the server sends.
-            if !model.panelPlugins.isEmpty {
-                Divider()
+            Text("This conversation").font(.system(size: 13, weight: .semibold)).foregroundStyle(IK.tertiary)
+                .padding(.top, 2)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+                tile("rectangle.expand.vertical", "Compress") { ui.openCompress(model: model) }
+                    .disabled(model.isStreaming || model.isCompacting || model.hasPendingCompression || model.isDraft)
+                tile("cpu", "Model") { ui.trayOpen = false; open(.models) }
+                tile("slider.horizontal.3", "Settings") { ui.trayOpen = false; open(.info) }
+                    .disabled(model.isDraft)
+                tile("puzzlepiece.extension", "Plugins") { ui.trayOpen = false; open(.info) }
+                    .disabled(model.isDraft)
                 ForEach(model.panelPlugins) { type in
                     if let panel = type.panel {
-                        Button {
-                            openPanel = type
-                        } label: {
-                            Label(panel.title, systemImage: panel.sfSymbol.isEmpty ? "square.grid.2x2" : panel.sfSymbol)
+                        tile(panel.sfSymbol.isEmpty ? "square.grid.2x2" : panel.sfSymbol, panel.title) {
+                            ui.trayOpen = false
+                            onPanel(type)
                         }
                     }
                 }
             }
-        } label: {
-            // Bare glyph — the composer island is the chrome surface;
-            // per-control fills and borders read as widget stacking.
-            // Plus rather than a paperclip: the menu carries plugin panels
-            // alongside attachments now, so a paperclip would under-describe
-            // it. Falls back to being attachment-only when no plugin
-            // contributes a panel, which is the common case.
-            Image(systemName: model.panelPlugins.isEmpty ? "paperclip" : "plus")
-                .font(.body)
-                .foregroundStyle(menuEnabled ? .secondary : .tertiary)
-                .frame(width: 34, height: 34)
-                .contentShape(Circle())
         }
-        .menuStyle(.button)
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(height: height, alignment: .top)
+        .background(theme.trayGround.ignoresSafeArea(edges: .bottom))
+        .overlay(alignment: .top) { Rectangle().fill(IK.wash(0.07)).frame(height: 1) }
+    }
+
+    private func tile(_ symbol: String, _ title: String, height: CGFloat = 72, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: symbol).font(.system(size: 20))
+                Text(title).font(.system(size: 12.5)).lineLimit(1)
+            }
+            .foregroundStyle(IK.strong)
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .background(RoundedRectangle(cornerRadius: 14).fill(IK.wash(0.06)))
+            .contentShape(RoundedRectangle(cornerRadius: 14))
+        }
         .buttonStyle(.plain)
-        .disabled(!menuEnabled)
-        .accessibilityLabel(menuAccessibilityLabel(anyOK: anyOK))
     }
 
-    /// The menu is usable when EITHER attachments or a panel is available.
-    /// Gating on attachments alone would hide plugin panels behind a model
-    /// that happens not to take files.
-    private var menuEnabled: Bool {
-        activeModelAccepts(.image) || activeModelAccepts(.document)
-            || activeModelAccepts(.audioVideo) || !model.panelPlugins.isEmpty
-    }
-
-    private func menuAccessibilityLabel(anyOK: Bool) -> String {
-        if !menuEnabled { return "Attachments not supported by this model" }
-        if model.panelPlugins.isEmpty { return "Attach a file" }
-        return anyOK ? "Attach a file or add context" : "Add context"
-    }
-
-    private func filePickerLabel(docOK: Bool, avOK: Bool) -> String {
-        switch (docOK, avOK) {
-        case (true, true):  return "Choose Files"   // PDFs, audio, video
-        case (true, false): return "Choose PDF"
-        case (false, true): return "Choose Audio / Video"
-        default:            return "Choose File"
+    private func wideTile(_ symbol: String, _ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: symbol).font(.system(size: 17))
+                Text(title).font(.system(size: 12.5))
+            }
+            .foregroundStyle(IK.strong)
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .background(RoundedRectangle(cornerRadius: 14).fill(IK.wash(0.06)))
+            .contentShape(RoundedRectangle(cornerRadius: 14))
         }
+        .buttonStyle(.plain)
     }
+}
 
-    /// UTTypes the file importer accepts for the active provider.
-    /// Built lazily so menu invocation reflects the current model.
-    private var fileImporterTypes: [UTType] {
-        var types: [UTType] = []
-        if activeModelAccepts(.document) {
-            types.append(.pdf)
-        }
-        if activeModelAccepts(.audioVideo) {
-            types.append(contentsOf: [.audio, .movie])
-        }
-        return types
-    }
+/// The newest photos in the library, when the app may already read it;
+/// tap one to attach it. Never asks for access itself: All Photos is
+/// the way in until the person grants it.
+struct RecentPhotosStrip: View {
+    let onPick: (Data) -> Void
+    @Environment(\.theme) private var theme
+    @State private var assets: [PHAsset] = []
+    @State private var thumbs: [String: UIImage] = [:]
+    @State private var picked: Set<String> = []
 
-    /// Pending-attachment strip — horizontal-scrolling thumbnails
-    /// above the composer. Each chip has an inline X button to
-    /// remove that one attachment before sending.
-    private var attachmentChips: some View {
+    var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(model.pendingAttachments) { att in
-                    pendingChip(att)
-                }
-                if model.attachmentUploadCount > 0 {
-                    uploadingChip
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-        }
-    }
-
-    private func pendingChip(_ att: PendingAttachment) -> some View {
-        // Image attachments use the in-memory preprocessed thumbnail
-        // bytes; everything else (PDF / audio / video) renders an
-        // icon + filename chip — no remote fetch needed since the
-        // file's already uploaded and the user just needs to see
-        // what's about to be sent.
-        ZStack(alignment: .topTrailing) {
-            if att.mimeType.hasPrefix("image/"),
-               let uiImage = UIImage(data: att.previewData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 60, height: 60)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
-            } else {
-                filePendingChip(att)
-            }
-
-            Button {
-                Haptics.impact(.light)
-                model.removePendingAttachment(fileID: att.fileID)
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, .black.opacity(0.55))
-                    .font(.system(size: 16))
-            }
-            .buttonStyle(.plain)
-            .padding(2)
-            .accessibilityLabel("Remove attachment")
-        }
-    }
-
-    /// Non-image pending-attachment chip. Bigger than the image
-    /// thumbnail (filename needs room), but capped so a long PDF
-    /// title doesn't push the send button off screen.
-    private func filePendingChip(_ att: PendingAttachment) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: iconName(for: att.mimeType))
-                .font(.title3)
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(att.originalFilename ?? defaultLabel(for: att.mimeType))
-                    .font(.caption.weight(.medium))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(att.mimeType)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(maxWidth: 180, alignment: .leading)
-        .frame(height: 60)
-        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
-    }
-
-    private func iconName(for mime: String) -> String {
-        if mime == "application/pdf" { return "doc.richtext" }
-        if mime.hasPrefix("audio/") { return "waveform" }
-        if mime.hasPrefix("video/") { return "film" }
-        if mime.hasPrefix("image/") { return "photo" }
-        return "doc"
-    }
-
-    private func defaultLabel(for mime: String) -> String {
-        if mime == "application/pdf" { return "PDF" }
-        if mime.hasPrefix("audio/") { return "Audio" }
-        if mime.hasPrefix("video/") { return "Video" }
-        return "File"
-    }
-
-    private var uploadingChip: some View {
-        RoundedRectangle(cornerRadius: 8)
-            .fill(Color.primary.opacity(0.08))
-            .frame(width: 60, height: 60)
-            .overlay(
-                ProgressView().controlSize(.small)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-            )
-            .accessibilityLabel("Uploading attachment")
-    }
-
-    /// Per-provider attachment capabilities. The composer's paperclip
-    /// menu shows / hides options based on the active provider:
-    ///
-    ///   anthropic         → image + document (PDF)
-    ///   google            → image + document + audio + video
-    ///   openai-compatible → image only (Files API path for docs
-    ///                       hasn't been wired; audio/video are
-    ///                       routed through the (separate) realtime
-    ///                       API and not supported here)
-    ///
-    /// Capabilities here mirror what the Go drivers actually
-    /// translate in `internal/providers/{anthropic,google,openai}/send.go`.
-    /// If the catalog grows a per-model `accepts_*` flag this can
-    /// move to a per-model lookup; for v1 the provider-level
-    /// granularity matches the driver-side reality.
-    enum AttachmentKind {
-        case image, document, audioVideo
-    }
-
-    private func activeModelAccepts(_ kind: AttachmentKind) -> Bool {
-        // A harness holds its own transcript and takes text only. The type
-        // whitelist below would fall through to false for one anyway; asking
-        // the binding first means the answer stays right the day a harness
-        // grows file support, and says why in the meantime.
-        guard model.canAttachFiles else { return false }
-        guard let pid = model.selectedProviderID else { return false }
-        switch (model.providerTypes[pid], kind) {
-        case ("anthropic", .image),
-             ("anthropic", .document),
-             ("google", .image),
-             ("google", .document),
-             ("google", .audioVideo),
-             ("openai-compatible", .image):
-            return true
-        default:
-            return false
-        }
-    }
-
-    // MARK: - Context warning
-
-    /// Nothing under the user's threshold; past it, the size in amber;
-    /// near the model's own window, red, whatever the threshold.
-    private var contextWarning: ContextWarning? {
-        guard !model.isDraft else { return nil }
-        return model.contextWarning(threshold: app.preferences.preferences.contextWarningTokens)
-    }
-
-    /// Tapping opens Compact: the warning carries its own remedy.
-    private func contextChip(_ warning: ContextWarning) -> some View {
-        let tint: Color = {
-            if case .nearWindow = warning { return .red }
-            return .orange
-        }()
-        return Button {
-            Haptics.impact(.light)
-            model.showingCompactView = true
-        } label: {
-            // Gauge + number, not "82k context": the model name beside
-            // it is the more important text and lost the space fight.
-            HStack(spacing: 3) {
-                Image(systemName: "gauge.with.needle")
-                    .font(.caption2.weight(.semibold))
-                Text(ContextWarning.compact(warning.tokens))
-                    .font(.caption.weight(.semibold))
-                    .monospacedDigit()
-            }
-                .lineLimit(1)
-                .fixedSize()
-                .foregroundStyle(tint)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(tint.opacity(0.14), in: Capsule())
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .disabled(model.isStreaming || model.isCompacting || model.hasPendingCompression)
-        .accessibilityLabel(contextChipAccessibility(warning))
-        .accessibilityHint("Opens Compact")
-    }
-
-    private func contextChipAccessibility(_ warning: ContextWarning) -> String {
-        switch warning {
-        case .overThreshold(let t):
-            return "Context is \(t.formatted()) tokens, past your warning level"
-        case .nearWindow(let t, let w):
-            return "Context is \(t.formatted()) of the model's \(w.formatted()) tokens"
-        }
-    }
-
-    // MARK: - Conversation settings button
-
-    /// Pushes the per-conversation settings page (system message,
-    /// thinking flag, default model overrides…). Sits next to the
-    /// model chip so the two related controls live together —
-    /// "what model" and "how it behaves".
-    private var settingsButton: some View {
-        NavigationLink {
-            ConversationSettingsView(model: model)
-        } label: {
-            Image(systemName: "gearshape")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .frame(width: 34, height: 34)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Conversation settings")
-    }
-
-    // MARK: - Draft text field
-
-    private var draftField: some View {
-        // UITextView wrapper instead of SwiftUI TextField so we
-        // can override `paste(_:)` and route image-pasteboard
-        // content to `attachImage` instead of letting iOS try to
-        // stringify the image and stuff a file URL into the text.
-        // Auto-sizes between minHeight and maxHeight, then enables
-        // internal scrolling — same behavior as the old
-        // `.lineLimit(1...8)` modifier on the vertical TextField.
-        let lineHeight = UIFont.preferredFont(forTextStyle: .body).lineHeight
-        let verticalInset: CGFloat = 16   // 8pt top + 8pt bottom
-        let minHeight = lineHeight + verticalInset
-        let maxHeight = lineHeight * 8 + verticalInset
-        // The field sits directly on the composer island's glass —
-        // no inner capsule fill or border. The placeholder carries
-        // the affordance; the island carries the surface.
-        return ZStack(alignment: .topLeading) {
-            PasteAwareTextField(
-                text: $model.draft,
-                measuredHeight: $draftFieldHeight,
-                isFocused: $draftFocused,
-                minHeight: minHeight,
-                maxHeight: maxHeight,
-                onImagePaste: { data in
-                    Task { @MainActor in
-                        await model.attachImage(data: data, originalFilename: nil)
+                ForEach(assets, id: \.localIdentifier) { asset in
+                    let id = asset.localIdentifier
+                    Button { pick(asset) } label: {
+                        ZStack(alignment: .bottomTrailing) {
+                            Group {
+                                if let img = thumbs[id] {
+                                    Image(uiImage: img).resizable().aspectRatio(contentMode: .fill)
+                                } else {
+                                    IK.wash(0.08)
+                                }
+                            }
+                            .frame(width: 84, height: 84)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            if picked.contains(id) {
+                                Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+                                    .frame(width: 20, height: 20)
+                                    .background(Circle().fill(theme.accent))
+                                    .padding(6)
+                            }
+                        }
+                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(picked.contains(id) ? theme.accent : .clear, lineWidth: 2))
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Recent photo")
                 }
-            )
-            .frame(height: draftFieldHeight)
+            }
+        }
+        .task { load() }
+    }
 
-            if model.draft.isEmpty {
-                Text("Send a message")
-                    .foregroundStyle(.tertiary)
-                    .allowsHitTesting(false)
+    private func load() {
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        guard status == .authorized || status == .limited else { return }
+        let options = PHFetchOptions()
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        options.fetchLimit = 12
+        let result = PHAsset.fetchAssets(with: .image, options: options)
+        var list: [PHAsset] = []
+        result.enumerateObjects { a, _, _ in list.append(a) }
+        assets = list
+        let size = CGSize(width: 168, height: 168)
+        for a in list {
+            let id = a.localIdentifier
+            PHImageManager.default().requestImage(for: a, targetSize: size, contentMode: .aspectFill, options: nil) { img, _ in
+                guard let img else { return }
+                Task { @MainActor in thumbs[id] = img }
             }
         }
     }
 
-    // MARK: - Model chip (provider logo + model name + chevron)
-
-    private var modelChip: some View {
-        Button {
-            model.showingModelPicker = true
-        } label: {
-            HStack(spacing: 7) {
-                ProviderLogo(slug: providerLogoSlug, size: 18)
-                Text(modelChipLabel)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 6)
-            .contentShape(Capsule())
+    private func pick(_ asset: PHAsset) {
+        let id = asset.localIdentifier
+        guard !picked.contains(id) else { return }
+        picked.insert(id)
+        let options = PHImageRequestOptions()
+        options.isNetworkAccessAllowed = true
+        options.version = .current
+        PHImageManager.default().requestImageDataAndOrientation(for: asset, options: options) { data, _, _, _ in
+            guard let data else { return }
+            Task { @MainActor in onPick(data) }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Choose model")
-        .accessibilityValue(modelChipLabel)
-    }
-
-    /// Composite label shown on the chip:
-    ///   - Selected model display name when set ("Gemini 3.1 Pro
-    ///     Preview"). Falls back to model id ("gemini-3.1-pro").
-    ///   - "Pick a model" when nothing is selected (fresh
-    ///     conversation, never sent).
-    private var modelChipLabel: String {
-        if let display = modelDisplayName { return display }
-        if let mid = model.selectedModelID, !mid.isEmpty { return mid }
-        return "Pick a model"
-    }
-
-    private var providerLogoSlug: String? {
-        guard let pid = model.selectedProviderID else { return nil }
-        switch model.providerTypes[pid] {
-        case "anthropic": return "anthropic"
-        case "google": return "google"
-        case "openai-compatible": return model.providerPresetIDs[pid]
-        default: return nil
-        }
-    }
-
-    private var modelDisplayName: String? {
-        guard let mid = model.selectedModelID else { return nil }
-        let pid = model.selectedProviderID
-        return model.availableModels
-            .first(where: { $0.modelID == mid && (pid == nil || $0.providerID == pid) })?
-            .displayName
-    }
-
-    // MARK: - Send / Stop button
-
-    @ViewBuilder
-    private var sendButton: some View {
-        // Stop also surfaces during compaction — that path runs its
-        // own stream alongside the conversation chain, and `isStreaming`
-        // is gated false while `isCompacting` is true, so we have to
-        // OR them. cancelStream() targets whichever streamRunID is
-        // currently live, so a single tap kills either.
-        if model.isStreaming || model.isCompacting {
-            Button {
-                model.cancelStream()
-            } label: {
-                Image(systemName: "stop.fill")
-                    .font(.title3)
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .background(Color.red, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(model.isCompacting ? "Stop compaction" : "Stop streaming")
-        } else {
-            Button {
-                triggerSend()
-            } label: {
-                Image(systemName: "arrow.up")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .background(canSend ? theme.accent : Color.gray.opacity(0.4), in: Circle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!canSend)
-            .accessibilityLabel("Send")
-        }
-    }
-
-    private var canSend: Bool {
-        let trimmed = model.draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasContent = !trimmed.isEmpty || !model.pendingAttachments.isEmpty
-        // Offline sends are no longer blocked — they go to the
-        // outbound queue and drain when the server is back. The
-        // composer still won't fire while an upload is pending
-        // (the file_ids the queue would reference don't exist
-        // yet) or while a compaction is mid-stream (those run on
-        // their own dedicated stream and overlap is unsupported).
-        let noUploadInFlight = model.attachmentUploadCount == 0
-        // A new conversation needs a profile to be created from and a
-        // model to answer (without one the create would succeed and the
-        // send fail, leaving the empty conversation drafts exist to
-        // avoid), and its first send is in flight while the create runs.
-        let draftReady = !model.isDraft
-            || (model.draftProfile != nil && model.selectedModelID != nil && !model.creatingConversation)
-        return hasContent && !model.sending && !model.isCompacting && noUploadInFlight && draftReady
-    }
-
-    private func triggerSend() {
-        guard canSend else { return }
-        Haptics.impact(.light)
-        // Drop the keyboard so the message bubble + streaming reply
-        // are visible without the user having to tap-to-dismiss.
-        draftFocused = false
-        Task { await model.send() }
     }
 }

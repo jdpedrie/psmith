@@ -2,299 +2,227 @@ import SwiftUI
 import PsmithKit
 import PsmithUI
 
-/// Custom long-press action menu for transcript messages, replacing
-/// `.contextMenu` on MessageRow. The system menu's lift animation
-/// portals the pressed row into an unflipped window-level container,
-/// and inside the inverted transcript (scroll view and row each carry
-/// a y-flip) that portal renders the row upside down for the duration
-/// of the lift. No public API reaches the portal, so the menu is ours:
-/// dimmed backdrop, upright excerpt card, glass action card — no
-/// portal anywhere, so the flash cannot occur.
+/// The long-press menu for a transcript message (MessageMenu): the
+/// message lifted into a card at the top, the actions under it, a quick
+/// row of Copy, Read and Regenerate first.
 ///
-/// Presented from ConversationBody via `model.actionMenuMessage`
-/// (hoisted like `editingMessage` so the overlay renders OUTSIDE the
-/// flipped scroll view). Delete confirmations morph the action card
-/// in place instead of stacking a system alert on the overlay — the
-/// alert's presentation anchor would be a view mid-dismissal.
+/// Ours rather than `.contextMenu`: the system menu's lift portals the
+/// pressed row into an unflipped container, and inside the inverted
+/// transcript (scroll view and row each carry a y-flip) the row renders
+/// upside down for the length of the lift. No public API reaches the
+/// portal. Presented from the conversation screen through
+/// `model.actionMenuMessage`, outside the flipped scroll view.
 struct MessageActionMenu: View {
     let message: PsmithMessage
     let model: ConversationViewModel
-    /// Opens the full-document reader (selection lives there — the
-    /// transcript disables in-bubble selection so this menu's gesture
-    /// can win the long-press; see MessageRow).
-    let onSelectText: () -> Void
-    /// Opens the usage sheet (tokens, cache, cost, time): the details
-    /// the transcript keeps out of line unless turn details are on.
-    let onShowDetails: () -> Void
+    let ui: ConversationUIState
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     @Environment(\.clipboard) private var clipboard
-
-    private enum DeleteConfirm { case single, cascade }
-    @State private var confirmingDelete: DeleteConfirm?
-    /// Drives the card pop-in. The overlay's insertion transition is a
-    /// plain fade (the backdrop scaling with the cards reads wrong);
-    /// the cards get their spring here instead.
+    @Environment(\.openConversationPage) private var open
     @State private var appeared = false
-    /// Set the instant dismissal starts. The overlay stays in the tree
-    /// for its fade-out, and without this it kept swallowing touches
-    /// for those frames: a tap on the composer right after closing the
-    /// menu did nothing.
+    /// Set the moment dismissal starts: the overlay stays in the tree for
+    /// its fade and must not swallow the next tap.
     @State private var dismissing = false
+    @State private var previewHeight: CGFloat = 250
 
     var body: some View {
-        ZStack {
-            // Backdrop: dims the transcript and intercepts every touch
-            // under the cards. Tap anywhere outside to dismiss.
-            Color.black.opacity(0.35)
+        ZStack(alignment: .topLeading) {
+            theme.menuBackdrop
                 .ignoresSafeArea()
                 .onTapGesture { dismiss() }
-
-            VStack(spacing: 12) {
-                excerptCard
-                actionCard
+            VStack(alignment: .leading, spacing: 0) {
+                preview
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height.rounded() } action: { previewHeight = $0 }
+                // The actions sit at a fixed line under a short preview, so
+                // they don't jump with the message's length; a tall one
+                // pushes them down.
+                actions.padding(.top, max(24, 274 - previewHeight))
             }
-            .frame(maxWidth: 320)
-            .padding(.horizontal, 24)
-            .scaleEffect(appeared ? 1 : 0.94)
+            .padding(.horizontal, 16)
+            .padding(.top, 91)
+            .scaleEffect(appeared ? 1 : 0.96, anchor: .top)
             .opacity(appeared ? 1 : 0)
         }
         .allowsHitTesting(!dismissing)
         .onAppear {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                appeared = true
-            }
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) { appeared = true }
         }
     }
 
-    // MARK: - Excerpt card
+    // MARK: Preview
 
-    /// Upright preview of the pressed message — same excerpt budget the
-    /// old context-menu preview used. Head cut, not BoundedMarkdownText:
-    /// its "Show full text" affordance would be a live button here and
-    /// the card is a preview, not a reader. Height-capped so a huge
-    /// message on a small screen can't crowd out the actions.
-    private var excerptCard: some View {
-        // CappedHeight, not `.frame(maxHeight: 300)`: a max-height frame
-        // takes the full proposed height up to its cap whatever the
-        // content needs, so a one-line message sat in a 300pt card.
-        CappedHeight(limit: 300) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(roleLabel)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                let body = message.displayContent ?? message.content
-                MarkdownText(MarkdownBudget.head(body, limit: 600) ?? body)
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(.systemBackground))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-    }
+    private var text: String { message.displayContent ?? message.content }
 
-    // MARK: - Action card
-
-    private var actionCard: some View {
-        VStack(spacing: 0) {
-            if confirmingDelete == nil {
-                actionRows
-            } else {
-                confirmRows
+    private var preview: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            CappedHeight(limit: 250 - 32 - (footer == nil ? 0 : 30)) {
+                let excerpt = MarkdownBudget.head(text, limit: 600) ?? text
+                if ProseText.isPlain(excerpt) {
+                    ProseText(text: excerpt, gap: 12).foregroundStyle(IK.text)
+                } else {
+                MarkdownText(excerpt)
+                    .environment(\.fontScale, 16.0 / 17)
+                    .lineSpacing(23 - 19.09)
+                    .environment(\.markdownTextSelectable, false)
+                    .foregroundStyle(IK.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .clipped()
+            if let footer {
+                HStack(spacing: 6) {
+                    Image(systemName: "cpu").font(.system(size: 11))
+                    Text(footer).font(.system(size: 12.5)).lineLimit(1)
+                }
+                .foregroundStyle(IK.tertiary)
             }
         }
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
-        .animation(.snappy(duration: 0.2), value: confirmingDelete == nil)
-    }
-
-    @ViewBuilder
-    private var actionRows: some View {
-        row("Edit", systemImage: "pencil", enabled: isEditableRole) {
-            dismiss()
-            model.editingMessage = message
-        }
-        if message.role != .user && message.role != .compressionSummary {
-            hairline
-            row("Reload", systemImage: "arrow.clockwise", enabled: isReloadable) {
-                dismiss()
-                Task { await model.reloadFromMessage(id: message.id) }
-            }
-        }
-        hairline
-        row("Copy", systemImage: "doc.on.doc") {
-            clipboard.write(message.displayContent ?? message.content)
-            dismiss()
-        }
-        hairline
-        row("Select text", systemImage: "character.cursor.ibeam") {
-            dismiss()
-            onSelectText()
-        }
-        if message.role == .assistant && message.usage != nil {
-            hairline
-            row("Details", systemImage: "info.circle") {
-                dismiss()
-                onShowDetails()
-            }
-        }
-        if message.role == .assistant && message.errorText == nil {
-            hairline
-            if app.speech.isPlaying(messageID: message.id) || app.speech.isLoading(messageID: message.id) {
-                row("Stop speaking", systemImage: "speaker.slash") { toggleSpeech() }
-            } else {
-                row("Read aloud", systemImage: "speaker.wave.2", enabled: !model.isStreaming) { toggleSpeech() }
-            }
-        }
-        groupBreak
-        row("Delete", systemImage: "trash", destructive: true) {
-            confirmingDelete = .single
-        }
-        if model.hasDescendants(message.id) {
-            hairline
-            row("Delete from here…", systemImage: "trash.slash", destructive: true) {
-                confirmingDelete = .cascade
-            }
-        }
-    }
-
-    /// Delete confirmation, morphed into the card. Copy matches the
-    /// alerts this flow replaced.
-    @ViewBuilder
-    private var confirmRows: some View {
-        let cascade = confirmingDelete == .cascade
-        VStack(alignment: .leading, spacing: 4) {
-            Text(cascade ? "Delete from here?" : "Delete message?")
-                .font(.subheadline.weight(.semibold))
-            Text(confirmBody(cascade: cascade))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        hairline
-        row(
-            cascade ? "Delete from here" : "Delete",
-            systemImage: cascade ? "trash.slash" : "trash",
-            destructive: true
-        ) {
-            Haptics.notify(.warning)
-            let id = message.id
-            dismiss()
-            Task { await model.deleteMessage(id: id, cascade: cascade) }
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(theme.chrome))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(IK.ring(0.06), lineWidth: 1))
+        .shadow(color: IK.shadow, radius: 25, y: 18)
+    }
+
+    private var footer: String? {
+        let time = UsageFormat.time(message.createdAt)
+        if message.role == .assistant, let name = model.modelDisplayName(providerID: message.providerID, modelID: message.modelID) {
+            return [name, time].compactMap { $0 }.joined(separator: " · ")
         }
-        hairline
-        row("Cancel", systemImage: "xmark") { confirmingDelete = nil }
+        return time
     }
 
-    private func confirmBody(cascade: Bool) -> String {
-        if cascade {
-            let count = model.descendantCount(of: message.id)
-            return "This deletes the message and \(count) repl\(count == 1 ? "y" : "ies") underneath it."
-        }
-        return "This message will be removed. Children stitch to its parent."
-    }
+    // MARK: Actions
 
-    // MARK: - Row chrome
-
-    private func row(
-        _ title: String,
-        systemImage: String,
-        enabled: Bool = true,
-        destructive: Bool = false,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack {
-                Text(title)
-                Spacer(minLength: 12)
-                Image(systemName: systemImage)
-            }
-            .font(.body)
-            .foregroundStyle(
-                !enabled
-                    ? AnyShapeStyle(.tertiary)
-                    : (destructive ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary))
-            )
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-    }
-
-    private var hairline: some View {
-        Rectangle()
-            .fill(Color.primary.opacity(0.08))
-            .frame(height: 0.5)
-    }
-
-    /// Thicker band separating the destructive group — the custom-menu
-    /// equivalent of UIMenu's chunky section separator.
-    private var groupBreak: some View {
-        Rectangle()
-            .fill(Color.primary.opacity(0.06))
-            .frame(height: 7)
-    }
-
-    // MARK: - Capability logic (mirrors MessageRow)
-
-    private var isEditableRole: Bool {
+    private var editable: Bool {
         switch message.role {
         case .user, .assistant, .system, .context: return true
-        // A clean summary is editable before it's confirmed; a failed
-        // one has nothing worth editing.
         case .compressionSummary: return message.errorText == nil
         default: return false
         }
     }
 
-    private var isReloadable: Bool {
-        isEditableRole && !model.isStreaming
+    private var regenerable: Bool {
+        (message.role == .user || message.role == .assistant) && !model.isStreaming && !model.sending
     }
 
-    private var roleLabel: String {
-        switch message.role {
-        case .user: return "USER"
-        case .assistant: return "ASSISTANT"
-        case .system: return "SYSTEM"
-        case .context: return "CONTEXT"
-        case .compressionSummary: return "SUMMARY"
-        case .unknown: return "?"
-        @unknown default: return "?"
+    private var speaking: Bool {
+        app.speech.isPlaying(messageID: message.id) || app.speech.isLoading(messageID: message.id)
+    }
+
+    private var actions: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                quick("doc.on.doc", "Copy") {
+                    clipboard.write(text)
+                    dismiss()
+                }
+                quick(speaking ? "speaker.slash" : "speaker.wave.2", speaking ? "Stop" : "Read") {
+                    Haptics.impact(.light)
+                    app.speech.toggle(messageID: message.id, content: text)
+                    dismiss()
+                }
+                .disabled(model.isStreaming || message.errorText != nil)
+                quick("arrow.clockwise", "Regenerate") {
+                    dismiss()
+                    Task { await model.reloadFromMessage(id: message.id) }
+                }
+                .disabled(!regenerable)
+            }
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(Color.dynamic(light: Color(red: 16 / 255, green: 26 / 255, blue: 38 / 255).opacity(0.06),
+                                        dark: Color.black.opacity(0.22)))
+                    .frame(height: 6)
+            }
+            row("Select Text", "character.cursor.ibeam") {
+                dismiss()
+                if message.role == .assistant && message.errorText == nil {
+                    model.selectingTextMessageID = message.id
+                } else {
+                    open(.fullText(title: "Message text", markdown: text))
+                }
+            }
+            row("Edit", "pencil") {
+                dismiss()
+                ui.beginEdit(message, model: model)
+            }
+            .disabled(!editable)
+            if message.role == .assistant && message.usage != nil {
+                row("Usage and Cost", "chart.bar") {
+                    dismiss()
+                    ui.usageExpanded.insert(message.id)
+                }
+            }
+            row("Delete", "trash", destructive: true, separator: model.hasDescendants(message.id)) {
+                dismiss()
+                ui.requestDelete(message)
+            }
+            if model.hasDescendants(message.id) {
+                row("Delete from Here", "trash.slash", destructive: true, separator: false) {
+                    dismiss()
+                    ui.requestDelete(message, cascade: true)
+                }
+            }
         }
+        .frame(width: 264)
+        .ikGlass(in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: IK.shadow, radius: 25, y: 18)
     }
 
-    // MARK: - Actions
+    private func quick(_ symbol: String, _ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                Image(systemName: symbol).font(.system(size: 19))
+                Text(title).font(.system(size: 12))
+            }
+            .foregroundStyle(IK.strong)
+            .frame(maxWidth: .infinity)
+            .frame(height: 64)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MenuPressStyle())
+    }
 
-    private func toggleSpeech() {
-        Haptics.impact(.light)
-        app.speech.toggle(
-            messageID: message.id,
-            content: message.displayContent ?? message.content
-        )
-        dismiss()
+    private func row(_ title: String, _ symbol: String, destructive: Bool = false, separator: Bool = true,
+                     action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(title).font(.system(size: 16))
+                Spacer(minLength: 12)
+                Image(systemName: symbol).font(.system(size: 17)).foregroundStyle(destructive ? IK.red : IK.strong)
+            }
+            .foregroundStyle(destructive ? IK.red : IK.text)
+            .padding(.horizontal, 16)
+            .frame(height: 46)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MenuPressStyle())
+        .overlay(alignment: .bottom) {
+            if separator { Rectangle().fill(IK.wash(0.08)).frame(height: 0.5) }
+        }
     }
 
     private func dismiss() {
         dismissing = true
-        withAnimation(.snappy(duration: 0.2)) {
-            model.actionMenuMessage = nil
-        }
+        withAnimation(.snappy(duration: 0.2)) { model.actionMenuMessage = nil }
     }
 }
 
-/// Sizes its single child to the child's ideal height, capped at
-/// `limit`, top-aligned. Overflow is the caller's to clip.
+private struct MenuPressStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(configuration.isPressed ? IK.wash(0.08) : .clear)
+            .opacity(enabled ? 1 : 0.4)
+    }
+}
+
+/// Sizes its child to the child's ideal height, capped at `limit`,
+/// top-aligned. A max-height frame would take the whole cap whatever the
+/// content needs.
 private struct CappedHeight: Layout {
     let limit: CGFloat
 
@@ -307,10 +235,6 @@ private struct CappedHeight: Layout {
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         guard let child = subviews.first else { return }
         let ideal = child.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
-        child.place(
-            at: bounds.origin,
-            anchor: .topLeading,
-            proposal: ProposedViewSize(width: bounds.width, height: ideal.height)
-        )
+        child.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: bounds.width, height: ideal.height))
     }
 }

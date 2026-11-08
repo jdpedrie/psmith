@@ -409,9 +409,9 @@ A new conversation is a draft `ConversationViewModel` on the regular conversatio
 | streaming | "•••" indicator + cancel button |
 | errored stream | inline error message |
 | user message edit mode | textarea inline |
-| compact mode page | CompactView replacement |
-| settings mode page | ConversationSettingsView replacement |
-| contexts mode page | ContextListView replacement |
+| compress sheet | CompactPane in its sheet with Cancel and Compress |
+| inspector, context tab | size against window and warning, totals, contexts with the active one marked |
+| inspector, settings tab | each call setting with its source, Edit opens the full form in a sheet |
 | usage popover | open with cache-read split |
 | long bullets / blockquotes (default + scale 1.1) | every wrapped list item and quote line shows in full, no "…" |
 | bullets inside a blockquote (narrow column + scale 1.1) | the quoted list item wraps instead of truncating |
@@ -421,6 +421,14 @@ A new conversation is a draft `ConversationViewModel` on the regular conversatio
 | compression card text selection mode | whole summary as the native text view plus Done in the header, no preview cut |
 | composer with a three-line draft | the text view grows to three lines |
 | composer with a twenty-line draft | capped at ten lines, the rest scrolls |
+
+#### Sidebar grouping (`SidebarSectionsTests`, Mac)
+
+Pure tests of `SidebarSections.group`: pinned first, then Today, Yesterday, Previous 7 Days, Previous 30 Days, then one section per month; newest first within a section; grouped by creation date when sorted that way.
+
+#### Window chrome (`WindowChromeTests`, Mac)
+
+The window setup pass touches only app windows. A popover and a borderless panel keep their size; before the fix they grew to the main window's 1080×520 floor, which is how menus and tooltips came out huge.
 
 #### Transcript scrolling (`TranscriptScrollTests`, Mac)
 
@@ -575,6 +583,33 @@ without one.
 Total: **~5-7 working days** for full coverage. Implementation can ship
 incrementally — Auth + Conversations repos first, then Profiles + Providers,
 then ViewModels, then snapshots, gating each on green tests.
+
+## End to end, frame by frame
+
+Layer 1 proves the view models and Layer 2 proves what a view looks like once
+it settles. Neither sees what happens between: a message that shows, vanishes
+mid-stream and comes back on reload passes both. Two harnesses record the
+screen over time instead.
+
+- **iOS: `make ios-e2e`.** `scripts/ios-e2e.sh` starts psmithd on a fresh
+  database plus the demo seeder's fake model (streaming a word every 80ms),
+  then runs the `*E2ETests` in the iOS test target against them. The tests
+  mount the real conversation screen inside a stack built like `ChatsRoot`'s
+  and drive it through the same calls its controls make. `E2ETimeline`
+  samples every quarter second: the rendered window (saved as a frame), its
+  text read back with on-device OCR, the navigation depth and the view
+  models' state, and saves `TranscriptTrace` beside them. Frames land in
+  `$PSMITH_E2E_OUT` (default `$TMPDIR/psmith-ios-e2e`). Waits must suspend
+  (`Task.sleep`), never spin the run loop: a test holding the main actor
+  starves the app's own continuations and records the stall instead of the
+  app.
+- **Web: the browser tests in `server/web`.** Headless Chrome against the
+  real handler, a fresh database and `fakellm`, sampling the page every
+  150ms. See [clients/web.md](clients/web.md#tests).
+
+Both assert on the whole timeline (every frame after a message first shows
+must still show it), and each was confirmed to fail against the bug it was
+written for.
 
 ## Appendix: deferred to Layer 3 (XCUITest)
 

@@ -21,12 +21,24 @@ struct PasteAwareTextField: UIViewRepresentable {
     var minHeight: CGFloat
     var maxHeight: CGFloat
     var onImagePaste: (Data) -> Void
+    var isEnabled = true
+
+    static func attributes(font: UIFont) -> [NSAttributedString.Key: Any] {
+        let para = NSMutableParagraphStyle()
+        para.minimumLineHeight = 22
+        para.maximumLineHeight = 22
+        return [.font: font, .paragraphStyle: para, .foregroundColor: UIColor(IK.text)]
+    }
 
     func makeUIView(context: Context) -> InternalTextView {
         let view = InternalTextView()
         view.delegate = context.coordinator
         view.coordinator = context.coordinator
-        view.font = .preferredFont(forTextStyle: .body)
+        // 16pt on 22pt lines, the composer boards' type.
+        view.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: .systemFont(ofSize: 16))
+        view.typingAttributes = Self.attributes(font: view.font!)
+        view.textColor = UIColor(IK.text)
+        view.isEditable = isEnabled
         view.backgroundColor = .clear
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0
@@ -40,8 +52,9 @@ struct PasteAwareTextField: UIViewRepresentable {
 
     func updateUIView(_ uiView: InternalTextView, context: Context) {
         context.coordinator.parent = self
+        uiView.isEditable = isEnabled
         if uiView.text != text {
-            uiView.text = text
+            uiView.attributedText = NSAttributedString(string: text, attributes: Self.attributes(font: uiView.font ?? .systemFont(ofSize: 16)))
             recalculateHeight(view: uiView)
         }
         // Mirror SwiftUI focus state into UIKit. Skip when the
@@ -53,6 +66,18 @@ struct PasteAwareTextField: UIViewRepresentable {
         } else if !isFocused, uiView.isFirstResponder {
             DispatchQueue.main.async { uiView.resignFirstResponder() }
         }
+    }
+
+    /// Width is the composer's to give, never the text's: a UITextView
+    /// reports its unwrapped text width as its natural size.
+    /// Height follows the text at the width offered, so a narrower phone
+    /// wraps instead of clipping; past `maxHeight` the view scrolls.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: InternalTextView, context: Context) -> CGSize? {
+        guard let width = proposal.width, width > 0 else { return CGSize(width: proposal.width ?? 0, height: measuredHeight) }
+        let fit = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
+        let shouldScroll = fit > maxHeight
+        if uiView.isScrollEnabled != shouldScroll { uiView.isScrollEnabled = shouldScroll }
+        return CGSize(width: width, height: min(max(fit, minHeight), maxHeight))
     }
 
     func makeCoordinator() -> Coordinator {

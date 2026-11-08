@@ -1,91 +1,81 @@
 import SwiftUI
 import PsmithKit
 
-/// Renders one image attachment on a historical message. Mints a
-/// signed URL via `FilesRepository.signedURL` on first appear and
-/// caches it for the lifetime of this view. SwiftUI's `AsyncImage`
-/// handles the URLSession fetch + cache below us — bytes are also
-/// cached by URLSession's default disk cache, so repeated views of
-/// the same conversation don't re-download.
-struct MessageAttachmentImage: View {
-    let attachment: PsmithMessageAttachment
-    @Environment(AppModel.self) private var app
-
-    @State private var url: URL?
-    @State private var failed = false
-    @State private var showingLightbox = false
-
-    /// Square thumbnail size — matches the composer's pending-chip
-    /// dimensions so a sent message visually echoes the chip the
-    /// user just dismissed by hitting send.
-    private let side: CGFloat = 140
+/// A message's images and files above its bubble (Attachments). Images
+/// are 140pt tiles that push the image viewer; files are chips.
+struct MessageAttachments: View {
+    let message: PsmithMessage
 
     var body: some View {
-        Group {
-            if failed {
-                placeholder(systemImage: "exclamationmark.triangle")
-            } else if let url {
-                AsyncImage(url: url, transaction: Transaction(animation: .easeInOut(duration: 0.15))) { phase in
-                    switch phase {
-                    case .empty:
-                        placeholder(systemImage: "photo")
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    case .failure:
-                        placeholder(systemImage: "exclamationmark.triangle")
-                    @unknown default:
-                        placeholder(systemImage: "photo")
+        let images = message.attachments.filter { $0.kind == "image" }
+        let files = message.attachments.filter { $0.kind != "image" }
+        VStack(alignment: .trailing, spacing: 6) {
+            if !images.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(images) { MessageAttachmentImage(messageID: message.id, attachment: $0) }
                     }
                 }
-            } else {
-                placeholder(systemImage: "photo")
+                .defaultScrollAnchor(.trailing)
+                .fixedSize(horizontal: images.count <= 2, vertical: false)
             }
+            ForEach(files) { MessageAttachmentChip(attachment: $0) }
         }
-        .frame(width: side, height: side)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            // Only present the lightbox when we actually have a URL
-            // — tapping during the loading / failed states would
-            // either show a spinner or an error glyph at full
-            // screen, neither of which is useful.
-            guard url != nil, !failed else { return }
-            showingLightbox = true
-        }
-        .fullScreenCover(isPresented: $showingLightbox) {
-            if let url {
-                MessageAttachmentLightbox(url: url)
+    }
+}
+
+/// One image tile. Loads a signed URL for the thumbnail; tap opens the
+/// image viewer page.
+struct MessageAttachmentImage: View {
+    let messageID: String
+    let attachment: PsmithMessageAttachment
+    @Environment(AppModel.self) private var app
+    @Environment(\.openConversationPage) private var open
+    @State private var url: URL?
+    @State private var failed = false
+
+    private let side: CGFloat = 140
+    private var filename: String { attachment.originalFilename ?? "Image" }
+
+    var body: some View {
+        Button {
+            open(.image(messageID: messageID, fileID: attachment.fileID, filename: filename))
+        } label: {
+            Group {
+                if let url, !failed {
+                    AsyncImage(url: url, transaction: Transaction(animation: .easeInOut(duration: 0.15))) { phase in
+                        if case .success(let image) = phase {
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        } else {
+                            placeholder(failed: phase.error != nil)
+                        }
+                    }
+                } else {
+                    placeholder(failed: failed)
+                }
             }
+            .frame(width: side, height: side)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(IK.ring(0.1), lineWidth: 0.5))
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open image \(filename)")
         .task(id: attachment.fileID) {
-            // Signed URLs have a 30s TTL. The view re-mints if the
-            // user lingers on a long scroll-back page and the URL
-            // expires — `task(id:)` fires once per attachment id,
-            // and we don't re-fire on URL expiry. Acceptable v1:
-            // if the URL expires while visible, AsyncImage will
-            // fail and the user sees the warning glyph. The next
-            // scroll-out + scroll-in re-mints.
             if url != nil { return }
-            do {
-                url = try await app.client.files.signedURL(fileID: attachment.fileID)
-            } catch {
-                failed = true
-            }
+            do { url = try await app.client.files.signedURL(fileID: attachment.fileID) } catch { failed = true }
         }
     }
 
-    private func placeholder(systemImage: String) -> some View {
+    private func placeholder(failed: Bool) -> some View {
         ZStack {
-            Color.primary.opacity(0.05)
-            Image(systemName: systemImage)
-                .font(.title2)
-                .foregroundStyle(.tertiary)
+            LinearGradient(colors: [IK.wash(0.10), IK.wash(0.04)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            VStack(spacing: 8) {
+                Image(systemName: "photo").font(.system(size: 26))
+                Text(filename).font(.system(size: 11.5)).multilineTextAlignment(.center).lineLimit(2)
+            }
+            .foregroundStyle(IK.secondary)
+            .padding(.horizontal, 10)
         }
     }
 }

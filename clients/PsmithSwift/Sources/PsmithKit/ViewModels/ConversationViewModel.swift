@@ -682,6 +682,7 @@ public final class ConversationViewModel {
         // chooseDraftProfile.
         guard !isDraft else { return }
         loading = true
+        TranscriptTrace.note(conversation.id, "load start \(TranscriptTrace.rows(messages)) streaming=\(isStreaming) sending=\(sending)")
         defer {
             loading = false
             hasLoadedFromServer = true
@@ -695,6 +696,7 @@ public final class ConversationViewModel {
             self.conversation = conv
             self.activeContext = ctx
             self.messages = try await client.conversations.listMessages(contextID: ctx.id)
+            TranscriptTrace.note(conversation.id, "load done \(TranscriptTrace.rows(messages)) serverLeaf=\(ctx.currentLeafMessageID?.suffix(8) ?? "nil")")
             self.loadError = nil
             // Selection priority:
             //   1. conversations.settings.{default_provider_id, default_model_id}
@@ -732,6 +734,7 @@ public final class ConversationViewModel {
             async let ctxs: Void = loadContexts()
             _ = await (tokens, tree, ctxs)
         } catch {
+            TranscriptTrace.note(conversation.id, "load failed: \(error)")
             self.loadError = PsmithError.display(error)
         }
     }
@@ -765,6 +768,7 @@ public final class ConversationViewModel {
             // A load that failed (opened while the server was down)
             // left the transcript on cached rows and an error banner up;
             // an unchanged server row doesn't make those current.
+            TranscriptTrace.note(conversation.id, "stale check: context=\(contextChanged) leaf=\(leafMoved) stamp=\(stampMoved) serverLeaf=\(ctx.currentLeafMessageID?.suffix(8) ?? "nil") \(TranscriptTrace.rows(messages))")
             if contextChanged || leafMoved || stampMoved || loadError != nil {
                 // load() re-fetches the chain and runs the advisory
                 // refreshes (token count, tree, contexts) itself.
@@ -1085,6 +1089,7 @@ public final class ConversationViewModel {
         // `queuedEntries` to render the queued bubble in the
         // meantime — no separate optimistic state path needed.
         if let outboundQueue, connectivity?.state == .offline {
+            TranscriptTrace.note(conversation.id, "send queued: offline \(TranscriptTrace.rows(messages))")
             outboundQueue.enqueue(.init(
                 conversationID: conversation.id,
                 content: text,
@@ -1099,6 +1104,7 @@ public final class ConversationViewModel {
 
         // Show message optimistically before the RPC round-trip completes.
         pendingUserText = text
+        TranscriptTrace.note(conversation.id, "send start: pending set \(TranscriptTrace.rows(messages))")
 
         do {
             let (userMsg, run) = try await client.conversations.sendMessage(
@@ -1111,6 +1117,7 @@ public final class ConversationViewModel {
             )
             pendingUserText = nil
             messages.append(userMsg)
+            TranscriptTrace.note(conversation.id, "send ok: appended user \(userMsg.id.suffix(8)) run \(run.id.suffix(8)) \(TranscriptTrace.rows(messages))")
             await persistTranscriptToCache()
             // Hand the run to the hub — it owns the subscriber task
             // and accumulates streaming state. Terminal arrives via
@@ -1139,6 +1146,7 @@ public final class ConversationViewModel {
             //      needs to fix something before another send will
             //      succeed.
             pendingUserText = nil
+            TranscriptTrace.note(conversation.id, "send failed: \(isLikelyTransientNetworkError(error) ? "network, queued" : "rejected") \(error)")
             if let outboundQueue, isLikelyTransientNetworkError(error) {
                 outboundQueue.enqueue(.init(
                     conversationID: conversation.id,
@@ -1951,6 +1959,7 @@ public final class ConversationViewModel {
     @MainActor
     private func handleStreamTerminal(_ run: PsmithStreamRun) async {
         let purpose = run.purpose
+        TranscriptTrace.note(conversation.id, "terminal: run \(run.id.suffix(8)) purpose=\(purpose) result=\(run.resultMessageID?.suffix(8) ?? "nil") \(TranscriptTrace.rows(messages))")
         if streamingThinkingExpanded, let resultID = run.resultMessageID, !resultID.isEmpty {
             expandedThinkingMessageIDs.insert(resultID)
         }
@@ -1981,6 +1990,7 @@ public final class ConversationViewModel {
            messages.last?.id == parentID,
            !messages.contains(where: { $0.id == settled.id }) {
             messages.append(settled)
+            TranscriptTrace.note(conversation.id, "terminal: appended reply in place \(TranscriptTrace.rows(messages))")
             await persistTranscriptToCache()
             hub.clear(conversationID: conversation.id)
             swappedInPlace = true
@@ -2005,9 +2015,13 @@ public final class ConversationViewModel {
             // Slow path: assign the chain and clear the hub between the
             // same two awaits (same one-frame swap contract), then full
             // load() for the bookkeeping.
+            TranscriptTrace.note(conversation.id, "terminal: reload path (in-place append didn't apply) context=\(activeContext?.id.suffix(8) ?? "nil")")
             if let ctx = activeContext,
                let chain = try? await client.conversations.listMessages(contextID: ctx.id) {
                 self.messages = chain
+                TranscriptTrace.note(conversation.id, "terminal: reloaded chain \(TranscriptTrace.rows(chain))")
+            } else {
+                TranscriptTrace.note(conversation.id, "terminal: chain reload skipped or failed; transcript unchanged")
             }
             hub.clear(conversationID: conversation.id)
             await load()

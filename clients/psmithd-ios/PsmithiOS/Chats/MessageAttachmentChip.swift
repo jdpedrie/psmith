@@ -1,18 +1,11 @@
 import SwiftUI
 import PsmithKit
 
-/// Compact chip for non-image message attachments (PDF / audio /
-/// video). Renders a kind-appropriate SF Symbol, the original
-/// filename (truncated middle), and a small "PDF · 1.2 MB"-style
-/// metadata line. Tap opens the file in Quick Look — handles PDFs,
-/// audio, video, and most document types out of the box.
-///
-/// Sized to roughly match the height of the image-thumbnail strip
-/// (140pt) so a mixed-kinds message lines up visually.
+/// A file a message carries (PDF, audio, video): icon, name, size.
+/// Tap downloads it and pushes Quick Look (Attachments).
 struct MessageAttachmentChip: View {
     let attachment: PsmithMessageAttachment
     @Environment(AppModel.self) private var app
-
     @State private var localURL: URL?
     @State private var loading = false
     @State private var failed = false
@@ -25,58 +18,43 @@ struct MessageAttachmentChip: View {
             HStack(spacing: 10) {
                 ZStack {
                     Image(systemName: iconName)
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 20))
+                        .foregroundStyle(IK.secondary)
                         .opacity(loading ? 0 : 1)
-                    if loading {
-                        ProgressView().controlSize(.small)
-                    }
+                    if loading { IKSpinner() }
                 }
-                .frame(width: 32)
-                VStack(alignment: .leading, spacing: 2) {
+                .frame(width: 24)
+                VStack(alignment: .leading, spacing: 1) {
                     Text(displayName)
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(.primary)
+                        .font(.system(size: 13))
+                        .foregroundStyle(IK.text)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Text(metaLine)
-                        .font(.caption)
-                        .foregroundStyle(failed
-                            ? AnyShapeStyle(Color.red)
-                            : AnyShapeStyle(HierarchicalShapeStyle.tertiary))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(failed ? IK.red : IK.tertiary)
                         .lineLimit(1)
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(maxWidth: 220, alignment: .leading)
-            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-            )
+            .frame(height: 52)
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(maxWidth: 240, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 12).fill(IK.wash(0.05)))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(IK.ring(0.08), lineWidth: 0.5))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(displayName), \(metaLine). Tap to preview.")
-        .fullScreenCover(isPresented: $showingPreview) {
+        .navigationDestination(isPresented: $showingPreview) {
             if let localURL {
-                NavigationStack {
-                    MessageAttachmentPreview(url: localURL)
-                        .ignoresSafeArea()
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button("Done") { showingPreview = false }
-                            }
-                        }
-                }
+                MessageAttachmentPreview(url: localURL)
+                    .ignoresSafeArea(edges: .bottom)
+                    .navigationTitle(displayName)
+                    .navigationBarTitleDisplayMode(.inline)
             }
         }
     }
 
-    /// Mint a signed URL, download the bytes to a sandboxed temp
-    /// file, and present the Quick Look sheet. Caches the local
-    /// file across taps for the lifetime of this view so re-taps
-    /// don't re-download.
     @MainActor
     private func openPreview() async {
         if let localURL, FileManager.default.fileExists(atPath: localURL.path) {
@@ -112,7 +90,7 @@ struct MessageAttachmentChip: View {
     private var iconName: String {
         switch attachment.kind {
         case "document":
-            return attachment.mimeType == "application/pdf" ? "doc.richtext" : "doc"
+            return "doc.text"
         case "audio": return "waveform"
         case "video": return "film"
         default: return "doc"
@@ -132,24 +110,11 @@ struct MessageAttachmentChip: View {
     }
 
     private var metaLine: String {
-        if failed { return "Couldn't load — tap to retry" }
-        let kindLabel: String
-        switch attachment.kind {
-        case "document":
-            kindLabel = attachment.mimeType == "application/pdf" ? "PDF" : "Document"
-        case "audio": kindLabel = "Audio"
-        case "video": kindLabel = "Video"
-        default: kindLabel = attachment.mimeType
-        }
-        return "\(kindLabel) · \(formattedSize(attachment.sizeBytes))"
+        if failed { return "Couldn't load. Tap to retry." }
+        return formattedSize(attachment.sizeBytes)
     }
 
-    private func formattedSize(_ bytes: Int64) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useKB, .useMB, .useGB]
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: bytes)
-    }
+    private func formattedSize(_ bytes: Int64) -> String { UsageFormat.bytes(Int(bytes)) }
 
     /// Best-effort file extension for a mime type. Quick Look uses
     /// the extension to pick a renderer, so a bare file_id with no

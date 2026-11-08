@@ -4,26 +4,21 @@ import PsmithUI
 import QuartzCore
 import os.log
 
-/// Diagnostic logger for the auto-follow state machine. Notice-level
-/// so entries survive into `log show` — these breadcrumbs exist
-/// because the follow/park interactions are only observable on a live
-/// stream and have burned multiple debugging rounds.
+/// Breadcrumbs for the follow-then-park state machine. Notice-level so
+/// they survive into `log show`: these interactions only show on a live
+/// stream.
 private let scrollLog = Logger(subsystem: "dev.jdpedrie.psmith", category: "ChatScroll")
 
 extension Notification.Name {
-    /// "Jump to the start of the context" — posted by the toolbar
-    /// title button (object: conversation id); ConversationBody
-    /// observes and runs its scroll-to-oldest. A notification rather
-    /// than a binding because the toolbar item lives on the OUTER
-    /// view while the scroll machinery is ConversationBody's.
+    /// "Jump to the start of the context", posted by the status-bar
+    /// bridge (object: conversation id); the screen runs its
+    /// scroll-to-oldest.
     static let psmithScrollToContextStart = Notification.Name("psmith.scrollToContextStart")
 }
 
-/// iOS conversation surface. Constructs `ConversationViewModel` against
-/// the live `psmithd`, then renders the status strip + message scroll.
-/// Per `docs/clients/ios-reference.md`: composer arrives in Phase 5d, the
-/// page-replace alternates (Compact / Contexts / Settings / Model
-/// Picker) become push/sheet destinations in Phase 5g.
+/// A conversation (board Conversation and its states). Builds the
+/// `ConversationViewModel` against the live server, then shows the
+/// screen.
 struct ConversationView: View {
     /// The conversation opened from the list; nil for a new one.
     private let existing: PsmithConversation?
@@ -36,21 +31,25 @@ struct ConversationView: View {
     @Environment(\.notifier) private var notifier
     @Environment(\.scenePhase) private var scenePhase
     @State private var model: ConversationViewModel?
+    @State private var ui = ConversationUIState()
+    /// Hands each view model this view builds to an observer. Tests use it
+    /// to drive the real screen and to see whether a model was replaced.
+    private let onModel: ((ConversationViewModel, ConversationUIState) -> Void)?
 
-    init(conversation: PsmithConversation) {
+    init(conversation: PsmithConversation, onModel: ((ConversationViewModel, ConversationUIState) -> Void)? = nil) {
         existing = conversation
         draftID = nil
+        self.onModel = onModel
     }
 
     /// A new conversation: nothing exists on the server until its first
     /// message is sent.
-    init(newConversation draftID: UUID) {
+    init(newConversation draftID: UUID, onModel: ((ConversationViewModel, ConversationUIState) -> Void)? = nil) {
         existing = nil
         self.draftID = draftID
+        self.onModel = onModel
     }
 
-    /// The conversation as it currently stands: the view model's once
-    /// it exists (a draft's changes to a real one at its first send).
     private var conversation: PsmithConversation {
         model?.conversation ?? existing ?? Self.emptyDraft
     }
@@ -60,68 +59,46 @@ struct ConversationView: View {
         ownerUserID: "", createdAt: .distantPast, updatedAt: .distantPast
     )
 
-    private var setupKey: String {
-        existing?.id ?? draftID?.uuidString ?? ""
-    }
+    private var setupKey: String { existing?.id ?? draftID?.uuidString ?? "" }
 
     var body: some View {
         Group {
             if let model {
-                ConversationBody(model: model, liveConversation: liveConversation)
+                ConversationScreen(model: model, ui: ui)
             } else {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .navigationTitle(existing?.title ?? "New conversation")
+                    .navigationBarTitleDisplayMode(.inline)
             }
         }
-        // Edge-only back swipe while the conversation is up — the
-        // iOS 26 swipe-anywhere pop fires on rightward transcript
-        // drags (see BackSwipeLimiter).
+        // Edge-only back swipe while the conversation is up: the iOS 26
+        // swipe-anywhere pop fires on rightward transcript drags.
         .background(BackSwipeLimiter())
         .onAppear {
-            // Mark this conversation as on-screen so a terminal arriving
-            // while the user is looking at it doesn't raise the "new
-            // message" dot on its sidebar row. markViewing also clears
-            // any pending unseen flag — opening the chat is the user's
-            // implicit "I've seen it."
-            if !conversation.id.isEmpty {
-                app.streamHub.markViewing(conversationID: conversation.id)
-            }
+            TranscriptTrace.note(conversation.id, "view appeared model=\(model != nil)")
+            // On screen: a terminal arriving now doesn't raise the list's
+            // new-message dot, and any pending one clears.
+            if !conversation.id.isEmpty { app.streamHub.markViewing(conversationID: conversation.id) }
         }
-        // A new conversation gets its id at the first send, while on
-        // screen.
+        // A new conversation gets its id at the first send, on screen.
         .onChange(of: model?.conversation.id) { _, id in
-            if let id, !id.isEmpty {
-                app.streamHub.markViewing(conversationID: id)
-            }
+            if let id, !id.isEmpty { app.streamHub.markViewing(conversationID: id) }
         }
         .onDisappear {
+            TranscriptTrace.note(conversation.id, "view disappeared")
             app.streamHub.markStoppedViewing(conversationID: conversation.id)
         }
-        .sheet(item: Binding(
-            get: { app.streamHub.activeStream(conversationID: conversation.id)?.pendingElicitations.first },
-            set: { _ in /* ElicitSheet calls clearPendingElicitation on its own */ }
-        )) { pending in
-            ElicitSheet(conversationID: conversation.id, pending: pending)
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            // Per `docs/clients/ios-reference.md`: cancel the live
-            // SSE on background, re-subscribe from the last seen
-            // sequence on foreground. Supervisor keeps streaming the
-            // whole time and persists chunks to stream_chunks; replay
-            // is correct-by-construction.
+        .onChange(of: scenePhase) { _, phase in
+            // The server keeps streaming while we're away and persists
+            // chunks; on return the subscriber replays from the last
+            // sequence, and anything changed elsewhere reconciles.
             guard let m = model else { return }
-            switch newPhase {
-            case .background, .inactive:
-                m.suspendActiveStream()
+            switch phase {
+            case .background, .inactive: m.suspendActiveStream()
             case .active:
                 m.resumeStreamIfPaused()
-                // Reconcile anything mutated from another client
-                // while this device was suspended (account events
-                // don't replay). Cheap: one GetConversation unless
-                // something actually moved.
                 Task { await m.refreshIfStale() }
-            @unknown default:
-                break
+            @unknown default: break
             }
         }
         .onChange(of: app.connectivity.state) { old, new in
@@ -129,29 +106,23 @@ struct ConversationView: View {
             Task { await m.reloadAfterReconnect() }
         }
         .task(id: setupKey) {
+            TranscriptTrace.note(conversation.id, "view setup task model=\(model != nil)")
             if existing == nil {
-                await setUpNewConversation()
+                // `.task` runs again every time this view reappears, as it
+                // does when a pushed page (the model picker, Info) pops. A
+                // draft has nothing on the server to reload, so rebuilding
+                // it threw away the profile and model just chosen.
+                if model == nil { await setUpNewConversation() }
                 return
             }
-            // Recreate the view model on every (re-)appearance — the
-            // scroll machinery is built around a fresh cold-entry
-            // settle per entry. A VM-reuse fast path for back-
-            // navigation was tried (to dodge the settings-save race)
-            // and regressed scrolling across the board; the race it
-            // dodged is now fixed at the source — every settings
-            // writer does a fresh read-modify-write against the live
-            // row (see saveCallSettings / selectModel), so a stale
-            // VM snapshot can no longer clobber anything.
+            // A fresh view model per appearance: the scroll machinery is
+            // built around a cold-entry settle per entry, and every
+            // settings writer does a fresh read-modify-write, so a stale
+            // snapshot can't clobber anything.
             //
-            // Drop stale parsed-markdown entries from the previous
-            // conversation so the cache doesn't accumulate forever
-            // across long sessions. Each conversation's entries land
-            // back in the cache as soon as its first load() returns.
+            // Parsed markdown from the previous conversation goes; this
+            // one's lands back as soon as its first load returns.
             MarkdownCache.shared.clear()
-            // Capture env-injected notifier into the closure so the VM-side
-            // firing path doesn't reach into a global. iOS Notifier impl
-            // arrives in Phase 8b; for now `\.notifier` resolves to the
-            // NoopNotifier default.
             let liveNotifier = notifier
             let m = ConversationViewModel(
                 conversation: existing ?? conversation,
@@ -161,88 +132,34 @@ struct ConversationView: View {
                 connectivity: app.connectivity,
                 onTerminal: { [weak convos] in await convos?.refresh() },
                 onAssistantTurnComplete: { convID, title, msgID, preview in
-                    liveNotifier.generationCompleted(
-                        conversationID: convID,
-                        conversationTitle: title,
-                        messageID: msgID,
-                        preview: preview
-                    )
+                    liveNotifier.generationCompleted(conversationID: convID, conversationTitle: title,
+                                                     messageID: msgID, preview: preview)
                 },
                 localTitler: AppleFoundationTitler()
             )
             m.speechPlayer = app.speech
-            // Cache-first entry: cached transcript renders this frame;
-            // the network load replaces it (and the inverted list's
-            // rest edge makes the swap invisible at the bottom).
+            // Cache first: the cached transcript renders this frame and
+            // the network load replaces it at the inverted list's rest
+            // edge, where the swap is invisible.
             await m.hydrateFromCache()
             self.model = m
+            onModel?(m, ui)
             await m.load()
-            // Decide whether to fire the on-device titler (or its cloud
-            // fallback) now that the messages are in hand — same trigger
-            // the Mac shell runs. The profile map lets the VM resolve
-            // title_provider_kind through the parent chain locally.
             let profileMap = Dictionary(uniqueKeysWithValues: convos.profiles.map { ($0.id, $0) })
             await m.maybeGenerateLocalTitle(profilesByID: profileMap)
-            // Loaded alongside the message list so the model chip
-            // can show the display name (not just the model id) and
-            // contexts toolbar item knows the count up-front.
             await m.loadContexts()
             await m.loadAvailableModels()
-            // Pre-warm parsed markdown in a background task so the
-            // first scroll-back through long history doesn't pay the
-            // parse cost on every realization. Cache-aware: on a
-            // subsequent terminal reload, only new messages parse.
-            MarkdownCache.shared.prewarm(
-                m.messages.map {
-                    let stamp = $0.editedAt?.timeIntervalSince1970 ?? 0
-                    return (key: "\($0.id):\(stamp)", source: $0.displayContent ?? $0.content)
-                }
-            )
-        }
-        .navigationTitle(navTitle)
-        .navigationBarTitleDisplayMode(.inline)
-        // Tap the TITLE to jump to the start of the context. This is
-        // the reliable device path for "tap the top to go to the
-        // beginning": the navigation bar owns touches in its band, so
-        // any tap target we float UNDER the bar never hears them on
-        // hardware (the sim's synthetic taps slipped through, which
-        // is why the fade-band tap looked verified). A principal
-        // toolbar item lives INSIDE the bar and wins those touches.
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Button(action: scrollToOldestFromToolbar) {
-                    Text(navTitle)
-                        .font(.headline)
-                        .lineLimit(1)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(navTitle) — tap to scroll to the start of the conversation")
-            }
+            // Parse history off the main thread so the first scroll back
+            // through it doesn't pay per row.
+            MarkdownCache.shared.prewarm(m.messages.map {
+                let body = $0.displayContent ?? $0.content
+                return (key: MessageRow.markdownKey(id: $0.id, body: body), source: body)
+            })
         }
     }
 
-    /// The toolbar lives outside ConversationBody, so the title button
-    /// posts the same notification the (device-only) status-bar bridge
-    /// uses; the body observes it and runs its scroll-to-oldest.
-    private func scrollToOldestFromToolbar() {
-        NotificationCenter.default.post(name: .psmithScrollToContextStart, object: conversation.id)
-    }
-
-    /// Always read the latest snapshot from the list so an auto-generated
-    /// title propagates without forcing a remount of this view.
-    private var liveConversation: PsmithConversation {
-        convos.conversations.first(where: { $0.id == conversation.id }) ?? conversation
-    }
-
-    private var navTitle: String {
-        if conversation.id.isEmpty { return "New Conversation" }
-        let t = liveConversation.title ?? ""
-        return t.isEmpty ? "Untitled" : t
-    }
-
-    /// Builds a draft view model and starts it from the default
-    /// profile when one is set; otherwise the profile pane opens and
-    /// the user picks.
+    /// Starts a draft from the default profile when there is one;
+    /// otherwise the start screen asks.
     private func setUpNewConversation() async {
         let liveNotifier = notifier
         let m = ConversationViewModel.draft(
@@ -252,23 +169,16 @@ struct ConversationView: View {
             connectivity: app.connectivity,
             onTerminal: { [weak convos] in await convos?.refresh() },
             onAssistantTurnComplete: { convID, title, msgID, preview in
-                liveNotifier.generationCompleted(
-                    conversationID: convID,
-                    conversationTitle: title,
-                    messageID: msgID,
-                    preview: preview
-                )
+                liveNotifier.generationCompleted(conversationID: convID, conversationTitle: title,
+                                                 messageID: msgID, preview: preview)
             },
             localTitler: AppleFoundationTitler()
         )
         m.speechPlayer = app.speech
-        // The terminal-time local titler resolves the profile's title
-        // kind from this map; an existing conversation seeds it at entry.
         m.localTitleProfilesByID = Dictionary(uniqueKeysWithValues: convos.profiles.map { ($0.id, $0) })
-        m.onConversationCreated = { [weak convos] created in
-            convos?.didCreate(created)
-        }
+        m.onConversationCreated = { [weak convos] created in convos?.didCreate(created) }
         model = m
+        onModel?(m, ui)
         if let profile = convos.profiles.first(where: { $0.isDefault && !$0.parentOnly }) {
             await m.chooseDraftProfile(profile)
         } else {
@@ -277,379 +187,439 @@ struct ConversationView: View {
     }
 }
 
-// MARK: - Conversation body (separated for env injection of model)
+// MARK: - Screen
 
-private struct ConversationBody: View {
+/// The conversation screen: the system navigation bar with the title
+/// and the context gauge, the inverted transcript, and the composer's
+/// slot, which a card takes over when something else needs an answer
+/// first.
+struct ConversationScreen: View {
     @Bindable var model: ConversationViewModel
-    let liveConversation: PsmithConversation
+    let ui: ConversationUIState
+    /// Tests stand in for the stream's pending elicitation, whose type
+    /// has no public initializer.
+    var elicitOverride: ElicitRequest?
+    var onSend: (() -> Void)?
+    var onStop: (() -> Void)?
+    /// Tests show the follow pill without scrolling.
+    var forceFollowPill = false
     @Environment(AppModel.self) private var app
     @Environment(ConversationsModel.self) private var convos
     @Environment(\.theme) private var theme
 
-    // THE INVERTED TRANSCRIPT. The scroll view renders through
-    // scaleEffect(y: -1) with each row flipped back and the message
-    // array iterated newest-first, so the newest message sits at
-    // content offset 0. Zero is not an estimate: every failure class
-    // this view has a history of — entry seeks landing in phantom
-    // space, the pill parking blank after a long jump, past-bottom
-    // clamps chasing a flapping content estimate at 100% CPU — came
-    // from solving positions against the estimated FAR end of a
-    // LazyVStack. Inverted, the interesting edge is the exact end;
-    // and since the stack went eager (see paneScrollBody) there is
-    // no estimate error anywhere — every offset is a laid-out fact.
-    //
-    // What this deletes: the cold-entry tail window + staged
-    // backfill + entry curtain + settle failsafes, the pill
-    // convergence loop + governor, the past-bottom clamp, and the
-    // measured send-pin jump. What stays: the width pins (horizontal
-    // containment is orthogonal to flip direction), the Equatable
-    // subview gates (ForEach diff cost is real at 447 rows), the
-    // markdown prewarm + budget, and the send runway (content
-    // constant under a shrinking spacer), now with near-origin
-    // EXACT coordinates instead of estimated ones.
-    //
-    // There is still NO auto-follow. A send pins the just-sent
-    // question at the viewport top and the reply streams in below
-    // with the viewport motionless.
-    //
-    /// Scroll handle for the explicit seeks (send pin, pill).
-    @State private var scrollPosition = ScrollPosition()
-    /// Programmatic push into the contexts list — the Contexts entry
-    /// lives in the toolbar menu now, and Menus don't host
-    /// NavigationLinks reliably.
-    @State private var showingContexts = false
-    /// Message opened in the full-document reader via the action
-    /// menu's "Select text".
-    @State private var selectTextMessage: PsmithMessage?
-    /// Message whose usage sheet the action menu's "Details" opened.
-    @State private var usageMessage: PsmithMessage?
+    /// The latest list snapshot, so a generated title shows without a
+    /// remount.
+    private var liveConversation: PsmithConversation {
+        convos.conversations.first(where: { $0.id == model.conversation.id }) ?? model.conversation
+    }
 
-    /// Latest scroll metrics, readable OUTSIDE the geometry handler.
-    /// A reference-type box deliberately: writing it per tick must not
-    /// invalidate any view body (an @State struct write would — that
-    /// per-tick invalidation was the amplification engine behind the
-    /// pre-inversion 100%-CPU storms). Kept as the debugging window
-    /// into the live metrics even though no steady-state actor reads
-    /// it anymore.
+    private var elicit: ElicitRequest? {
+        if let elicitOverride { return elicitOverride }
+        guard let p = app.streamHub.activeStream(conversationID: model.conversation.id)?.pendingElicitations.first else { return nil }
+        return ElicitRequest(id: p.id, message: p.message, schemaJSON: p.schemaJSON)
+    }
+
+    @State private var showingSettings = false
+    @State private var queueTick = 0
+    @State private var rootHeight: CGFloat = 800
+    @FocusState private var renameFocused: Bool
+
+    // Scroll machinery: see paneScrollBody.
+    @State private var scrollPosition = ScrollPosition()
+    /// Latest scroll metrics in a reference box: writing it per tick must
+    /// not invalidate any body (per-tick @State writes were what drove
+    /// the old 100%-CPU storms).
     private final class ScrollMetricsBox {
-        var latest = ScrollMetrics(
-            contentHeight: 0, offset: 0, viewportHeight: 0,
-            contentWidth: 0, viewportWidth: 0, offsetX: 0
-        )
+        var latest = ScrollMetrics(contentHeight: 0, offset: 0, viewportHeight: 0,
+                                   contentWidth: 0, viewportWidth: 0, offsetX: 0)
     }
     @State private var metricsBox = ScrollMetricsBox()
-
-    /// Viewport height of the message scroll, measured via
-    /// `onGeometryChange`.
     @State private var viewportHeight: CGFloat = 0
-    /// The scroll pane's TOP safe-area inset (nav-bar clearance),
-    /// re-applied as a content-space BOTTOM margin so it renders at
-    /// the visual top through the flip.
+    /// The pane's top safe-area inset (nav bar clearance), re-applied as
+    /// a content-space bottom margin so it renders at the visual top
+    /// through the flip.
     @State private var navClearance: CGFloat = 0
-    /// Width of the message pane, measured via `onGeometryChange` and
-    /// injected as `chatPaneWidth` for bubble width caps. Measured
-    /// WITHOUT wrapping the ScrollView in a layout-owning
-    /// GeometryReader — that wrapper made the scroll content lose its
-    /// horizontal padding (content slammed to the screen edges) the
-    /// instant the keyboard appeared or a send fired, snapping back
-    /// only on the next interaction. `onGeometryChange` measures the
-    /// view in place, so the ScrollView keeps normal keyboard
-    /// avoidance + insets.
+    /// Measured in place with onGeometryChange: a GeometryReader around
+    /// the scroll view lost the content's horizontal padding whenever the
+    /// keyboard appeared.
     @State private var paneWidth: CGFloat = 0
-    /// True when the scroll position is more than `scrollToBottomThreshold`
-    /// points away from the bottom of the message list. Drives the
-    /// "Scroll to bottom" pill that slides down from below the status
-    /// strip; tapping it returns the user to the latest message.
-    /// Inverted, "distance from bottom" is simply the offset.
-    @State private var isFarFromBottom: Bool = false
-
-    /// Distance (pt) from the bottom that flips the "scroll to bottom"
-    /// affordance on. Roughly one bubble-height of slack so the pill
-    /// doesn't pop the moment the user reads past the last message.
+    @State private var isFarFromBottom = false
     private let scrollToBottomThreshold: CGFloat = 200
-
-    /// The scroll-content unit's global minX, from the layer probe.
-    /// Regression telemetry for the horizontal-displacement bug class
-    /// (the scroll offset's x reads 0 while the content draws
-    /// displaced — the probes disagree by design; pixels follow the
-    /// content unit).
     @State private var contentUnitMinX: CGFloat = 0
-
-
-    // STREAMING SCROLL, sixth design (follow-then-park). The user's
-    // spec, and the first design where the inverted list's native
-    // physics do ALL the work: follow the growing reply until its
-    // top reaches the viewport top, then park with further growth
-    // below the fold, and any user scroll detaches immediately and
-    // completely.
-    //
-    // Follow = the rest edge. At offset ~0 the viewport is glued to
-    // the newest content by construction, so the reply pours in
-    // above the composer and the transcript slides up — no anchor,
-    // no per-tick commands, nothing to fight. Park = the CLIP: when
-    // the streaming row's measured height reaches one viewport, its
-    // rendered height caps there (first lines visible — alignment
-    // .bottom reads as the reply's top through the flips), so
-    // content stops growing and the rest-edge frame freezes with
-    // the reply's top at the viewport top. The tail accumulates
-    // behind the clip — "below the fold". Zero scroll commands for
-    // the entire stream. Detach is inherent: there is no held
-    // position and no follow machinery, so the instant the user
-    // moves the viewport they own it (the terminal solve also
-    // yields to `isPositionedByUser`).
-    //
-    // At terminal the clip releases (full reply lands) and ONE
-    // exact id-solve restores the parked frame — the settled
-    // reply's top at the viewport top; short replies clamp to the
-    // rest edge, which is the same frame they streamed in.
-    //
-    // History: the fifth design jumped instantly to question-at-top
-    // over a viewport-sized runway spacer (this design deletes the
-    // spacer and the jump). The fourth (held id-anchor) died in one
-    // live test: any nonzero held offset is garbage during a
-    // structural re-estimate — LazyVStack re-mapped ±40k pt under a
-    // frozen offset and the viewport spent a whole stream lost in
-    // mid-history.
-
-    /// The streaming row's rendered-height cap, set when a stream
-    /// begins (~one viewport). Nonzero = a stream's park contract is
-    /// live; zeroed at terminal, by the pill, and on send failure.
+    /// The streaming row's rendered-height cap, set when a stream begins
+    /// (about one viewport). Nonzero means the park is live; zeroed at
+    /// the terminal, by the pill, and on send failure.
     @State private var streamClipBudget: CGFloat = 0
-    /// True while the ScrollPosition binding holds a one-shot
-    /// programmatic position (send catch-up, terminal solve, pill).
-    /// Released (binding replaced) on user grab and by each solve's
-    /// own settle task — a held position is STICKY and re-applies
-    /// against a user's drag otherwise.
+    /// True while the scroll position holds a one-shot programmatic
+    /// position. A held position is sticky and re-applies against a
+    /// user's drag, so each one releases on grab or after its settle.
     @State private var positionHeld = false
+
+    private var showsDraftStart: Bool {
+        model.isDraft && model.pendingUserText == nil && !model.creatingConversation
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            if model.isDraft {
-                DraftProfilePane(model: model, profiles: convos.profiles)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+            Group {
+                if showsDraftStart {
+                    draftStart
+                } else {
+                    messageScroll
+                }
             }
-            // A draft's failure (the create on first send) is a banner
-            // over its preview, never the full-pane load-failure state.
-            if let err = model.loadError, !model.messages.isEmpty || model.isDraft {
-                loadErrorBanner(err)
-            }
-            if let speechErr = app.speech.playbackError {
-                speechErrorBanner(speechErr)
-            }
-            messageScroll
-            if let archivedAt = liveConversation.archivedAt {
-                archivedBar(archivedAt)
-            } else if let pending = model.pendingCompressionSummary {
-                // A pending summary limits the conversation (the server
-                // refuses sends and compacts until it's resolved) — the
-                // composer gives way to the review verdict.
-                CompressionReviewBar(message: pending, model: model)
-            } else {
-                Composer(model: model)
-            }
+            .opacity(ui.renaming ? 0.45 : 1)
+            .allowsHitTesting(!ui.renaming)
+            bottomSlot
+                .padding(.horizontal, 12)
+                .padding(.bottom, ui.trayOpen ? 0 : 0)
+                .opacity(ui.renaming ? 0.45 : 1)
+                .allowsHitTesting(!ui.renaming)
         }
         .background(theme.chrome.ignoresSafeArea())
-        .onChange(of: model.messages.count) { old, new in
-            // Pre-warm parsed markdown for any newly-added messages
-            // (terminal reloads, fork switches, manual refresh). Cache
-            // already-present entries skip — only the new assistant
-            // turn(s) pay the parse cost, and that happens off the
-            // main thread. Keys MUST match MessageRow's render key.
-            MarkdownCache.shared.prewarm(
-                model.messages.map {
-                    let body = $0.displayContent ?? $0.content
-                    return (key: MessageRow.markdownKey(id: $0.id, body: body), source: body)
-                }
-            )
-            // No shrink-settle needed inverted: a delete near the
-            // newest edge shrinks content at/above the origin-side
-            // viewport and UIKit's native offset clamp covers it —
-            // there is no far-end estimate to strand the viewport
-            // against.
+        .onReceive(NotificationCenter.default.publisher(for: OutboundQueue.didChangeNotification)) { _ in
+            queueTick &+= 1
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height.rounded() } action: { rootHeight = $0 }
+        .environment(\.openConversationPage) { page in ui.page = page }
+        .environment(\.chatPaneWidth, paneWidth)
+        .navigationTitle(navTitle)
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(ui.renaming)
+        // The long-press menu covers the whole screen, bar included.
+        .toolbar(model.actionMenuMessage == nil ? .visible : .hidden, for: .navigationBar)
+        .toolbar { toolbar }
+        .onChange(of: model.messages.count) { _, _ in
+            // Parse new messages off the main thread; keys must match
+            // MessageRow's render key.
+            MarkdownCache.shared.prewarm(model.messages.map {
+                let body = $0.displayContent ?? $0.content
+                return (key: MessageRow.markdownKey(id: $0.id, body: body), source: body)
+            })
         }
         .animation(.snappy(duration: 0.25), value: model.isDraft)
-        .toolbar {
-            // Cost, contexts and compaction all act on a conversation
-            // that a draft doesn't have yet.
-            if !model.isDraft {
-                ToolbarItem(placement: .topBarTrailing) {
-                    ConversationMenu(model: model, showingContexts: $showingContexts)
-                }
-            }
-        }
-        .navigationDestination(isPresented: $showingContexts) {
-            ContextListView(model: model)
-        }
-        .sheet(isPresented: $model.showingCompactView) {
-            CompactView(model: model)
-        }
-        // Single message-edit sheet, bound to the active editingMessage
-        // on the view model. `.sheet(item:)` avoids the per-row computed-
-        // binding loop the inline `.sheet(isPresented:)` was hitting.
-        .sheet(item: $model.editingMessage) { msg in
-            EditMessageSheet(message: msg, model: model)
-        }
-        // Long-press action menu, hoisted OUTSIDE the flipped scroll
-        // view (the whole reason it exists — see MessageActionMenu).
-        // Fade-only transition here; the cards spring in on their own
-        // so the backdrop doesn't visibly scale.
+        .animation(.snappy(duration: 0.25), value: ui.trayOpen)
+        .animation(.snappy(duration: 0.25), value: model.showingCompactView)
         .overlay {
             if let msg = model.actionMenuMessage {
-                MessageActionMenu(
-                    message: msg,
-                    model: model,
-                    onSelectText: { selectTextMessage = msg },
-                    onShowDetails: { usageMessage = msg }
-                )
-                .transition(.opacity)
+                MessageActionMenu(message: msg, model: model, ui: ui)
+                    .environment(\.openConversationPage) { page in ui.page = page }
+                    .transition(.opacity)
             }
         }
-        // Full-document reader behind the menu's "Select text" — the
-        // transcript itself renders with selection off (see MessageRow),
-        // so this is where a text grab actually happens. Same cache key
-        // as the row, so the parse is warm.
-        .sheet(item: $usageMessage) { msg in
-            NavigationStack {
-                MessageUsageSheet(message: msg, model: model)
-                    .navigationTitle("Details")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button("Done") { usageMessage = nil }
-                        }
-                    }
-            }
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
+        .navigationDestination(item: Bindable(ui).page) { page in
+            destination(page)
         }
-        .sheet(item: $selectTextMessage) { msg in
-            let body = msg.displayContent ?? msg.content
-            MarkdownDocumentView(
-                body,
-                cacheKey: MessageRow.markdownKey(id: msg.id, body: body),
-                title: "Message text"
-            )
-        }
+        .navigationDestination(isPresented: $showingSettings) { SettingsRoot() }
         .toast(
             message: Binding(
-                get: { model.lastPromotedContextID == nil ? nil : "Switched to new context" },
+                get: { model.lastPromotedContextID == nil ? nil : "Switched to the new context" },
                 set: { _ in model.lastPromotedContextID = nil }
             ),
             systemImage: "wand.and.stars"
         )
-        // Note: model-picker sheet is presented from the Composer
-        // itself. SwiftUI doesn't reliably dispatch multiple
-        // `.sheet(isPresented:)` modifiers from the same anchor;
-        // attaching the picker at its trigger view sidesteps the
-        // race.
     }
 
-
-    private func loadErrorBanner(_ err: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            // Let the message wrap to its natural height. The
-            // earlier `.lineLimit(2)` ellipsized server errors like
-            // "model X lacks capabilities required by this profile's
-            // plugin pipeline" right at the noun the user needs to
-            // see. fixedSize forces the Text to take its full
-            // intrinsic vertical size against the HStack layout
-            // pressure from Dismiss on the right.
-            Text(err)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-            Button("Dismiss") { model.loadError = nil }
-                .font(.caption)
+    @ViewBuilder
+    private func destination(_ page: ConversationPage) -> some View {
+        switch page {
+        case .info: ConversationInfoScreen(model: model)
+        case .models: ModelPickerScreen(model: model)
+        case .callSettings: CallSettingsScreen(model: model)
+        case .fullText(let title, let markdown): FullTextScreen(title: title, markdown: markdown)
+        case .image(let messageID, let fileID, let filename):
+            ImageViewerScreen(model: model, messageID: messageID, fileID: fileID, filename: filename)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(Color.orange.opacity(0.10))
     }
 
-    private func speechErrorBanner(_ err: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "speaker.slash.fill")
-                .foregroundStyle(.orange)
-            Text(err)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-            Button("Dismiss") { app.speech.clearError() }
-                .font(.caption)
+    // MARK: Header
+
+    private var navTitle: String {
+        if model.isDraft { return "New conversation" }
+        let t = liveConversation.title ?? ""
+        return t.isEmpty ? "Untitled" : t
+    }
+
+    private var profile: PsmithProfile? {
+        model.draftProfile ?? convos.profiles.first(where: { $0.id == model.conversation.profileID })
+    }
+
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        if ui.renaming {
+            ToolbarItem(placement: .principal) { renameField }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .principal) { titleBlock }
+                .sharedBackgroundVisibility(.hidden)
+            if !model.isDraft {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { ui.page = .info } label: { ContextGauge(fraction: contextFraction) }
+                        .accessibilityLabel(gaugeLabel)
+                }
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(Color.orange.opacity(0.10))
     }
 
-    // MARK: - Message scroll
+    private var titleBlock: some View {
+        VStack(spacing: 0) {
+            Button {
+                guard !model.isDraft else { return }
+                ui.renameDraft = liveConversation.title ?? ""
+                ui.renaming = true
+                renameFocused = true
+            } label: {
+                Text(navTitle)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(IK.text)
+                    .lineLimit(1)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(model.isDraft ? navTitle : "\(navTitle), rename conversation")
+            subtitle
+        }
+        .frame(maxWidth: max(paneWidth - 32 - 2 * 52, 160))
+    }
+
+    @ViewBuilder
+    private var subtitle: some View {
+        let voices = model.councilVoices
+        if voices.count > 1 {
+            HStack(spacing: 4) {
+                ForEach(voices, id: \.self) { Circle().fill(theme.personaColor($0)).frame(width: 7, height: 7) }
+                Text("\(voices.count) voices").padding(.leading, 3)
+            }
+            .font(.system(size: 12.5))
+            .foregroundStyle(IK.secondary)
+            .frame(height: 22)
+        } else if let profile {
+            HStack(spacing: 6) {
+                if model.isCompacting {
+                    IKSpinner(size: 11, color: IK.orange)
+                    Text("\(profile.name) · compressing").lineLimit(1)
+                } else if model.isStreaming {
+                    IKSpinner(size: 11)
+                    Text("\(profile.name) · replying").lineLimit(1)
+                } else {
+                    Circle().fill(ProfileColor.color(for: profile.id, theme: theme)).frame(width: 7, height: 7)
+                    Text(profile.name + contextLabel).lineLimit(1)
+                }
+            }
+            .font(.system(size: 12.5))
+            .foregroundStyle(model.isCompacting ? IK.orange : (model.isStreaming ? theme.accentInk : IK.secondary))
+            .frame(height: 20)
+        }
+    }
+
+    /// " · Context 2 of 3" once the conversation has been compressed.
+    private var contextLabel: String {
+        guard model.contexts.count > 1, let id = model.activeContext?.id,
+              let n = model.contextNumber(for: id) else { return "" }
+        return " · Context \(n) of \(model.contexts.count)"
+    }
+
+    private var renameField: some View {
+        HStack(spacing: 8) {
+            ZStack(alignment: .trailing) {
+                TextField("Conversation title", text: Bindable(ui).renameDraft)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(IK.text)
+                    .tint(theme.accent)
+                    .focused($renameFocused)
+                    .submitLabel(.done)
+                    .onSubmit(commitRename)
+                    .padding(.leading, 12)
+                    .padding(.trailing, 44)
+                    .frame(height: 44)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(IK.wash(0.08)))
+                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(theme.accent.opacity(0.6), lineWidth: 1.5))
+                if !ui.renameDraft.isEmpty {
+                    Button { ui.renameDraft = "" } label: {
+                        Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(theme.chrome)
+                            .frame(width: 18, height: 18)
+                            .background(Circle().fill(IK.wash(0.22)))
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear title")
+                }
+            }
+            Button(action: commitRename) {
+                Text("Done").font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .frame(height: 44)
+                    .background(Capsule().fill(theme.accent))
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(width: max(paneWidth - 32, 280))
+    }
+
+    private func commitRename() {
+        let title = ui.renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        ui.renaming = false
+        renameFocused = false
+        guard !title.isEmpty, title != liveConversation.title else { return }
+        Task { await convos.rename(id: model.conversation.id, title: title) }
+    }
+
+    private var contextFraction: Double? {
+        guard let t = model.contextTokens, let w = model.contextWindow, w > 0 else { return nil }
+        return Double(t) / Double(w)
+    }
+
+    private var gaugeLabel: String {
+        if let f = contextFraction { return "Context \(Int((f * 100).rounded()))% full, conversation info" }
+        return "Conversation info"
+    }
+
+    // MARK: Composer slot
+
+    private var contextWarning: ContextWarning? {
+        guard !model.isDraft else { return nil }
+        return model.contextWarning(threshold: app.preferences.preferences.contextWarningTokens)
+    }
+
+    @ViewBuilder
+    private var bottomSlot: some View {
+        VStack(spacing: 8) {
+            banners
+            if let archivedAt = liveConversation.archivedAt {
+                ArchivedCard(conversationID: liveConversation.id, archivedAt: archivedAt)
+            } else if let pending = model.pendingCompressionSummary {
+                // The server refuses sends and compactions until a
+                // pending summary is confirmed or deleted.
+                ReviewCard(message: pending, model: model, ui: ui)
+            } else if let elicit {
+                ElicitCard(conversationID: model.conversation.id, request: elicit)
+                    .id(elicit.id)
+            } else if model.showingCompactView {
+                CompressCard(model: model, ui: ui)
+            } else {
+                // Keyboard-sized on a big phone; smaller on a short one so
+                // the transcript keeps some room.
+                Composer(model: model, ui: ui, onSend: onSend, onStop: onStop,
+                         trayHeight: min(282, max(200, (rootHeight * 0.4).rounded())))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var banners: some View {
+        if let err = model.loadError, !model.messages.isEmpty || model.isDraft {
+            StatusBanner(systemImage: "exclamationmark.triangle", text: err) { model.loadError = nil }
+        }
+        if let err = app.speech.playbackError {
+            StatusBanner(systemImage: "speaker.slash", text: err) { app.speech.clearError() }
+        }
+        if app.connectivity.state == .offline {
+            StatusBanner(systemImage: "wifi.exclamationmark", text: "Server unreachable. Messages queue and send when it’s back.")
+        }
+        if let err = model.compactError, !model.showingCompactView {
+            NoticeBanner(systemImage: "exclamationmark.triangle", text: "Compression failed: \(err)") { model.compactError = nil }
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        if let warning = contextWarning, liveConversation.archivedAt == nil, model.pendingCompressionSummary == nil,
+           !model.isCompacting {
+            Button {
+                if !model.showingCompactView { ui.openCompress(model: model) }
+            } label: {
+                NoticeBanner(systemImage: "exclamationmark.triangle", text: warningText(warning))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .buttonStyle(.plain)
+            .disabled(model.isStreaming)
+            .accessibilityHint(model.showingCompactView ? "" : "Opens Compress")
+        }
+    }
+
+    private func warningText(_ w: ContextWarning) -> String {
+        if let window = model.contextWindow, window > 0 {
+            let pct = Int((Double(w.tokens) / Double(window) * 100).rounded())
+            return "This context is \(pct)% full. Replies get slower and dearer from here."
+        }
+        return "This context is \(ContextWarning.compact(w.tokens)) tokens. Replies get slower and dearer from here."
+    }
+
+    // MARK: Draft
+
+    private var draftStart: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                DraftStart(model: model, profiles: convos.profiles,
+                           lastUsedProfileID: lastUsedProfileID,
+                           onOpenSettings: { showingSettings = true })
+                // What creating the conversation will seed: the system
+                // message, a welcome.
+                ForEach(model.messages) { msg in
+                    MessageRow(message: msg, model: model, ui: ui)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 24)
+            .frame(maxWidth: .infinity, minHeight: convos.profiles.contains { !$0.parentOnly } ? nil : 560,
+                   alignment: .top)
+        }
+        .scrollEdgeEffectStyle(.hard, for: .top)
+        .scrollDismissesKeyboard(.interactively)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { paneWidth = $0 }
+    }
+
+    private var lastUsedProfileID: String? {
+        convos.conversations.filter { $0.archivedAt == nil }
+            .max { ($0.lastActivityAt ?? $0.updatedAt) < ($1.lastActivityAt ?? $1.updatedAt) }?.profileID
+    }
+
+    // MARK: Transcript
 
     @ViewBuilder
     private var messageScroll: some View {
         if let err = model.loadError, model.messages.isEmpty, !model.isDraft {
-            EmptyStateView(
-                "Failed to load",
-                systemImage: "exclamationmark.triangle",
-                description: "\(err)"
-            )
+            VStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle").font(.system(size: 26)).foregroundStyle(IK.orange)
+                Text("Couldn’t load this conversation").font(.system(size: 17, weight: .semibold)).foregroundStyle(IK.text)
+                Text(err).font(.system(size: 14)).foregroundStyle(IK.secondary).multilineTextAlignment(.center)
+            }
+            .padding(32)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if model.loading && model.messages.isEmpty {
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             paneScrollBody
-                .environment(\.chatPaneWidth, paneWidth)
+                // Whole points: when the composer's slot leaves the
+                // transcript little room, its height and top inset feed
+                // each other, and unrounded values chase float jitter
+                // forever.
                 .onGeometryChange(for: [CGFloat].self) { proxy in
-                    [proxy.size.width, proxy.size.height, proxy.safeAreaInsets.top]
+                    [proxy.size.width, proxy.size.height, proxy.safeAreaInsets.top].map { $0.rounded() }
                 } action: { v in
                     paneWidth = v[0]
                     viewportHeight = v[1]
                     navClearance = v[2]
                 }
-                // Status-bar tap → scroll to the top of the context
-                // (the OLDEST message — the content end, inverted).
-                // The system gesture can't serve this: its native
-                // semantics target offset 0 (the NEWEST edge here),
-                // and eligibility is murky on the flipped scroll.
-                // The bridge claims it where the platform delivers
-                // it; the fade band below is the deterministic tap
-                // target either way.
-                .background(StatusBarTapBridge(onTap: scrollToOldest)
-                    .frame(width: 2, height: 2))
-                // Hand-rolled under-the-bar fade, drawn in SCREEN
-                // space where no transform can misplace it. The
-                // system scroll-edge fade is hidden on this scroll
-                // (its extent math breaks on inverted scroll views —
-                // FB20540755) and iOS 26 glass bars ignore
-                // toolbarBackground, so without this the title text
-                // sat directly on passing transcript content.
-                //
-                // PURELY VISUAL — hit-testing off, unconditionally.
-                // This band used to carry the tap-to-top gesture, and
-                // any hit-testable view floated over the transcript
-                // steals EVERY gesture in its frame (scroll pans and
-                // long-presses live in the scroll view's UIKit branch;
-                // there's no simultaneity across branches). On device
-                // that read as "a transparent overlay blocks the top
-                // of the screen" (user-reported). The tap-to-top
-                // affordance is the toolbar TITLE button now — inside
-                // the bar, which owns those touches anyway.
+                // Status-bar tap scrolls to the oldest message, the
+                // content end here; the system gesture targets offset 0
+                // (the newest edge), so the bridge claims it.
+                .background(StatusBarTapBridge(onTap: scrollToOldest).frame(width: 2, height: 2))
+                // The under-the-bar fade, drawn in screen space where no
+                // transform can misplace it: the system scroll-edge
+                // effect is hidden on this scroll (its extent math breaks
+                // on inverted scroll views, FB20540755). Purely visual;
+                // anything hit-testable here steals the transcript's pans
+                // and long-presses.
                 .overlay(alignment: .top) {
+                    let h = navClearance + 21
                     LinearGradient(
                         stops: [
-                            // The surface it fades into, so it reads as
-                            // part of the page, not a white band.
                             .init(color: theme.chrome, location: 0),
-                            .init(color: theme.chrome.opacity(0.85), location: 0.55),
+                            .init(color: theme.chrome, location: h > 0 ? (navClearance + 1) / h : 0.9),
                             .init(color: theme.chrome.opacity(0), location: 1),
                         ],
-                        startPoint: .top,
-                        endPoint: .bottom
+                        startPoint: .top, endPoint: .bottom
                     )
-                    .frame(height: navClearance + 28)
+                    .frame(height: h)
                     .ignoresSafeArea(edges: .top)
                     .allowsHitTesting(false)
                 }
@@ -681,43 +651,14 @@ private struct ConversationBody: View {
                 // summary card paints inside the push animation
                 // (sim-measured); watch entry feel and memory on
                 // device before scaling fixtures further.
-                VStack(alignment: .leading, spacing: 12) {
-                    StreamingArea(model: model)
-                        // fixedSize BEFORE the cap: frame(maxHeight:)
-                        // clamps the height PROPOSAL, and MarkdownUI
-                        // under a too-short proposal degrades every
-                        // paragraph to one truncated line (the same
-                        // proposal-starvation class as the Mac
-                        // blockquote bug; user-reported here as
-                        // "paragraphs truncate while streaming, snap
-                        // into place at stream end"). fixedSize lets
-                        // the content lay out at its ideal height
-                        // regardless, so the frame below only caps
-                        // the LAYOUT size and the clip only hides
-                        // overflow.
-                        .fixedSize(horizontal: false, vertical: true)
-                        // The park: cap the streaming row's rendered
-                        // height at ~one viewport. While the reply is
-                        // shorter, the cap is inert and the rest edge
-                        // follows its growth natively; once it fills
-                        // the viewport, content stops growing and the
-                        // frame freezes with the reply's top at the
-                        // viewport top. Alignment .bottom in content
-                        // space keeps the row's content-space bottom
-                        // — the reply's FIRST lines through the flips
-                        // — visible, with the growing tail behind the
-                        // clip. The full body lands at the terminal
-                        // swap.
-                        .frame(
-                            maxHeight: streamClipBudget > 0 ? streamClipBudget : nil,
-                            alignment: .bottom
-                        )
-                        .clipped()
+                VStack(alignment: .leading, spacing: 18) {
+                    // The park: the streaming row's rendered height caps at
+                    // about one viewport (see StreamingArea).
+                    StreamingArea(model: model, waitingOnInput: elicit != nil, clipBudget: streamClipBudget)
                     // Pending user is its own subview so it observes
                     // only pendingUserText, not the chunk-rate
                     // streaming state.
-                    PendingUserArea(model: model)
-                        .equatable()
+                    PendingUserArea(model: model, queueTick: queueTick)
                     // Settled history is its own subview that observes
                     // only `model.messages`. Without this split, every
                     // streaming chunk (which mutates streamingText on the
@@ -727,17 +668,17 @@ private struct ConversationBody: View {
                     // per chunk, even though none of them changed. The
                     // eager stack raises the stakes: a spurious re-eval
                     // re-renders ALL rows, not just realized ones.
-                    ChatHistoryArea(model: model)
+                    ChatHistoryArea(model: model, ui: ui)
                         .equatable()
                 }
-                .padding()
-                // Short conversations read from the visual top like
-                // any chat: pushing the (flipped) stack to the FAR end
-                // of a viewport-height minimum puts the rows at the
-                // visual top with the blank space by the composer.
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
+                // A short conversation sits on the composer, the blank
+                // space above it: the flipped stack at the NEAR end of a
+                // viewport-height minimum is the visual bottom.
                 .frame(
                     minHeight: viewportHeight > 0 ? viewportHeight : nil,
-                    alignment: .bottom
+                    alignment: .top
                 )
                 // Width clamp on the scroll content, one layer of the
                 // three-part containment for the "content slams to the
@@ -828,7 +769,7 @@ private struct ConversationBody: View {
             .ignoresSafeArea(.container, edges: .vertical)
             .ignoresSafeArea(.keyboard)
             .contentMargins(.bottom, navClearance + 8, for: .scrollContent)
-            .contentMargins(.top, 8, for: .scrollContent)
+            .contentMargins(.top, 12, for: .scrollContent)
             // The iOS 26 progressive scroll-edge blur computes its
             // extent in the TRANSFORMED coordinate space (FB20540755
             // — known regression with inverted scroll views): the
@@ -932,41 +873,22 @@ private struct ConversationBody: View {
                     }
                 }
             }
-            // Pill is always-rendered with opacity, not conditional view
-            // insertion, so SwiftUI doesn't tear down and rebuild the
-            // overlay subtree per state change. Hit testing is gated so
-            // a hidden pill can't intercept taps. Anchored at the TOP
-            // (user preference — it floats over the parked message
-            // when one is pinned there, and that's the accepted
-            // trade).
-            .overlay(alignment: .top) {
-                Button {
+            // Always rendered and faded rather than inserted, so the
+            // overlay subtree isn't rebuilt per state change; hit testing
+            // is gated so a hidden pill can't take taps.
+            .overlay(alignment: .bottom) {
+                FollowPill(streaming: model.isStreaming) {
                     Haptics.impact(.light)
-                    // Inverted, "bottom" is offset 0 — one exact
-                    // absolute scroll, no convergence, no estimates.
-                    // Mid-stream this returns to the PARKED frame
-                    // (the clip stays; the tail remains below the
-                    // fold until terminal, per the streaming design).
+                    // Inverted, "bottom" is offset 0: one exact absolute
+                    // scroll. Mid-stream this returns to the parked frame;
+                    // the tail stays below the fold until the terminal.
                     oneShotScroll(y: 0, reason: "pill")
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.down")
-                            .font(.caption.weight(.semibold))
-                        Text("Scroll to bottom")
-                            .font(.caption.weight(.medium))
-                    }
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .glassEffect(.regular.interactive(), in: .capsule)
                 }
-                .buttonStyle(.plain)
-                .padding(.top, 8)
-                .opacity(isFarFromBottom ? 1 : 0)
-                .allowsHitTesting(isFarFromBottom)
+                .padding(.bottom, 56)
+                .opacity(isFarFromBottom || forceFollowPill ? 1 : 0)
+                .allowsHitTesting(isFarFromBottom || forceFollowPill)
                 .animation(.easeInOut(duration: 0.22), value: isFarFromBottom)
-                .accessibilityLabel("Scroll to bottom of conversation")
-                .accessibilityHidden(!isFarFromBottom)
+                .accessibilityHidden(!(isFarFromBottom || forceFollowPill))
             }
             // Intentionally NOT scrolling on `model.messages.count` —
             // that handler used to fire on stream end (streaming row
@@ -1107,12 +1029,8 @@ private struct ConversationBody: View {
 
 }
 
-
-/// Snapshot of the bits of `ScrollGeometry` the scroll-to-bottom-pill
-/// handler needs. Equatable + Sendable so
-/// `onScrollGeometryChange(for:_:action:)` can deliver it through its
-/// diff machinery; we only re-fire the action when one of these three
-/// values actually moves, not on every layout pass.
+/// The scroll metrics the pill and the telemetry read; Equatable so
+/// `onScrollGeometryChange` only fires when one actually moves.
 private struct ScrollMetrics: Equatable, Sendable {
     var contentHeight: CGFloat
     var offset: CGFloat
@@ -1122,381 +1040,182 @@ private struct ScrollMetrics: Equatable, Sendable {
     var offsetX: CGFloat
 }
 
-/// The conversation's toolbar menu. Its label is the running cost,
-/// truncated to cents — the always-visible signal the old status chip
-/// carried, now living in the nav bar where it costs no vertical
-/// space. Inside: Compress (infrequent, so demoted from a top-level
-/// button), Contexts, and a non-interactive precise-cost entry. When
-/// any assistant turn ran on a model without per-token pricing, an
-/// "Unpriced models" entry appears and opens the explainer listing
-/// them (subscription / flat-fee models like Z.AI Coding Plan don't
-/// populate per-million pricing in `user_models`, so those turns roll
-/// up as $0 and the total is approximate).
-///
-/// A standalone view (not a ConversationBody computed) so its O(N)
-/// message scans re-run only when the observed model data changes —
-/// inside ConversationBody they re-ran on every body evaluation,
-/// which during scroll-command storms meant per-tick.
-private struct ConversationMenu: View {
-    @Bindable var model: ConversationViewModel
-    @Binding var showingContexts: Bool
-    @State private var showingMissingCostInfo = false
+/// "Follow the reply": back to the newest edge (Streaming).
+private struct FollowPill: View {
+    let streaming: Bool
+    let action: () -> Void
+    @Environment(\.theme) private var theme
 
     var body: some View {
-        Menu {
-            Button {
-                model.showingCompactView = true
-            } label: {
-                Label("Compress", systemImage: "wand.and.stars")
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.down").font(.system(size: 13, weight: .semibold))
+                Text(streaming ? "Follow the reply" : "Latest messages").font(.system(size: 14, weight: .medium))
             }
-            .disabled(model.isStreaming || model.isCompacting || model.hasPendingCompression)
-
-            Button {
-                showingContexts = true
-            } label: {
-                Label("Contexts", systemImage: "tray.full")
-            }
-
-            Divider()
-
-            // Precise cost, deliberately unclickable — information,
-            // not an action. The truncated version lives on the menu
-            // label; this row carries the full four decimals.
-            Button {} label: {
-                Label(String(format: "$%.4f", accruedCost), systemImage: "dollarsign.circle")
-            }
-            .disabled(true)
-
-            if !modelsMissingCost.isEmpty {
-                Button {
-                    showingMissingCostInfo = true
-                } label: {
-                    Label("Unpriced models…", systemImage: "exclamationmark.triangle")
-                }
-            }
-        } label: {
-            // A menu, not a price tag: the running cost is the precise
-            // row inside, and the unpriced-models warning lives there
-            // too rather than as an orange triangle on every open.
-            Image(systemName: "ellipsis")
-                .font(.body.weight(.semibold))
-                .frame(width: 32, height: 32)
-                .contentShape(Rectangle())
+            .foregroundStyle(theme.accentInk)
+            .padding(.leading, 12)
+            .padding(.trailing, 14)
+            .frame(height: 36)
+            .contentShape(Capsule())
         }
-        .accessibilityLabel("Conversation menu")
-        .accessibilityValue(String(format: "cost $%.4f", accruedCost))
-        .alert(
-            "Cost is approximate",
-            isPresented: $showingMissingCostInfo
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            let names = modelsMissingCost.joined(separator: "\n• ")
-            Text("Some turns ran on models without per-token pricing in your catalog, so they're not included in the running total:\n\n• \(names)")
-        }
-    }
-
-    /// Total cost of the ACTIVE CONTEXT — every message in it,
-    /// including abandoned branches. The server's per-context
-    /// aggregate (ListContexts.cumulative_cost_usd) is the source:
-    /// a chain-local sum undercounts the moment the user forks,
-    /// because the messages array only holds the currently-viewed
-    /// branch (user-reported: "cost shows only the current tree").
-    /// The chain sum remains as the fallback for the window before
-    /// loadContexts lands (cold cache, first frames).
-    private var accruedCost: Double {
-        if let ctx = model.activeContext,
-           let row = model.contexts.first(where: { $0.id == ctx.id }) {
-            return row.cumulativeCostUsd
-        }
-        return model.messages.reduce(0) { acc, m in
-            acc + (m.usage?.totalCostUsd ?? 0)
-        }
-    }
-
-    /// Distinct display-name list of models that produced an assistant
-    /// message with usage data (real LLM call) but no totalCostUsd
-    /// (no per-token price). Sorted, deduped.
-    private var modelsMissingCost: [String] {
-        var seen: Set<String> = []
-        var out: [String] = []
-        for m in model.messages {
-            guard m.role == .assistant,
-                  m.usage != nil,
-                  m.usage?.totalCostUsd == nil,
-                  let mid = m.modelID else { continue }
-            // Resolve to display name when we know it; otherwise fall
-            // back to the raw id so the user can still identify it.
-            let pid = m.providerID
-            let display = model.availableModels
-                .first(where: { $0.modelID == mid && (pid == nil || $0.providerID == pid) })?
-                .displayName ?? mid
-            if seen.insert(display).inserted {
-                out.append(display)
-            }
-        }
-        return out.sorted()
+        .buttonStyle(.plain)
+        .glassEffect(.regular.tint(theme.accent.opacity(0.22)).interactive(), in: Capsule())
+        .overlay(Capsule().strokeBorder(theme.accent.opacity(0.45), lineWidth: 1).allowsHitTesting(false))
+        .shadow(color: IK.shadow, radius: 9, y: 6)
     }
 }
 
-// MARK: - Decoupled scroll-content subviews
+// MARK: - Transcript areas
 //
-// These exist to keep streaming-chunk-rate state mutations out of the
-// settled-history render path. Each subview reads only the observable
-// properties it actually consumes — so `model.streamingText` updating
-// 20-50× per second does NOT re-eval ChatHistoryArea's body and run
-// ForEach over hundreds of messages.
+// Split so chunk-rate streaming mutations stay out of the settled
+// history: each area reads only the observable properties it uses, so
+// `streamingText` changing 20-50 times a second doesn't re-run ForEach
+// over hundreds of messages.
 
-/// Renders the settled message + compression-summary timeline,
-/// NEWEST-FIRST for the flipped stack (each row un-flips itself via
-/// `chatRowFlip`). Observes only `model.messages`; immune to
-/// streaming-text churn. Rows render eagerly (see paneScrollBody for
-/// why laziness is banned here), so every row's un-flip commits in
-/// the same transaction as its content. Message ids are stable, so a
-/// new message is a pure head-insert in ForEach's diff.
+/// Settled history, newest first for the flipped stack. Rows render
+/// eagerly (see paneScrollBody), so each row's un-flip commits with its
+/// content.
 private struct ChatHistoryArea: View, @MainActor Equatable {
     @Bindable var model: ConversationViewModel
+    let ui: ConversationUIState
     @Environment(\.chatPaneWidth) private var paneWidth
 
-    /// Value-equality gate for parent-driven re-renders. WITHOUT this
-    /// conformance every ConversationBody invalidation (each geometry
-    /// tick during seeks and streams) re-ran this body and re-diffed
-    /// the full ForEach — at 446 messages that was 446 MessageRow
-    /// constructions per frame, the dominant cost in the live
-    /// 100%-CPU sample. Message-content changes still re-render:
-    /// @Observable tracks `model.messages` as this view's OWN
-    /// dependency, independent of parent diffing; same for the
-    /// paneWidth environment.
+    /// Parent re-renders never need to re-diff the whole ForEach;
+    /// message changes still re-render through observation.
     static func == (_: ChatHistoryArea, _: ChatHistoryArea) -> Bool { true }
 
-    /// Exact per-row width: the pane minus the transcript padding.
-    /// The stack-level exact frame keeps the whole content honest,
-    /// but a transition pass (keyboard show, send relayout) can still
-    /// re-solve a SINGLE realized row against a loose proposal and
-    /// render it wide (video-verified: one boundary row flush to the
-    /// screen edge while its neighbors held their margins). Pinning
-    /// each row makes the width non-negotiable in every pass.
-    private var rowWidth: CGFloat? {
-        paneWidth > 32 ? paneWidth - 32 : nil
-    }
+    /// Exact per-row width: transition passes (keyboard show, send) can
+    /// re-solve a single row against a loose proposal and render it
+    /// wide; pinning each row makes the width non-negotiable.
+    private var rowWidth: CGFloat? { paneWidth > 32 ? paneWidth - 32 : nil }
 
     var body: some View {
-        // Once per transcript change, not once per row.
         let modelChanges = model.modelChangeMessageIDs
         let firstMetered = model.firstMeteredReplyID
+        // Its own stack: the equatable wrapper isn't flattened into the
+        // parent's, which would space these rows at the default 8.
+        VStack(alignment: .leading, spacing: 18) {
         ForEach(model.messages.reversed()) { msg in
-            if msg.role == .compressionSummary {
-                CompressionSummaryCard(message: msg, model: model)
-                    // The card's own context menu is macOS-only; here it
-                    // gets the transcript's action menu like any row.
-                    .messageActionsOnLongPress {
-                        Haptics.impact(.medium)
-                        withAnimation(.snappy(duration: 0.22)) {
-                            model.actionMenuMessage = msg
+            Group {
+                if msg.role == .compressionSummary && model.editingMessage?.id != msg.id
+                    && ui.confirmingDelete?.messageID != msg.id {
+                    SummaryCard(message: msg, model: model)
+                        .messageActionsOnLongPress {
+                            Haptics.impact(.medium)
+                            withAnimation(.snappy(duration: 0.22)) { model.actionMenuMessage = msg }
                         }
-                    }
-                    .frame(width: rowWidth, alignment: .leading)
-                    .chatRowFlip()
-                    .id(msg.id)
-            } else {
-                MessageRow(
-                    message: msg,
-                    previousMessage: model.messages.first(where: { $0.id == msg.parentID }),
-                    model: model,
-                    modelChanged: modelChanges.contains(msg.id),
-                    isFirstMeteredReply: msg.id == firstMetered
-                )
-                    .frame(width: rowWidth, alignment: .leading)
-                    .chatRowFlip()
-                    .id(msg.id)
-            }
-        }
-    }
-}
-
-/// Optimistic user message rendered before the SendMessage RPC returns,
-/// plus any messages queued offline waiting on the OutboundQueue
-/// drain. Both render as user bubbles; queued ones get a small
-/// clock chip so the user knows they're still waiting on the
-/// server.
-///
-/// Observes `model.pendingUserText` AND the queue snapshot. When
-/// the OutboundQueue drains, the entry slides into `messages`
-/// via the normal SendMessage response path and disappears from
-/// `queuedEntries` — same one-frame swap as `pendingUserText`.
-private struct PendingUserArea: View, @MainActor Equatable {
-    @Bindable var model: ConversationViewModel
-    @State private var queuedTick: Int = 0
-    @Environment(\.chatPaneWidth) private var paneWidth
-
-    /// Same parent-diff gate as ChatHistoryArea: observation of
-    /// pendingUserText / the queue snapshot drives real updates.
-    static func == (_: PendingUserArea, _: PendingUserArea) -> Bool { true }
-
-    private var rowWidth: CGFloat? {
-        paneWidth > 32 ? paneWidth - 32 : nil
-    }
-
-    var body: some View {
-        // Newest-first for the flipped stack: queued entries (newer
-        // than the pending sentinel) precede it.
-        Group {
-            ForEach(model.queuedEntries.reversed()) { entry in
-                QueuedUserRow(text: entry.content)
-                    .frame(width: rowWidth, alignment: .leading)
-                    .chatRowFlip()
-                    .id("__queued_\(entry.id)")
-            }
-            if let pending = model.pendingUserText {
-                PendingUserRow(text: pending, style: .themed)
-                    .frame(width: rowWidth, alignment: .leading)
-                    .chatRowFlip()
-                    .id("__pending__")
-            }
-        }
-        // OutboundQueue posts a notification on every mutation;
-        // bumping queuedTick re-evaluates `model.queuedEntries`
-        // which the parent View hierarchy doesn't otherwise
-        // observe (it's not @Observable property — it computes
-        // through the queue).
-        .onReceive(
-            NotificationCenter.default.publisher(for: OutboundQueue.didChangeNotification)
-        ) { _ in
-            queuedTick &+= 1
-        }
-    }
-}
-
-/// Bubble for a message that's sitting in the offline queue,
-/// waiting for the server to come back. Visually mirrors
-/// `PendingUserRow` but with a small clock chip below the text
-/// so the user can tell at a glance it hasn't gone out yet.
-private struct QueuedUserRow: View {
-    let text: String
-
-    var body: some View {
-        VStack(alignment: .trailing, spacing: 4) {
-            HStack {
-                Spacer(minLength: 60)
-                Text(text)
-                    .font(.body)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background { ThemedUserBubbleBackground(cornerRadius: 16) }
-                    .foregroundStyle(.primary)
-            }
-            HStack(spacing: 4) {
-                Spacer()
-                Image(systemName: "clock")
-                    .font(.caption2)
-                Text("Queued — will send when online")
-                    .font(.caption2)
-            }
-            .foregroundStyle(.secondary)
-            .padding(.trailing, 4)
-        }
-    }
-}
-
-/// In-flight assistant turn. Observes the streaming-state cluster
-/// (streamingText, isStreaming, isCompacting, …) so chunk mutations
-/// re-render this subview and ONLY this subview.
-private struct StreamingArea: View {
-    @Bindable var model: ConversationViewModel
-    @Environment(\.chatPaneWidth) private var paneWidth
-
-    private var rowWidth: CGFloat? {
-        paneWidth > 32 ? paneWidth - 32 : nil
-    }
-
-    var body: some View {
-        if !model.streamingText.isEmpty || model.isStreaming || model.isCompacting {
-            StreamingRow(
-                text: model.streamingText,
-                thinkingText: model.streamingThinking,
-                thinkingStartedAt: model.streamingThinkingStartedAt,
-                thinkingFinishedAt: model.streamingThinkingFinishedAt,
-                thinkingExpanded: $model.streamingThinkingExpanded,
-                toolCalls: model.streamingToolCalls,
-                toolCallExpansionBinding: { call in
-                    Binding(
-                        get: { model.expandedLiveToolCallIDs.contains(call.id) },
-                        set: { newValue in
-                            if newValue {
-                                model.expandedLiveToolCallIDs.insert(call.id)
-                            } else {
-                                model.expandedLiveToolCallIDs.remove(call.id)
-                            }
-                        }
+                } else {
+                    MessageRow(
+                        message: msg,
+                        previousMessage: model.messages.first(where: { $0.id == msg.parentID }),
+                        model: model,
+                        ui: ui,
+                        modelChanged: modelChanges.contains(msg.id),
+                        isFirstMeteredReply: msg.id == firstMetered
                     )
-                },
-                isCompression: model.isCompacting,
-                streamingComponents: model.conversation.streamingComponents
-            )
-            .frame(width: rowWidth, alignment: .leading)
-            .chatRowFlip()
-            .id("__streaming__")
-        }
-    }
-}
-
-/// Un-flips one row inside the inverted transcript stack. The scroll
-/// view renders through `scaleEffect(y: -1)` (newest at offset 0);
-/// every row applies this to draw its content upright. Pure render
-/// transform — layout, geometry probes, and heights are unaffected.
-extension View {
-    fileprivate func chatRowFlip() -> some View {
-        scaleEffect(x: 1, y: -1)
-    }
-}
-
-
-// MARK: - Archived (read-only) state
-
-private struct ArchivedBar: View {
-    let conversationID: String
-    let archivedAt: Date
-    @Environment(AppModel.self) private var app
-    @Environment(ConversationsModel.self) private var convos
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "archivebox")
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Archived")
-                    .font(.callout.weight(.semibold))
-                Text(archivedAt, style: .date)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button("Unarchive") {
-                Task {
-                    try? await app.client.conversations.unarchive(id: conversationID)
-                    await convos.refresh()
-                    dismiss()
                 }
             }
-            .buttonStyle(.glassProminent)
-            .controlSize(.small)
+            .frame(width: rowWidth, alignment: .leading)
+            .chatRowFlip()
+            .id(msg.id)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
-        .padding(.horizontal, 10)
-        .padding(.bottom, 4)
+        }
     }
 }
 
-extension ConversationBody {
-    /// Replaces the composer while the conversation is archived. The
-    /// server refuses every mutation on archived conversations, so the
-    /// transcript above is view-only; Unarchive restores it to the
-    /// active list and pops back.
-    @ViewBuilder
-    fileprivate func archivedBar(_ archivedAt: Date) -> some View {
-        ArchivedBar(conversationID: liveConversation.id, archivedAt: archivedAt)
+/// Your message before the send returns, and messages waiting in the
+/// offline queue (OfflineQueued).
+private struct PendingUserArea: View {
+    @Bindable var model: ConversationViewModel
+    /// Bumped by the screen on every queue change: the queue isn't
+    /// observable, so a new value is what re-reads `queuedEntries`.
+    var queueTick: Int
+    @Environment(\.chatPaneWidth) private var paneWidth
+
+    private var rowWidth: CGFloat? { paneWidth > 32 ? paneWidth - 32 : nil }
+
+    // Rows straight into the transcript's stack, so an empty area adds
+    // no child (and no gap) to it.
+    var body: some View {
+        ForEach(model.queuedEntries.reversed()) { entry in
+            QueuedUserRow(text: entry.content)
+                .frame(width: rowWidth, alignment: .leading)
+                .chatRowFlip()
+                .id("__queued_\(entry.id)")
+        }
+        if let pending = model.pendingUserText {
+            UserBubble(text: pending)
+                .frame(width: rowWidth, alignment: .leading)
+                .chatRowFlip()
+                .id("__pending__")
+        }
+    }
+}
+
+/// A message waiting for the server to come back.
+private struct QueuedUserRow: View {
+    let text: String
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            UserBubble(text: text)
+            HStack(spacing: 6) {
+                Text("Queued").font(.system(size: 12, weight: .medium)).foregroundStyle(IK.orange)
+                IKSpinner(size: 10, color: IK.orange)
+            }
+            .frame(height: 24)
+            .padding(.horizontal, 4)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Queued, waiting to send")
+        }
+        .opacity(0.7)
+    }
+}
+
+/// The turn in flight. Observes the streaming state so chunks re-render
+/// this and only this.
+private struct StreamingArea: View {
+    @Bindable var model: ConversationViewModel
+    var waitingOnInput = false
+    /// Nonzero while a stream's park is live: the row's rendered height
+    /// caps here.
+    var clipBudget: CGFloat = 0
+    @Environment(\.chatPaneWidth) private var paneWidth
+
+    private var rowWidth: CGFloat? { paneWidth > 32 ? paneWidth - 32 : nil }
+
+    // Modifiers stay inside the branches: a frame on the empty case
+    // would still be a stack child and add a gap above the composer.
+    var body: some View {
+        if model.isCompacting {
+            parked(CompactingCard(model: model))
+        } else if !model.streamingText.isEmpty || model.isStreaming {
+            parked(StreamingReply(model: model, waitingOnInput: waitingOnInput))
+        }
+    }
+
+    private func parked<V: View>(_ row: V) -> some View {
+        row
+            .frame(width: rowWidth, alignment: .leading)
+            .chatRowFlip()
+            // fixedSize before the cap: frame(maxHeight:) clamps the
+            // height proposal, and MarkdownUI under a short proposal
+            // degrades every paragraph to one truncated line. This way
+            // the content lays out at its ideal height and the cap only
+            // limits layout size; the clip hides the overflow.
+            .fixedSize(horizontal: false, vertical: true)
+            // Alignment .bottom in content space keeps the reply's first
+            // lines (through the flips) in view, the tail behind the clip
+            // until the terminal swap.
+            .frame(maxHeight: clipBudget > 0 ? clipBudget : nil, alignment: .bottom)
+            .clipped()
+            .id("__streaming__")
+    }
+}
+
+extension View {
+    /// Un-flips one row inside the inverted transcript. Render-only;
+    /// layout and geometry are untouched.
+    fileprivate func chatRowFlip() -> some View {
+        scaleEffect(x: 1, y: -1)
     }
 }
