@@ -1,73 +1,51 @@
 import SwiftUI
 import PsmithKit
+import PsmithUI
 
+/// The main window once signed in: the conversation list, then the
+/// reading pane (which owns the inspector). Drawn to the main-window
+/// boards: each column draws its own 52pt header, the traffic lights sit
+/// in the list's, and nothing is a system split view, so every column
+/// measures what the board says.
 struct HomeView: View {
     let user: PsmithUser
     @Environment(AppModel.self) private var app
-    @Environment(AccountManager.self) private var accountManager
     @Environment(ConversationsModel.self) private var convos
     @Environment(Navigator.self) private var navigator
-    @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
-    @State private var showingUserMenu: Bool = false
-    @State private var showingAddAccount: Bool = false
-    @State private var accountToRemove: Account? = nil
+    @Environment(\.theme) private var theme
+    @Environment(\.openSettings) private var openSettings
     /// Sidebar archive-browsing mode. Lives here (not in the list view)
     /// because the detail pane must resolve selections against the
     /// archive list while it's active.
-    @State private var showingArchived: Bool = false
-
-    private var mode: AppMode { navigator.mode }
+    @State private var showingArchived = false
+    @AppStorage("mainListWidth") private var listWidth: Double = MK.listWidth
 
     var body: some View {
-        Group {
-            switch mode {
-            case .chats:    chatsShell
-            case .settings: settingsShell
+        HStack(spacing: 0) {
+            if navigator.listShown {
+                MainListColumn(user: user, showingArchived: $showingArchived, width: $listWidth)
+                    .frame(width: CGFloat(listWidth))
+                    .transition(.move(edge: .leading))
             }
+            detailContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .ignoresSafeArea()
+        .background(theme.chrome.ignoresSafeArea())
+        .onAppear { navigator.openSettingsWindow = { openSettings() } }
         .task {
             await convos.refresh()
             await app.providers.load()
             await app.profiles.load()
         }
-    }
-
-    // MARK: - Chats
-
-    private var chatsShell: some View {
-        @Bindable var convos = convos
-        return NavigationSplitView(columnVisibility: $sidebarVisibility) {
-            VStack(spacing: 0) {
-                ConversationListView(showingArchived: $showingArchived)
-                    .frame(maxHeight: .infinity)
-                Divider()
-                sidebarTray
-            }
-            .frame(minWidth: 240)
-            .navigationSplitViewColumnWidth(min: 240, ideal: 280)
-        } detail: {
-            if let draft = navigator.draft, convos.selectedID == nil || convos.selectedID == draft.createdID {
-                ConversationView(newConversation: draft.key) { created in
-                    navigator.draft?.createdID = created.id
-                }
-                .id(draft.key)
-            } else if let id = convos.selectedID,
-                      let conversation = convos.conversations.first(where: { $0.id == id })
-                          ?? convos.archivedConversations.first(where: { $0.id == id }) {
-                ConversationView(conversation: conversation)
-                    .id(id)
-            } else {
-                WelcomeView()
-            }
-        }
-        // Picking another conversation in the sidebar abandons the draft;
-        // the draft's own creation selects its new id, which keeps it.
+        // Picking another conversation abandons the draft; the draft's own
+        // creation selects its new id, which keeps it.
         .onChange(of: convos.selectedID, initial: false) { _, newID in
             if let newID, let draft = navigator.draft, draft.createdID != newID {
                 navigator.draft = nil
             }
         }
-        // A fresh draft takes the detail pane from whatever was open.
+        // A fresh draft takes the reading pane from whatever was open.
         .onChange(of: navigator.draft?.key) { _, key in
             if key != nil, navigator.draft?.createdID == nil {
                 convos.selectedID = nil
@@ -75,211 +53,143 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Settings
-
-    private var settingsShell: some View {
-        SettingsView(
-            providersModel: app.providers,
-            profilesModel: app.profiles,
-            mcpServersModel: app.mcpServers,
-            onBack: { navigator.mode = .chats }
-        )
-        // The settings sidebar names the screen; a leftover conversation
-        // title in the window bar would contradict it.
-        .navigationTitle("")
-    }
-
-    /// Bottom sidebar row: user menu (sign out) on the left, gear (settings)
-    /// and `+` (new conversation) on the right. The trailing buttons share
-    /// a `GlassEffectContainer` so they read as floating glass chrome.
-    private var sidebarTray: some View {
-        HStack(spacing: 8) {
-            // Plain Button + popover instead of SwiftUI Menu — single-item
-            // macOS Menus render as zero-height rows on macOS 26 (the user
-            // saw the menu pop empty). Popover is reliable and gives us the
-            // same affordance.
-            Button {
-                showingUserMenu = true
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "person.crop.circle")
-                        .foregroundStyle(.secondary)
-                    Text(user.username)
-                        .scaledFont(.callout)
-                        .foregroundStyle(.primary)
-                    Image(systemName: "chevron.down")
-                        .scaledFont(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .glassEffect(.regular.interactive(), in: .capsule)
-            }
-            .buttonStyle(.plain)
-            .popover(isPresented: $showingUserMenu, arrowEdge: .top) {
-                accountSwitcherPopover
-            }
-            .sheet(isPresented: $showingAddAccount) {
-                // Sheet-presented LoginView (no preselected host)
-                // walks server probe + credentials and routes through
-                // AccountManager.addAccount. AccountManager dedupes on
-                // (host, username), so re-entering an existing
-                // account here reactivates rather than duplicating.
-                VStack(spacing: 0) {
-                    HStack {
-                        Text("Add account")
-                            .scaledFont(.title3, weight: .semibold)
-                        Spacer()
-                        Button("Cancel") { showingAddAccount = false }
-                            .keyboardShortcut(.cancelAction)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
-                    LoginView()
-                        .environment(accountManager)
-                }
-                .frame(minWidth: 460, minHeight: 420)
-            }
-            .confirmationDialog(
-                accountToRemove.map { "Remove \($0.resolvedDisplayLabel)?" } ?? "Remove account?",
-                isPresented: Binding(
-                    get: { accountToRemove != nil },
-                    set: { if !$0 { accountToRemove = nil } }
-                ),
-                titleVisibility: .visible
-            ) {
-                Button("Remove account", role: .destructive) {
-                    if let id = accountToRemove?.id {
-                        Task { await accountManager.removeAccount(id: id) }
-                    }
-                    accountToRemove = nil
-                }
-                Button("Cancel", role: .cancel) { accountToRemove = nil }
-            } message: {
-                Text("Removes the saved credentials and forgets this account locally. Conversations on the server are unchanged.")
-            }
-
-            Spacer()
-
-            GlassEffectContainer(spacing: 6) {
-                HStack(spacing: 6) {
-                    Button {
-                        navigator.mode = .settings
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .buttonStyle(.glass)
-                    .help("Settings (⌘,)")
-
-                    Button {
-                        navigator.startNewConversation()
-                    } label: {
-                        Image(systemName: "plus.bubble")
-                    }
-                    .buttonStyle(.glass)
-                    .disabled(!convos.profiles.contains(where: { !$0.parentOnly }))
-                    .help("New conversation (⌘N)")
-                }
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-    }
-
-    // MARK: - Account switcher popover
-
-    /// Popover content for the user chip. Lists every account
-    /// with a check next to the active one, an "Add account…"
-    /// entry that opens LoginView in a sheet, and per-row
-    /// remove + sign-out actions on a hover-revealed trailing
-    /// menu.
     @ViewBuilder
-    private var accountSwitcherPopover: some View {
-        VStack(spacing: 0) {
-            // Account list. Stable sort comes from AccountStore.
-            ForEach(accountManager.accounts) { account in
-                AccountSwitcherRow(
-                    account: account,
-                    isActive: account.id == accountManager.activeAccountID,
-                    onSelect: {
-                        showingUserMenu = false
-                        accountManager.switchAccount(to: account.id)
-                    },
-                    onRemove: {
-                        showingUserMenu = false
-                        accountToRemove = account
-                    }
-                )
+    private var detailContent: some View {
+        if let draft = navigator.draft, convos.selectedID == nil || convos.selectedID == draft.createdID {
+            ConversationView(newConversation: draft.key) { created in
+                navigator.draft?.createdID = created.id
             }
-            Divider().padding(.vertical, 4)
-            Button {
-                showingUserMenu = false
-                showingAddAccount = true
-            } label: {
-                Label("Add account…", systemImage: "plus.circle")
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-            Divider().padding(.vertical, 4)
-            Button(role: .destructive) {
-                showingUserMenu = false
-                Task { await accountManager.signOutActive() }
-            } label: {
-                Label("Sign out of \(user.username)", systemImage: "rectangle.portrait.and.arrow.right")
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
+            .id(draft.key)
+        } else if let id = convos.selectedID,
+                  let conversation = convos.conversations.first(where: { $0.id == id })
+                      ?? convos.archivedConversations.first(where: { $0.id == id }) {
+            ConversationView(conversation: conversation)
+                .id(id)
+        } else {
+            WelcomeView()
         }
-        .frame(minWidth: 260)
     }
 }
 
-/// Single row in the account switcher popover. Click anywhere
-/// activates this account; hover reveals a trailing minus-circle
-/// to remove it (with a confirmation dialog at the call site).
-private struct AccountSwitcherRow: View {
-    let account: Account
-    let isActive: Bool
-    let onSelect: () -> Void
-    let onRemove: () -> Void
-    @State private var hovering = false
+/// The list column (board AppConversation): its header with the traffic
+/// lights and the hide and new buttons, the list, the account row, and a
+/// resizable right edge.
+struct MainListColumn: View {
+    let user: PsmithUser
+    @Binding var showingArchived: Bool
+    @Binding var width: Double
+    @Environment(Navigator.self) private var navigator
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isActive ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.tertiary))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(account.username)
-                    .scaledFont(.callout)
-                Text(account.host.host ?? account.host.absoluteString)
-                    .scaledFont(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 8)
-            if hovering, !isActive {
-                // Removing the active account would tear down the
-                // pane the user is interacting with — only expose
-                // the affordance on inactive rows.
-                Button {
-                    onRemove()
-                } label: {
-                    Image(systemName: "minus.circle")
-                        .foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            MKHeaderBand(divider: false, ground: .well) {
+                Spacer(minLength: 0)
+                HStack(spacing: 2) {
+                    MKIconButton(systemImage: "sidebar.leading", label: "Hide the conversation list (⌃⌘S)") {
+                        withAnimation(.easeInOut(duration: 0.25)) { navigator.listShown = false }
+                    }
+                    MKIconButton(systemImage: "square.and.pencil", label: "New conversation (⌘N)") {
+                        navigator.startNewConversation()
+                    }
                 }
-                .buttonStyle(.borderless)
-                .help("Remove this account")
             }
+            .padding(.horizontal, 10)
+            ConversationListView(showingArchived: $showingArchived)
+                .frame(maxHeight: .infinity)
+            AccountFooter(user: user)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .contentShape(Rectangle())
-        .background(hovering ? Color.primary.opacity(0.04) : Color.clear)
-        .onHover { hovering = $0 }
-        .onTapGesture { onSelect() }
+        .background(MKWell())
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(SK.line).frame(width: 1)
+                .overlay(ColumnResizeHandle(width: $width, range: MK.listRange))
+        }
     }
 }
 
+/// The list's bottom row: who you are, on which server, whether it's
+/// reachable. A native menu holds the rest; accounts are managed in
+/// Settings ▸ Accounts rather than in sheets from here.
+struct AccountFooter: View {
+    let user: PsmithUser
+    @Environment(AppModel.self) private var app
+    @Environment(AccountManager.self) private var accountManager
+    @Environment(Navigator.self) private var navigator
+
+    var body: some View {
+        Menu {
+            Section("Accounts") {
+                ForEach(accountManager.accounts) { account in
+                    Button {
+                        accountManager.switchAccount(to: account.id)
+                    } label: {
+                        let label = "\(account.username) · \(account.host.host ?? account.host.absoluteString)"
+                        if account.id == accountManager.activeAccountID {
+                            Label(label, systemImage: "checkmark")
+                        } else {
+                            Text(label)
+                        }
+                    }
+                }
+            }
+            Divider()
+            Button("Add Account…") { navigator.showAddAccount() }
+            Button("Manage Accounts…") { navigator.showSettings(.accounts) }
+            Divider()
+            SettingsLink { Text("Settings…") }
+            Divider()
+            Button("Sign Out of \(user.username)") {
+                Task { await accountManager.signOutActive() }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                MKAvatar(name: user.username)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(user.username).sk(13).lineLimit(1).frame(height: 15.6)
+                    Text(app.serverURL.host ?? app.serverURL.absoluteString).sk(11, SK.secondary).lineLimit(1).frame(height: 13.2)
+                }
+                Spacer(minLength: 4)
+                let offline = app.connectivity.state == .offline
+                SKDot(color: offline ? SK.orange : SK.green)
+                    .help(offline ? "Server unreachable" : "Connected")
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 47)
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .overlay(alignment: .top) { Rectangle().fill(SK.line).frame(height: 1) }
+        .padding(.top, 1)
+    }
+}
+
+/// Drag a column's edge to resize it, with the resize cursor over it.
+struct ColumnResizeHandle: View {
+    @Binding var width: Double
+    let range: ClosedRange<CGFloat>
+    @State private var start: Double?
+
+    var body: some View {
+        Color.clear
+            .frame(width: 8)
+            .contentShape(Rectangle())
+            .onHover { inside in
+                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { g in
+                        let base = start ?? width
+                        if start == nil { start = width }
+                        width = Double(min(max(CGFloat(base) + g.translation.width, range.lowerBound), range.upperBound))
+                    }
+                    .onEnded { _ in start = nil }
+            )
+    }
+}
+
+/// The conversation list's ground. Kept for the list's snapshots.
+struct SidebarWell: View {
+    var body: some View { MKWell() }
+}

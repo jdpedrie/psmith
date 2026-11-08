@@ -4,156 +4,139 @@ import SwiftUI
 import PsmithKit
 import SnapshotHarness
 
-/// Snapshots for the three-column settings shell. The shell hosts the
-/// providers + profiles management surfaces — this file covers the
-/// outer chrome only (categories sidebar, middle column, detail column);
-/// the panes themselves are exercised in detail by
-/// `ProvidersViewSnapshots` and `ProfilesViewSnapshots`.
-///
-/// Sizes: rendered at `default` (the WindowGroup defaultSize) and
-/// `minWindow` (1080x520) — the AppKit-enforced floor. minWindow is the
-/// case the original column-clipping bug surfaced at and is the whole
-/// point of testing the shell.
+/// Snapshots of the Settings window, one per pane that renders without a
+/// live server. Outside the Settings scene the TabView draws its tabs
+/// inline rather than as the window toolbar; the panes under it are the
+/// same views either way.
 @MainActor
 struct SettingsViewSnapshots {
+    private let settingsSize: [(label: String, size: CGSize)] = [("window", CGSize(width: 1050, height: 640))]
 
-    // MARK: - Providers category
-
-    /// Empty providers state — center pane shows the "no providers" empty
-    /// message and the create button stays enabled in the header.
-    @Test
-    func providersEmpty() {
-        let providers = SnapshotStubs.makeProvidersModel(
-            providers: [],
-            enabledModels: [],
-            selectedID: nil
-        )
-        let profiles = SnapshotStubs.makeProfilesModel()
+    private func settings(
+        _ pane: SettingsCategory,
+        providers: ProvidersViewModel = SnapshotStubs.makeProvidersModel(),
+        profiles: ProfilesViewModel = SnapshotStubs.makeProfilesModel(),
+        providerTab: SettingsProviderTab = .models,
+        profileTab: SettingsProfileTab = .general
+    ) -> some View {
         let env = SnapshotEnvironment.standard(navMode: .settings)
-        let view = PsmithMacEnvironment(
+        env.navigator.settingsCategory = pane
+        env.navigator.settingsProviderTab = providerTab
+        env.navigator.settingsProfileTab = profileTab
+        return PsmithMacEnvironment(
             app: env.app, convos: env.convos,
             navigator: env.navigator, windowState: env.windowState
         ) {
             SettingsView(
                 providersModel: providers,
                 profilesModel: profiles,
-                mcpServersModel: SnapshotStubs.makeMCPServersModel(),
-                onBack: {}
+                mcpServersModel: SnapshotStubs.makeMCPServersModel()
             )
         }
-        assertViewSnapshots(view, sizes: defaultSizes)
     }
 
-    /// Providers populated — full three-column layout with provider list,
-    /// selected provider header, tab bar, and enabled models list.
+    /// No providers yet: the list holds only "Add provider…".
     @Test
-    func providersPopulated() {
+    func modelsEmpty() {
+        let providers = SnapshotStubs.makeProvidersModel(providers: [], enabledModels: [], selectedID: nil)
+        assertViewSnapshots(settings(.models, providers: providers), sizes: settingsSize)
+    }
+
+    /// A provider selected: header, models table, provider defaults.
+    @Test
+    func modelsPopulated() {
+        assertViewSnapshots(settings(.models), sizes: settingsSize)
+    }
+
+    @Test
+    func modelsConnection() {
+        assertViewSnapshots(settings(.models, providerTab: .connection), sizes: settingsSize)
+    }
+
+    @Test
+    func modelsDefaults() {
+        assertViewSnapshots(settings(.models, providerTab: .defaults), sizes: settingsSize)
+    }
+
+    /// A model drilled into from the table.
+    @Test
+    func modelPage() {
         let providers = SnapshotStubs.makeProvidersModel()
-        let profiles = SnapshotStubs.makeProfilesModel()
-        let env = SnapshotEnvironment.standard(navMode: .settings)
-        let view = PsmithMacEnvironment(
-            app: env.app, convos: env.convos,
-            navigator: env.navigator, windowState: env.windowState
-        ) {
-            SettingsView(
-                providersModel: providers,
-                profilesModel: profiles,
-                mcpServersModel: SnapshotStubs.makeMCPServersModel(),
-                onBack: {}
-            )
-        }
-        assertViewSnapshots(view, sizes: defaultSizes)
+        if let first = providers.enabledModels.first { providers.detailMode = .editingModel(first.modelID) }
+        assertViewSnapshots(settings(.models, providers: providers), sizes: settingsSize)
     }
 
-    // MARK: - Profiles category
-
-    /// Profiles category with the smoke profile selected — verifies the
-    /// shell flips middle + detail columns to the profiles surfaces and
-    /// ProfileViewer renders its read-only body inside the detail column.
     @Test
-    func profilesCategory() {
+    func addProvider() {
+        let providers = SnapshotStubs.makeProvidersModel()
+        providers.detailMode = .adding
+        assertViewSnapshots(settings(.models, providers: providers), sizes: settingsSize)
+    }
+
+    @Test
+    func addModel() {
+        let providers = SnapshotStubs.makeProvidersModel()
+        providers.detailMode = .addingManualModel
+        assertViewSnapshots(settings(.models, providers: providers), sizes: settingsSize)
+    }
+
+    @Test
+    func profiles() {
         let profiles = SnapshotStubs.makeProfilesModel(
             profiles: [SnapshotFixtures.profile()],
             detailMode: .viewing
         )
-        let providers = SnapshotStubs.makeProvidersModel()
-        let env = SnapshotEnvironment.standard(navMode: .settings)
-        let view = PsmithMacEnvironment(
-            app: env.app, convos: env.convos,
-            navigator: env.navigator, windowState: env.windowState
-        ) {
-            // Initial category lands on `.providers` — flip to profiles by
-            // wrapping in a small view that sets it on appear. Going via the
-            // public surface (state inside SettingsView is private) means we
-            // wrap the whole shell with an init that sets it.
-            SettingsViewWithCategory(
-                providersModel: providers,
-                profilesModel: profiles,
-                category: .profiles
-            )
-        }
-        assertViewSnapshots(view, sizes: defaultSizes)
-    }
-}
-
-/// Workaround wrapper — `SettingsView` keeps the category as a `@State`
-/// internally and defaults to `.providers`. We can't reach into that state
-/// from the test target, but we can render the category-specific surfaces
-/// directly via the shell's column primitives. This wrapper reproduces the
-/// HSplitView layout one-to-one so the snapshot still exercises real
-/// production shell code: ProfilesMiddleColumn + ProfilesDetail, hosted in
-/// the same column min/max widths the production HSplitView uses.
-@MainActor
-struct SettingsViewWithCategory: View {
-    @Bindable var providersModel: ProvidersViewModel
-    @Bindable var profilesModel: ProfilesViewModel
-    let category: SettingsCategory
-
-    var body: some View {
-        HSplitView {
-            categoriesColumn
-                .frame(minWidth: 180, idealWidth: 220, maxWidth: 240)
-            middleColumn
-                .frame(minWidth: 220, idealWidth: 280, maxWidth: 340)
-            detailColumn
-                .frame(minWidth: 540)
-        }
-        .frame(minWidth: 1040, minHeight: 520)
+        assertViewSnapshots(settings(.profiles, profiles: profiles), sizes: settingsSize)
     }
 
-    private var categoriesColumn: some View {
-        List(SettingsCategory.allCases, selection: .constant(Optional(category))) { c in
-            Label(c.label, systemImage: c.systemImage)
-                .tag(Optional(c))
-        }
-        .listStyle(.sidebar)
+    private func oneProfile() -> ProfilesViewModel {
+        SnapshotStubs.makeProfilesModel(profiles: [SnapshotFixtures.profile()], detailMode: .viewing)
     }
 
-    @ViewBuilder
-    private var middleColumn: some View {
-        switch category {
-        case .providers:
-            ProvidersMiddleColumn(model: providersModel, onBack: {})
-        case .profiles:
-            ProfilesMiddleColumn(model: profilesModel, onBack: {})
-        default:
-            // Only the providers/profiles surfaces are snapshotted from
-            // this harness; other categories have their own snapshot
-            // files. Placeholder keeps the switch total as categories
-            // grow.
-            EmptyView()
-        }
+    @Test
+    func profilePrompt() {
+        assertViewSnapshots(settings(.profiles, profiles: oneProfile(), profileTab: .prompt), sizes: settingsSize)
     }
 
-    @ViewBuilder
-    private var detailColumn: some View {
-        switch category {
-        case .providers:
-            ProvidersDetail(model: providersModel)
-        case .profiles:
-            ProfilesDetail(model: profilesModel)
-        default:
-            EmptyView()
-        }
+    @Test
+    func profileModel() {
+        assertViewSnapshots(settings(.profiles, profiles: oneProfile(), profileTab: .model), sizes: settingsSize)
+    }
+
+    @Test
+    func profilePlugins() {
+        assertViewSnapshots(settings(.profiles, profiles: oneProfile(), profileTab: .plugins), sizes: settingsSize)
+    }
+
+    @Test
+    func profileAutomation() {
+        assertViewSnapshots(settings(.profiles, profiles: oneProfile(), profileTab: .automation), sizes: settingsSize)
+    }
+
+    @Test
+    func newProfile() {
+        let profiles = oneProfile()
+        profiles.detailMode = .adding
+        assertViewSnapshots(settings(.profiles, profiles: profiles), sizes: settingsSize)
+    }
+
+    @Test
+    func plugins() {
+        assertViewSnapshots(settings(.plugins), sizes: settingsSize)
+    }
+
+    @Test
+    func servers() {
+        assertViewSnapshots(settings(.servers), sizes: settingsSize)
+    }
+
+    @Test
+    func general() {
+        assertViewSnapshots(settings(.general), sizes: settingsSize)
+    }
+
+    @Test
+    func appearance() {
+        assertViewSnapshots(settings(.appearance), sizes: settingsSize)
     }
 }

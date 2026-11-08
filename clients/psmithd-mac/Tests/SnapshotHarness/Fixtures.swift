@@ -34,7 +34,8 @@ public enum SnapshotFixtures {
         favorite: Bool = true,
         parent: PsmithProfile? = nil,
         defaultProviderID: String? = "provider-anthropic",
-        defaultModelID: String? = "claude-opus-4-7"
+        defaultModelID: String? = "claude-opus-4-7",
+        isDefault: Bool = false
     ) -> PsmithProfile {
         PsmithProfile(
             id: id,
@@ -42,6 +43,7 @@ public enum SnapshotFixtures {
             description: description,
             parentOnly: parentOnly,
             favorite: favorite,
+            isDefault: isDefault,
             parentProfileID: parent?.id,
             systemMessage: "You are a helpful assistant.",
             defaultUserMessage: nil,

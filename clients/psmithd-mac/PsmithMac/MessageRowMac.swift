@@ -33,7 +33,7 @@ struct MessageRow: View {
     @Environment(\.clipboard) private var clipboard
     @Environment(\.chatPaneWidth) private var paneWidth
 
-    @State private var showDeleteConfirm = false
+    @State private var confirmingDelete = false
     @State private var showUsageDetail = false
     @State private var editDraft = ""
     /// The inline editor's role. Only user and assistant can flip, and
@@ -98,33 +98,41 @@ struct MessageRow: View {
             if !model.isDraft, !isEditing {
                 actionRow
             }
+            if showUsageDetail, !isEditing {
+                MessageUsageDetails(message: message, model: model)
+                    .padding(.top, 4)
+            }
+            if confirmingDelete {
+                MKStrip(systemImage: "exclamationmark.triangle", lead: "Delete this \(isUser ? "message" : "reply")?",
+                        detail: "Replies after it attach to the message before.") {
+                    Button("Cancel") { confirmingDelete = false }.skButton(small: true).keyboardShortcut(.cancelAction)
+                    Button("Delete") {
+                        confirmingDelete = false
+                        Task { await model.deleteMessage(id: message.id) }
+                    }
+                    .skButton(.destructiveFilled, small: true)
+                }
+                .padding(.top, 4)
+            }
+            if let text = pendingForkText {
+                MKStrip(systemImage: "arrow.triangle.branch", lead: "Send “\(text)” from this earlier reply?",
+                        detail: "It starts a new branch here. The current one stays.",
+                        tint: theme.accentInk, fill: theme.accent.opacity(0.18), ring: theme.accent.opacity(0.45)) {
+                    Button("Cancel") { pendingForkText = nil }.skButton(small: true).keyboardShortcut(.cancelAction)
+                    Button("Fork and Send") {
+                        pendingForkText = nil
+                        Task { await model.sendForking(content: text, parentMessageID: message.id) }
+                    }
+                    .skButton(.primary, small: true)
+                }
+                .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         .contentShape(Rectangle())
         // A plain state write: wrapping it in withAnimation has crashed
         // mid-stream on macOS 26.
         .onHover { isHovering = $0 }
-        .confirmationDialog("Delete message?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
-                Task { await model.deleteMessage(id: message.id) }
-            }
-        } message: {
-            Text("This message is removed from the conversation. Its replies attach to the message before it.")
-        }
-        .confirmationDialog(
-            "Submit choice on an earlier message?",
-            isPresented: Binding(get: { pendingForkText != nil }, set: { if !$0 { pendingForkText = nil } }),
-            titleVisibility: .visible,
-            presenting: pendingForkText
-        ) { text in
-            Button("Fork & Send") {
-                Task { await model.sendForking(content: text, parentMessageID: message.id) }
-                pendingForkText = nil
-            }
-            Button("Cancel", role: .cancel) { pendingForkText = nil }
-        } message: { _ in
-            Text("This forks the conversation from this message and sends your choice as a new branch. The current branch stays as it is.")
-        }
     }
 
     @ViewBuilder
@@ -149,11 +157,7 @@ struct MessageRow: View {
         HuggingWidth(maxWidth: bubbleCap) {
             inner
                 .contextMenu { contextMenuItems }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background { ThemedUserBubbleBackground(cornerRadius: 16) }
-                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.06)))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .modifier(UserBubbleChrome())
         }
     }
 
@@ -166,20 +170,19 @@ struct MessageRow: View {
             .padding(12)
             .background {
                 RoundedRectangle(cornerRadius: 12).fill(
-                    isEditing ? theme.accent.opacity(0.10)
-                        : isErrored ? Color.orange.opacity(0.10)
-                        : Color.primary.opacity(0.04)
+                    isEditing ? theme.accent.opacity(0.08)
+                        : isErrored ? SK.orange.opacity(0.08)
+                        : MK.card
                 )
             }
             .overlay(
                 RoundedRectangle(cornerRadius: 12).strokeBorder(
-                    isEditing ? theme.accent.opacity(0.6)
-                        : isErrored ? Color.orange.opacity(0.55)
-                        : Color.primary.opacity(0.06),
+                    isEditing ? theme.accent.opacity(0.45)
+                        : isErrored ? SK.orange.opacity(0.5)
+                        : SK.line,
                     lineWidth: isEditing || isErrored ? 1.5 : 1
                 )
             )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     /// System and context rows fold to one line: framing you read once
@@ -190,26 +193,19 @@ struct MessageRow: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: message.role == .system ? "gearshape" : "tray.full")
-                    .scaledFont(.caption)
-                    .foregroundStyle(.secondary)
-                Text(roleLabel)
-                    .scaledFont(.caption2, weight: .semibold)
-                    .foregroundStyle(.secondary)
-                Text(previewLine)
-                    .scaledFont(.caption)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.down")
-                    .scaledFont(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(SK.secondary)
+                    .frame(width: 13)
+                Text(roleLabel).sk(10.5, SK.secondary, weight: .semibold)
+                Text(previewLine).sk(12, SK.tertiary).lineLimit(1).truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(SK.tertiary)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.04)))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.06)))
+            .background(RoundedRectangle(cornerRadius: 10).fill(MK.card))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(SK.line, lineWidth: 1))
             .contentShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
@@ -243,7 +239,7 @@ struct MessageRow: View {
             if !isEditing, !imageAttachments.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
-                        ForEach(imageAttachments) { MessageAttachmentImageMac(attachment: $0) }
+                        ForEach(imageAttachments) { MessageAttachmentImageMac(attachment: $0, messageID: message.id) }
                     }
                 }
             }
@@ -303,8 +299,7 @@ struct MessageRow: View {
         VStack(alignment: .leading, spacing: 8) {
             if let errText = message.errorText, !errText.isEmpty {
                 Text(errText)
-                    .scaledFont(.callout)
-                    .foregroundStyle(.red)
+                    .sk(13, SK.red)
                     .textSelection(.enabled)
             }
             if !bodyText.isEmpty {
@@ -314,9 +309,7 @@ struct MessageRow: View {
                         .foregroundStyle(.secondary)
                         .padding(.top, 4)
                 } label: {
-                    Text("Partial output streamed before failure")
-                        .scaledFont(.caption)
-                        .foregroundStyle(.secondary)
+                    Text("Partial output streamed before failure").sk(12, SK.secondary)
                 }
             }
             if message.role == .assistant {
@@ -325,10 +318,12 @@ struct MessageRow: View {
                     Button {
                         Task { await model.reloadFromMessage(id: message.id) }
                     } label: {
-                        Label("Retry", systemImage: "arrow.clockwise")
+                        HStack(spacing: 5) {
+                            Image(systemName: "arrow.clockwise").font(.system(size: 10.5, weight: .semibold))
+                            Text("Retry")
+                        }
                     }
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.small)
+                    .skButton(.primary, small: true)
                     .disabled(model.isStreaming || model.sending)
                     .help("Run this turn again. The retry is a new branch; the failed turn stays.")
                 }
@@ -357,9 +352,9 @@ struct MessageRow: View {
     private var headerRow: some View {
         HStack(spacing: 6) {
             if isErrored {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                    .imageScale(.small)
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(SK.orange)
             }
             if isFraming {
                 Button {
@@ -367,36 +362,30 @@ struct MessageRow: View {
                 } label: {
                     HStack(spacing: 4) {
                         Text(roleLabel)
-                        Image(systemName: "chevron.up").imageScale(.small)
+                        Image(systemName: "chevron.up").font(.system(size: 8, weight: .bold))
                     }
-                    .scaledFont(.caption2, weight: .semibold)
-                    .foregroundStyle(.secondary)
+                    .sk(10.5, SK.secondary, weight: .semibold)
                 }
                 .buttonStyle(.plain)
                 .help("Fold the \(roleLabel.lowercased()) message")
             } else if let slot = message.personaSlot, let name = message.persona, !isErrored {
                 PersonaLabel(name: name, index: slot, showsName: message.showsPersonaLabel(after: previousMessage))
             } else if showsRoleLabel {
-                Text(roleLabel)
-                    .scaledFont(.caption2, weight: isErrored ? .semibold : .regular)
-                    .foregroundStyle(isErrored ? .orange : .secondary)
+                Text(roleLabel).sk(11, isErrored ? SK.orange : SK.tertiary, weight: isErrored ? .semibold : nil)
             }
             if isErrored {
-                Text("FAILED")
-                    .scaledFont(.caption2, weight: .semibold)
-                    .foregroundStyle(.orange)
+                Text("FAILED").sk(11, SK.orange, weight: .semibold)
             }
             if message.editedAt != nil {
-                Text("edited")
-                    .scaledFont(.caption2)
-                    .foregroundStyle(.tertiary)
+                Text("edited").sk(11, SK.tertiary)
             }
             if showsModelLabel, let label = modelDisplayLabel {
                 if !isUser { Spacer(minLength: 6) }
-                Label(label, systemImage: modelChanged && !prefs.showTurnDetails ? "arrow.triangle.swap" : "cpu")
-                    .labelStyle(.titleAndIcon)
-                    .scaledFont(.caption2)
-                    .foregroundStyle(.tertiary)
+                HStack(spacing: 4) {
+                    Image(systemName: modelChanged && !prefs.showTurnDetails ? "arrow.left.arrow.right" : "cpu").font(.system(size: 9.5))
+                    Text(label).sk(11, SK.tertiary)
+                }
+                    .foregroundStyle(SK.tertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(modelChanged ? "This reply came from a different model than the one before it" : label)
@@ -419,8 +408,8 @@ struct MessageRow: View {
                 Text(stamp)
             }
         }
-        .scaledFont(.caption2, monospacedDigit: true)
-        .foregroundStyle(.tertiary)
+        .sk(11, SK.tertiary)
+        .monospacedDigit()
     }
 
     // MARK: - Action row
@@ -435,12 +424,13 @@ struct MessageRow: View {
                 branchSwitcher
             } else {
                 branchSwitcher
-                signals
                 actions.opacity(actionsVisible ? 1 : 0).allowsHitTesting(actionsVisible)
+                Spacer(minLength: 8)
+                signals
             }
         }
         .frame(height: 24)
-        .padding(.horizontal, isUser ? 4 : 0)
+        .padding(.leading, isUser ? 0 : -4)
         .animation(.easeInOut(duration: 0.12), value: actionsVisible)
     }
 
@@ -453,20 +443,18 @@ struct MessageRow: View {
         let grade = message.role == .assistant ? message.usage.flatMap(cacheGrade) : nil
         let stop = message.role == .assistant ? unexpectedFinishReasonLabel : nil
         if !prefs.showTurnDetails, let grade {
-            Circle()
-                .fill(grade.color)
-                .frame(width: 7, height: 7)
-                .padding(.horizontal, 4)
-                .help(grade.tooltip)
+            HStack(spacing: 5) {
+                Circle().fill(grade.color).frame(width: 7, height: 7)
+                Text(grade.short).sk(11, SK.tertiary)
+            }
+            .help(grade.tooltip)
         }
         if let stop {
-            Text(stop)
-                .scaledFont(.caption2)
-                .foregroundStyle(.orange)
-                .lineLimit(1)
+            Text(stop).sk(11, SK.orange).lineLimit(1)
         }
     }
 
+    /// The common three as icons, everything else in a menu.
     private var actions: some View {
         HStack(spacing: 0) {
             ActionIcon(systemImage: showCopied ? "checkmark" : "doc.on.doc", help: "Copy") {
@@ -476,18 +464,9 @@ struct MessageRow: View {
                 ActionIcon(
                     systemImage: isSpeaking ? "speaker.slash" : "speaker.wave.2",
                     help: isSpeaking ? "Stop reading aloud" : "Read aloud",
-                    tint: isSpeaking ? theme.accent : nil
+                    tint: isSpeaking ? theme.accentInk : nil
                 ) {
                     app.speech.toggle(messageID: message.id, content: bodyText)
-                }
-            }
-            if canSelectText {
-                ActionIcon(
-                    systemImage: "character.cursor.ibeam",
-                    help: selectingText ? "Done selecting" : "Select text: drag over any range, ⌘C copies it",
-                    tint: selectingText ? theme.accent : nil
-                ) {
-                    model.selectingTextMessageID = selectingText ? nil : message.id
                 }
             }
             if !isUser {
@@ -495,18 +474,45 @@ struct MessageRow: View {
                     Task { await model.reloadFromMessage(id: message.id) }
                 }
             }
-            if isEditableRole {
-                ActionIcon(systemImage: "pencil", help: "Edit") { startEdit() }
+            if selectingText {
+                ActionIcon(systemImage: "character.cursor.ibeam", help: "Done selecting", tint: theme.accentInk) {
+                    model.selectingTextMessageID = nil
+                }
             }
-            if message.role == .assistant, message.usage != nil || message.modelID != nil {
-                ActionIcon(systemImage: "info.circle", help: "Usage and cost") { showUsageDetail = true }
-                    .popover(isPresented: $showUsageDetail, arrowEdge: .bottom) {
-                        MessageUsagePopover(message: message, model: model)
-                    }
+            Menu {
+                moreMenuItems
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 24, height: 22)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(showUsageDetail ? Color.white.opacity(0.08) : .clear))
+                    .contentShape(Rectangle())
             }
-            if isEditableRole {
-                ActionIcon(systemImage: "trash", help: "Delete", tint: .red.opacity(0.85)) { showDeleteConfirm = true }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .foregroundStyle(SK.secondary)
+            .help("More")
+        }
+    }
+
+    @ViewBuilder
+    private var moreMenuItems: some View {
+        if canSelectText {
+            Button(selectingText ? "Done Selecting" : "Select Text") {
+                model.selectingTextMessageID = selectingText ? nil : message.id
             }
+        }
+        if isEditableRole {
+            Button("Edit") { startEdit() }
+        }
+        if message.role == .assistant, message.usage != nil || message.modelID != nil {
+            Button(showUsageDetail ? "Hide Usage and Cost" : "Usage and Cost") { showUsageDetail.toggle() }
+        }
+        if isEditableRole {
+            Divider()
+            Button("Delete…", role: .destructive) { confirmingDelete = true }
         }
     }
 
@@ -519,26 +525,24 @@ struct MessageRow: View {
                     let i = (info.index - 1 + info.siblingIDs.count) % info.siblingIDs.count
                     Task { await model.switchToBranch(siblingID: info.siblingIDs[i]) }
                 } label: {
-                    Image(systemName: "chevron.left").scaledFont(.caption2, weight: .semibold)
+                    Image(systemName: "chevron.left").font(.system(size: 8, weight: .bold))
                 }
                 .buttonStyle(.plain)
                 .help("Previous branch")
-                Text("\(info.index + 1)/\(info.siblingIDs.count)")
-                    .scaledFont(.caption2, monospacedDigit: true)
-                    .foregroundStyle(.secondary)
+                Text("\(info.index + 1)/\(info.siblingIDs.count)").sk(11, SK.secondary).monospacedDigit()
                 Button {
                     let i = (info.index + 1) % info.siblingIDs.count
                     Task { await model.switchToBranch(siblingID: info.siblingIDs[i]) }
                 } label: {
-                    Image(systemName: "chevron.right").scaledFont(.caption2, weight: .semibold)
+                    Image(systemName: "chevron.right").font(.system(size: 8, weight: .bold))
                 }
                 .buttonStyle(.plain)
                 .help("Next branch")
             }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Capsule().fill(Color.primary.opacity(0.06)))
+            .foregroundStyle(SK.secondary)
+            .padding(.horizontal, 7)
+            .frame(height: 20)
+            .background(Capsule().fill(Color.white.opacity(0.06)))
         }
     }
 
@@ -550,14 +554,14 @@ struct MessageRow: View {
                 model.selectingTextMessageID = selectingText ? nil : message.id
             }
             .disabled(!canSelectText)
-            Button("Edit…") { startEdit() }
+            Button("Edit") { startEdit() }
                 .disabled(!isEditableRole)
             Button("Regenerate From Here") {
                 Task { await model.reloadFromMessage(id: message.id) }
             }
             .disabled(!isReloadable || isUser)
             Divider()
-            Button("Delete…", role: .destructive) { showDeleteConfirm = true }
+            Button("Delete…", role: .destructive) { confirmingDelete = true }
                 .disabled(!isEditableRole)
         }
     }
@@ -565,36 +569,31 @@ struct MessageRow: View {
     // MARK: - Inline editor
 
     private var inlineEditor: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if showsRolePicker {
-                Picker("Role", selection: $editRoleDraft) {
-                    Text("User").tag(PsmithMessageRole.user)
-                    Text("Assistant").tag(PsmithMessageRole.assistant)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(maxWidth: 220)
-            }
-            TextEditor(text: $editDraft)
-                .scaledFont(.body)
-                .frame(minHeight: 100)
-                .scrollContentBackground(.hidden)
-                .padding(8)
-                .background(Color.primary.opacity(0.04))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Spacer()
+                if showsRolePicker {
+                    SKSegmented(options: [(PsmithMessageRole.user, "User"), (.assistant, "Assistant")], selection: $editRoleDraft)
+                }
+                Spacer(minLength: 0)
+                Text("Editing").sk(11, SK.tertiary)
+            }
+            SKTextArea(text: $editDraft, lines: 3)
+            HStack(spacing: 8) {
+                if showsRolePicker {
+                    Text("Save and Resend starts a new branch beside this one.").sk(11.5, SK.tertiary)
+                }
+                Spacer(minLength: 0)
                 Button("Cancel") { model.editingMessage = nil }
+                    .skButton()
                     .keyboardShortcut(.cancelAction)
                 Button("Save") { saveEdit(thenResend: false) }
-                    .buttonStyle(.glass)
+                    .skButton()
                     .disabled(editDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if showsRolePicker {
                     // Resend forks a new turn, which means nothing for
                     // framing roles; those save content only.
                     Button("Save and Resend") { saveEdit(thenResend: true) }
-                        .buttonStyle(.glassProminent)
+                        .skButton(.primary)
                         .disabled(editDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isStreaming)
                         .keyboardShortcut(.defaultAction)
                         .help("Save the edit and send it again as a new branch beside the original.")
@@ -750,10 +749,11 @@ struct MessageRow: View {
         guard totalPrompt >= Self.cacheGradeFloorTokens else { return nil }
         let ratio = Double(cacheRead) / Double(totalPrompt)
         let pct = Int((ratio * 100).rounded())
+        let short = "\(pct)% cached"
         switch ratio {
-        case 0.8...: return CacheGrade(color: .green, tooltip: "Excellent cache hit: \(pct)% of the prompt served from cache")
-        case 0.3..<0.8: return CacheGrade(color: .yellow, tooltip: "Partial cache hit: \(pct)% of the prompt served from cache")
-        default: return CacheGrade(color: .red, tooltip: "Poor cache hit: \(pct)% of the prompt served from cache")
+        case 0.8...: return CacheGrade(color: SK.green, tooltip: "Excellent cache hit: \(pct)% of the prompt served from cache", short: short)
+        case 0.3..<0.8: return CacheGrade(color: Color(hex: 0xF5C451), tooltip: "Partial cache hit: \(pct)% of the prompt served from cache", short: short)
+        default: return CacheGrade(color: SK.red, tooltip: "Poor cache hit: \(pct)% of the prompt served from cache", short: short)
         }
     }
 
@@ -798,19 +798,37 @@ struct ActionIcon: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .scaledFont(size: 12, weight: .medium)
+                .font(.system(size: 12, weight: .medium))
                 .frame(width: 24, height: 22)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(hovering && !disabled ? Color.primary.opacity(0.08) : .clear)
-                )
+                .background(RoundedRectangle(cornerRadius: 6).fill(hovering && !disabled ? Color.white.opacity(0.08) : .clear))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(disabled ? AnyShapeStyle(.quaternary) : (tint.map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary)))
+        .foregroundStyle(disabled ? SK.tertiary.opacity(0.5) : (tint ?? SK.secondary))
         .disabled(disabled)
         .help(help)
+        .accessibilityLabel(help)
         .onHover { hovering = $0 }
+    }
+}
+
+/// The user bubble: the theme's bubble color, 16pt corners, a faint ring.
+struct UserBubbleChrome: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background { ThemedUserBubbleBackground(cornerRadius: 16) }
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+/// A message in flight, drawn as the bubble it will become.
+struct UserBubble: View {
+    let text: String
+    var body: some View {
+        MarkdownText(text).modifier(UserBubbleChrome())
     }
 }
 
@@ -848,4 +866,6 @@ struct HuggingWidth<Content: View>: View {
 struct CacheGrade {
     let color: Color
     let tooltip: String
+    /// "94% cached", beside the dot.
+    var short: String = ""
 }

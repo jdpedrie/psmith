@@ -61,12 +61,6 @@ struct ConversationView: View {
         .onDisappear {
             app.streamHub.markStoppedViewing(conversationID: conversationID)
         }
-        .sheet(item: Binding(
-            get: { app.streamHub.activeStream(conversationID: conversationID)?.pendingElicitations.first },
-            set: { _ in /* ElicitSheet clears its own pending entry */ }
-        )) { pending in
-            ElicitSheet(conversationID: conversationID, pending: pending)
-        }
         // Coming back online: the transcript may have moved on another
         // client while this one couldn't hear about it.
         .onChange(of: app.connectivity.state) { old, new in
@@ -143,107 +137,88 @@ private final class ScrollMetricsBox {
     var distanceFromBottom: CGFloat = 0
 }
 
-/// Internal so snapshot and event tests can render it with a prepared
-/// view model, bypassing the load in ConversationView's task.
+/// The reading pane: its header, the transcript (or a page in its place),
+/// the composer's slot, and the inspector beside it. Internal so snapshot
+/// and event tests can render it with a prepared view model.
 struct ConversationBody: View {
     @Bindable var model: ConversationViewModel
     let liveConversation: PsmithConversation
     @Environment(AppModel.self) private var app
     @Environment(ConversationsModel.self) private var convos
+    @Environment(Navigator.self) private var navigator
     @Environment(\.theme) private var theme
 
     /// Bumped to move keyboard focus into the composer: on entry and on
     /// every conversation switch.
     @State private var composerFocusRequest = 0
     @State private var showingFileImporter = false
-    @State private var showingMenu = false
+    @State private var dropTargeted = false
 
     // THE TRANSCRIPT. An eager VStack, so every row is laid out at entry
-    // and every offset is a fact, not a LazyVStack estimate (the
-    // estimate physics behind every scroll bug iOS ever had; see
-    // docs/clients/chat-scroll.md). The steady states are rest-edge
-    // states: at the bottom, following; or wherever the user put it.
-    //
-    // Streaming is follow-then-park, as on iOS. While the viewport sits
-    // at the bottom, content growth re-pins it there. The streaming row
-    // is clipped to one viewport, so once the reply fills the view the
-    // content stops growing and the reply's first line rests at the
-    // top; the tail accumulates under the clip. At terminal the clip
-    // goes, and since nothing re-pins, the viewport stays on the start
-    // of the reply. Any user scroll detaches immediately.
-    /// Bumped by the jump-to-latest button, which lives outside the
-    /// scroll view's reader.
+    // and every offset is a fact, not a LazyVStack estimate (see
+    // docs/clients/chat-scroll.md). Streaming is follow-then-park: while
+    // the viewport sits at the bottom, growth re-pins it there; the
+    // streaming row is clipped to one viewport, so the reply's first line
+    // rests at the top and the tail accumulates under the clip. At
+    // terminal the clip goes and nothing re-pins. Any user scroll detaches.
     @State private var bottomRequest = 0
     @State private var metrics = ScrollMetricsBox()
-    /// The viewport is at the newest edge and should stay there as
-    /// content grows.
     @State private var following = true
-    /// A user gesture is moving the viewport.
     @State private var userScrolling = false
     @State private var farFromBottom = false
-    /// Height cap for the streaming row, armed at stream start.
     @State private var streamClip: CGFloat?
-    /// A reply is streaming (as far as this view has handled it).
     @State private var streamActive = false
-    /// The live reply's natural height, to tell whether the clip is cutting.
     @State private var streamRowHeight: CGFloat = 0
 
-    private static let columnMaxWidth: CGFloat = 820
     private static let bottomID = "__newest_edge__"
 
-    private var isPage: Bool {
-        model.showingContextList || model.showingCompactView || model.showingSettingsView || model.showingModelPicker
-    }
-
     var body: some View {
-        VStack(spacing: 0) {
-            if model.showingContextList {
-                ContextListPane(model: model).padding(.top, 28)
-            } else if model.showingCompactView {
-                CompactPane(model: model).padding(.top, 28)
-            } else if model.showingSettingsView {
-                ConversationSettingsView(model: model).padding(.top, 28)
-            } else if model.showingModelPicker {
-                ConversationModelPicker(model: model).padding(.top, 28)
-            } else {
-                transcript
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                header
+                if let page = navigator.page, !model.isDraft {
+                    ConversationPageView(page: page, model: model)
+                } else {
+                    transcript
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if navigator.inspectorShown && !model.isDraft {
+                ConversationInspector(model: model, tab: Binding(
+                    get: { navigator.inspectorTab },
+                    set: { navigator.inspectorTab = $0 }
+                ))
+                .frame(width: MK.inspectorWidth)
+                .background(MKWell())
+                .overlay(alignment: .leading) { Rectangle().fill(SK.line).frame(width: 1) }
             }
         }
         .background(theme.chrome)
         .navigationTitle(navTitle)
-        .navigationSubtitle(navSubtitle)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                leadingToolbarItem
-            }
-            if !isPage {
-                if !model.isDraft {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            model.showingSettingsView = true
-                        } label: {
-                            Image(systemName: "slider.horizontal.3")
-                        }
-                        .help("Conversation settings")
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            showingMenu = true
-                        } label: {
-                            Image(systemName: "ellipsis")
-                        }
-                        .help("Compress, contexts, and cost")
-                        .popover(isPresented: $showingMenu, arrowEdge: .bottom) {
-                            ConversationMenuMac(model: model, dismiss: { showingMenu = false })
-                        }
-                    }
-                }
-            }
-            if model.showingCompactView {
-                ToolbarItem(placement: .confirmationAction) {
-                    compactSubmitButton
-                }
-            }
+        .background {
+            // ⌥⌘I, without a toolbar item to hang it on.
+            // Zero-size, not .hidden(): a hidden button drops its shortcut.
+            Button("") { navigator.inspectorShown.toggle() }
+                .keyboardShortcut("i", modifiers: [.command, .option])
+                .disabled(model.isDraft)
+                .frame(width: 0, height: 0)
+                .opacity(0)
+                .accessibilityHidden(true)
+        }
+        .onChange(of: model.showingModelPicker) { _, on in
+            guard on else { return }
+            model.showingModelPicker = false
+            navigator.page = .models
+        }
+        .onChange(of: model.showingSettingsView) { _, on in
+            guard on else { return }
+            model.showingSettingsView = false
+            openInspector(.settings)
+        }
+        .onChange(of: model.showingContextList) { _, on in
+            guard on else { return }
+            model.showingContextList = false
+            openInspector(.context)
         }
         .task(id: liveConversation.id) {
             guard !model.isDraft else { return }
@@ -251,64 +226,199 @@ struct ConversationBody: View {
             await model.loadAvailableModels()
         }
         .onAppear {
-            // The message box is focused on entering a chat. A selection
-            // mode left on from an earlier visit ends first: its text view
-            // and the composer would otherwise take key focus from each other.
+            // A selection mode left on from an earlier visit ends first:
+            // its text view and the composer would take focus from each other.
             model.selectingTextMessageID = nil
             composerFocusRequest += 1
         }
         .onChange(of: liveConversation.id) { _, _ in
             model.selectingTextMessageID = nil
+            navigator.page = nil
             composerFocusRequest += 1
         }
     }
 
-    // MARK: Titles
+    private func openInspector(_ tab: InspectorTab) {
+        navigator.inspectorTab = tab
+        navigator.inspectorShown = true
+    }
+
+    // MARK: Header
+
+    private var header: some View {
+        MKDetailHeader(title: navTitle, subtitle: navSubtitle) {
+            MKCapsule {
+                modelMenu
+                if !model.isDraft, let tokens = model.contextTokens {
+                    MKCapsuleDivider()
+                    contextButton(tokens)
+                }
+            }
+            if !model.isDraft {
+                MKIconButton(systemImage: "sidebar.trailing", label: "Show the inspector (⌥⌘I)", active: navigator.inspectorShown) {
+                    navigator.inspectorShown.toggle()
+                }
+            }
+        }
+    }
+
+    /// The model this conversation sends to, as a menu: favorites, then
+    /// each provider's models, then the full catalog as a page.
+    private var modelMenu: some View {
+        let models = model.selectableModels
+        let favorites = models.filter(\.favorite).sorted { $0.displayName < $1.displayName }
+        let byProvider = Dictionary(grouping: models.filter { !$0.favorite }, by: \.providerID)
+            .map { (label: model.providerLabels[$0.key] ?? $0.key, models: $0.value.sorted { $0.displayName < $1.displayName }) }
+            .sorted { $0.label < $1.label }
+        return Menu {
+            if let notice = model.harnessNotice {
+                Text(notice)
+            }
+            if !favorites.isEmpty {
+                Section("Favorites") {
+                    ForEach(favorites, id: \.self) { modelButton($0) }
+                }
+            }
+            ForEach(byProvider, id: \.label) { group in
+                Section(group.label) {
+                    ForEach(group.models, id: \.self) { modelButton($0) }
+                }
+            }
+            Divider()
+            Button("All Models…") { navigator.page = .models }
+        } label: {
+            HStack(spacing: 7) {
+                ProviderLogo(slug: model.selectedProviderID.flatMap { model.providerTypes[$0] }, size: 12)
+                    .frame(width: 12, height: 12)
+                Text(selectedModelLabel).sk(12.5).lineLimit(1)
+                Image(systemName: "chevron.down").font(.system(size: 7.5, weight: .bold)).foregroundStyle(SK.secondary)
+            }
+            .padding(.leading, 10)
+            .padding(.trailing, 9)
+            .frame(height: 28)
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Model for this conversation")
+        .disabled(models.isEmpty)
+    }
+
+    private func modelButton(_ m: PsmithUserModel) -> some View {
+        let selected = m.providerID == model.selectedProviderID && m.modelID == model.selectedModelID
+        return Button {
+            Task { await model.selectModel(providerID: m.providerID, modelID: m.modelID) }
+        } label: {
+            if selected {
+                Label(m.displayName, systemImage: "checkmark")
+            } else {
+                Text(m.displayName)
+            }
+        }
+    }
+
+    /// The context's size, always: a power user wants the number. Past
+    /// the user's threshold it turns amber, near the model's own window
+    /// red. Opens the inspector's context tab, where the remedy is.
+    private func contextButton(_ tokens: Int32) -> some View {
+        let warning = model.contextWarning(threshold: app.preferences.preferences.contextWarningTokens)
+        let tint: Color = switch warning {
+        case .nearWindow: SK.red
+        case .overThreshold: SK.orange
+        case nil: SK.secondary
+        }
+        return Button {
+            openInspector(.context)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "gauge.with.needle").font(.system(size: 11.5, weight: .medium))
+                Text(ContextWarning.compact(tokens)).sk(12.5, tint, weight: warning == nil ? .medium : .semibold).monospacedDigit()
+            }
+            .foregroundStyle(tint)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(warning.map(contextChipHelp) ?? "Context: \(tokens.formatted()) tokens")
+        .accessibilityLabel("Context \(ContextWarning.compact(tokens))")
+    }
+
+    private func contextChipHelp(_ warning: ContextWarning) -> String {
+        switch warning {
+        case .overThreshold(let t):
+            return "Context is \(t.formatted()) tokens, past your warning level. Click to compress."
+        case .nearWindow(let t, let w):
+            return "Context is \(t.formatted()) of the model's \(w.formatted()) tokens. Click to compress."
+        }
+    }
 
     private var navTitle: String {
-        if model.showingContextList { return "Contexts" }
-        if model.showingCompactView { return "Compress" }
-        if model.showingSettingsView { return "Settings" }
-        if model.showingModelPicker { return "Choose Model" }
         if model.isDraft { return "New Conversation" }
         let raw = liveConversation.title ?? ""
         return raw.isEmpty ? "Untitled" : raw
     }
 
-    /// The active context, only when there's more than one to tell apart.
+    /// The profile, and the active context once there's more than one.
     private var navSubtitle: String {
-        guard !isPage, model.contexts.count > 1, let ctx = model.activeContext else { return "" }
-        if let t = ctx.title, !t.isEmpty { return t }
-        if let n = model.contextNumber(for: ctx.id) { return "Context \(n)" }
-        return ""
+        var parts: [String] = []
+        if let name = model.draftProfile?.name ?? convos.profiles.first(where: { $0.id == liveConversation.profileID })?.name {
+            parts.append(name)
+        }
+        if model.contexts.count > 1, let ctx = model.activeContext {
+            if let t = ctx.title, !t.isEmpty {
+                parts.append(t)
+            } else if let n = model.contextNumber(for: ctx.id) {
+                parts.append("Context \(n) of \(model.contexts.count)")
+            }
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var selectedModelLabel: String {
+        if let mid = model.selectedModelID, let pid = model.selectedProviderID,
+           let m = model.availableModels.first(where: { $0.modelID == mid && $0.providerID == pid }) {
+            return m.displayName
+        }
+        return model.selectedModelID ?? "Choose a model"
     }
 
     // MARK: Transcript
 
+    /// Before its first message a new conversation is a start screen:
+    /// pick who you're talking to, then write. After it, the transcript.
+    private var showsStartScreen: Bool {
+        model.isDraft && !model.messages.contains(where: { $0.role == .user })
+            && model.pendingUserText == nil && !model.creatingConversation
+    }
+
+    @ViewBuilder
     private var transcript: some View {
+        if showsStartScreen {
+            VStack(spacing: 0) {
+                DraftStartView(model: model, profiles: convos.profiles)
+                    .frame(maxHeight: .infinity)
+                bottomStack
+            }
+        } else {
+            transcriptBody
+        }
+    }
+
+    private var transcriptBody: some View {
         GeometryReader { geo in
-            let column = min(geo.size.width - 48, Self.columnMaxWidth)
+            let column = min(geo.size.width - 48, MK.column)
             scrollBody
                 .environment(\.chatPaneWidth, column)
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    if model.isDraft {
-                        DraftProfilePaneMac(model: model, profiles: convos.profiles)
-                            .frame(maxWidth: column + 32)
-                            .frame(maxWidth: .infinity)
-                    }
-                }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    VStack(spacing: 6) {
-                        banners
-                        bottomBar
-                    }
-                    .frame(maxWidth: column + 32)
-                    .frame(maxWidth: .infinity)
-                    .overlay(alignment: .top) {
-                        if farFromBottom && !isPage {
-                            jumpToBottomButton.offset(y: -44)
+                    bottomStack
+                        .overlay(alignment: .top) {
+                            if farFromBottom {
+                                jumpToBottomButton.offset(y: -48)
+                            }
                         }
-                    }
                 }
         }
         .fileImporter(
@@ -329,15 +439,18 @@ struct ConversationBody: View {
                 Task { @MainActor in await attach(url: url) }
             }
             return true
+        } isTargeted: { dropTargeted = $0 && attachmentsSupported }
+        .overlay {
+            if dropTargeted { DropOverlay(detail: dropDetail) }
         }
     }
 
     @ViewBuilder
     private var scrollBody: some View {
         if let err = model.loadError, model.messages.isEmpty, !model.isDraft {
-            EmptyStateView("Failed to load", systemImage: "exclamationmark.triangle", description: "\(err)")
+            MKEmptyList(systemImage: "exclamationmark.triangle", title: "Couldn’t load this conversation", detail: err, top: 120)
         } else if model.loading && model.messages.isEmpty {
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            MKSpinner(size: 18).frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollViewReader { proxy in
             ScrollView {
@@ -350,23 +463,22 @@ struct ConversationBody: View {
                         streamingRow.id("__streaming__")
                     }
                 }
-                .frame(maxWidth: Self.columnMaxWidth, alignment: .leading)
+                .frame(maxWidth: MK.column, alignment: .leading)
                 .padding(.horizontal, 24)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
+                .padding(.top, 20)
+                // 14 above the composer with the edge marker below: the
+                // same space as between rows.
+                .padding(.bottom, 5)
                 .frame(maxWidth: .infinity)
-                // The newest edge, as an id: proxy scrolls always run,
-                // where re-setting a ScrollPosition to the edge it already
-                // holds is a no-op and a single append never followed.
                 Color.clear.frame(height: 1).id(Self.bottomID)
             }
             .defaultScrollAnchor(.bottom, for: .initialOffset)
+            .scrollEdgeEffectHidden(true, for: .top)
+            .scrollEdgeEffectHidden(true, for: .bottom)
             .onScrollGeometryChange(for: ScrollGeometrySample.self) { g in
                 ScrollGeometrySample(
                     contentHeight: g.contentSize.height,
                     viewportHeight: g.containerSize.height,
-                    // The offset runs against the full visible rect, which
-                    // includes the toolbar and composer insets.
                     distanceFromBottom: g.contentSize.height + g.contentInsets.bottom - g.visibleRect.height - g.contentOffset.y
                 )
             } action: { old, new in
@@ -380,8 +492,6 @@ struct ConversationBody: View {
                 metrics.distanceFromBottom = new.distanceFromBottom
                 let far = new.distanceFromBottom > 240
                 if far != farFromBottom { farFromBottom = far }
-                // Follow: content grew (or the viewport shrank) while the
-                // viewport belonged at the bottom.
                 if following, !userScrolling, new.distanceFromBottom > 1,
                    new.contentHeight != old.contentHeight || new.viewportHeight != old.viewportHeight {
                     proxy.scrollTo(Self.bottomID, anchor: .bottom)
@@ -404,15 +514,12 @@ struct ConversationBody: View {
                 }
             }
             .onChange(of: model.pendingUserText) { _, text in
-                // A send shows the user their own message, wherever they
-                // had scrolled to.
                 guard text != nil else { return }
                 following = true
                 proxy.scrollTo(Self.bottomID, anchor: .bottom)
             }
             .onChange(of: model.isStreaming) { _, now in
                 if now {
-                    // Armed at stream start, when the viewport is settled.
                     streamActive = true
                     streamClip = max(160, metrics.viewportHeight - 40)
                 } else {
@@ -428,9 +535,8 @@ struct ConversationBody: View {
 
     /// The stream is over: the clip lets go, and nothing may pin to the
     /// bottom, so the reply's start stays in view as its tail fills in
-    /// below. One exact solve onto the reply's top covers a terminal
-    /// that reloaded the transcript instead of appending to it. A reply
-    /// shorter than the viewport lands at the bottom and keeps following.
+    /// below. A reply shorter than the viewport lands at the bottom and
+    /// keeps following.
     private func endStream(_ proxy: ScrollViewProxy) {
         guard streamActive else { return }
         streamActive = false
@@ -478,99 +584,70 @@ struct ConversationBody: View {
             bottomRequest += 1
         } label: {
             Image(systemName: "arrow.down")
-                .scaledFont(size: 13, weight: .semibold)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(SK.text)
                 .frame(width: 32, height: 32)
+                .background(Circle().fill(MK.raised))
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                .shadow(color: .black.opacity(0.4), radius: 6, y: 4)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
         .help("Jump to the latest message")
         .transition(.opacity.combined(with: .scale(scale: 0.8)))
     }
 
-    // MARK: Banners
+    // MARK: The composer's slot
+
+    /// Banners, then whatever holds the composer's place, in one column
+    /// with the transcript's measure.
+    private var bottomStack: some View {
+        VStack(spacing: 0) {
+            banners
+            bottomSlot
+        }
+        .padding(.bottom, 16)
+    }
 
     @ViewBuilder
     private var banners: some View {
         if let err = model.compactError {
-            InlineBanner(systemImage: "exclamationmark.triangle.fill", text: "Compression failed: \(err)") {
-                model.compactError = nil
-            }
+            bannerRow(MKInlineBanner(systemImage: "exclamationmark.triangle", text: "Compression failed: \(err)") { model.compactError = nil })
         }
         if let err = model.loadError, !model.messages.isEmpty {
-            InlineBanner(systemImage: "exclamationmark.triangle.fill", text: err) { model.loadError = nil }
+            bannerRow(MKInlineBanner(systemImage: "exclamationmark.triangle", text: err) { model.loadError = nil })
         }
         if let err = app.speech.playbackError {
-            InlineBanner(systemImage: "speaker.slash.fill", text: err) { app.speech.clearError() }
+            bannerRow(MKInlineBanner(systemImage: "speaker.slash", text: err) { app.speech.clearError() })
         }
         if app.connectivity.state == .offline {
-            InlineBanner(systemImage: "wifi.exclamationmark", text: "Server unreachable. Messages queue and send when it's back.", onDismiss: nil)
+            bannerRow(MKInlineBanner(systemImage: "wifi.exclamationmark", text: "Server unreachable. Messages wait here and send when it’s back."))
         }
     }
 
+    private func bannerRow(_ b: MKInlineBanner) -> some View {
+        MKColumn { b }.padding(.bottom, 8)
+    }
+
+    private var pendingElicitation: StreamHub.PendingElicit? {
+        app.streamHub.activeStream(conversationID: liveConversation.id)?.pendingElicitations.first
+    }
+
     @ViewBuilder
-    private var bottomBar: some View {
+    private var bottomSlot: some View {
         if let archivedAt = liveConversation.archivedAt {
             // The server refuses every write to an archived conversation.
-            ArchivedBarMac(conversationID: liveConversation.id, archivedAt: archivedAt)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 12)
+            MKColumn { ArchivedCard(conversationID: liveConversation.id, archivedAt: archivedAt) }
         } else if let pending = model.pendingCompressionSummary {
             // The server refuses sends until the summary is reviewed.
-            CompressionReviewBar(message: pending, model: model)
+            MKColumn { ReviewCard(message: pending, model: model) }
+        } else if let pending = pendingElicitation {
+            MKColumn { ElicitCard(conversationID: liveConversation.id, pending: pending).id(pending.id) }
+        } else if model.showingCompactView {
+            MKColumn { CompressCard(model: model) }
         } else {
             composer
         }
-    }
-
-    // MARK: Toolbar
-
-    @ViewBuilder
-    private var leadingToolbarItem: some View {
-        if isPage {
-            Button {
-                model.showingContextList = false
-                model.showingCompactView = false
-                model.showingSettingsView = false
-                model.showingModelPicker = false
-            } label: {
-                Image(systemName: "chevron.left")
-            }
-            .help("Back to the conversation")
-            .keyboardShortcut(.cancelAction)
-        }
-    }
-
-    @ViewBuilder
-    private var compactSubmitButton: some View {
-        Button {
-            let providerID = model.compactProviderID
-            let modelID = model.compactModelID
-            let trimmed = model.compactPromptDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-            // Close the page first so the summary streams into view.
-            model.showingCompactView = false
-            Task {
-                await model.compact(guide: trimmed.isEmpty ? nil : trimmed, providerID: providerID, modelID: modelID)
-            }
-        } label: {
-            if model.isCompacting { ProgressView().controlSize(.small) } else { Text("Compress") }
-        }
-        .buttonStyle(.glassProminent)
-        .keyboardShortcut(.defaultAction)
-        .disabled(!compactFormValid || model.isCompacting || model.sending)
-        .help("Compress with the prompt and model above")
-    }
-
-    /// Needs a prompt and an enabled model: the server refuses a
-    /// compression model that isn't enabled, and catching it here beats
-    /// an error a beat later.
-    private var compactFormValid: Bool {
-        let trimmed = model.compactPromptDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              let providerID = model.compactProviderID, !providerID.isEmpty,
-              let modelID = model.compactModelID, !modelID.isEmpty
-        else { return false }
-        return app.profiles.availableModels.contains { $0.providerID == providerID && $0.modelID == modelID }
     }
 
     // MARK: Composer
@@ -578,19 +655,22 @@ struct ConversationBody: View {
     @ViewBuilder
     private var continueChip: some View {
         if model.canContinueDiscussion {
-            HStack {
-                Button {
-                    Task { await model.continueDiscussion() }
-                } label: {
-                    Label("Continue the discussion", systemImage: "arrow.turn.down.right")
-                        .scaledFont(.caption)
+            MKColumn {
+                HStack {
+                    Button {
+                        Task { await model.continueDiscussion() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.turn.down.right").font(.system(size: 11, weight: .medium))
+                            Text("Continue the discussion")
+                        }
+                    }
+                    .skButton(.plainQuiet)
+                    .disabled(app.connectivity.state == .offline)
+                    Spacer(minLength: 0)
                 }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-                .disabled(app.connectivity.state == .offline)
-                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 20)
+            .padding(.bottom, 8)
         }
     }
 
@@ -600,6 +680,7 @@ struct ConversationBody: View {
 
     private var placeholder: String {
         if model.isDraft, model.draftProfile == nil { return "Choose a profile to start" }
+        if model.isCompacting { return "Waiting for the summary…" }
         if let name = model.draftProfile?.name ?? convos.profiles.first(where: { $0.id == liveConversation.profileID })?.name {
             return "Message \(name)"
         }
@@ -607,15 +688,13 @@ struct ConversationBody: View {
     }
 
     private var composer: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 0) {
             continueChip
             if !model.pendingAttachments.isEmpty || model.attachmentUploadCount > 0 {
-                pendingAttachmentStrip
+                MKColumn { pendingAttachmentStrip }.padding(.bottom, 8)
             }
-            // One floating glass island: the text on top, the controls
-            // on a footer row inside it.
-            GlassEffectContainer(spacing: 8) {
-                VStack(spacing: 6) {
+            MKColumn {
+                VStack(alignment: .leading, spacing: 0) {
                     // An AppKit text view: SwiftUI's vertical TextField
                     // stops growing at its line limit but never scrolls on
                     // macOS. Return sends; Shift-Return inserts a newline;
@@ -633,71 +712,29 @@ struct ConversationBody: View {
                     .overlay(alignment: .topLeading) {
                         if model.draft.isEmpty {
                             Text(placeholder)
-                                .scaledFont(.body)
-                                .foregroundStyle(Color(nsColor: .placeholderTextColor))
+                                .sk(13, SK.tertiary)
                                 .allowsHitTesting(false)
                         }
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.top, 12)
-
-                    HStack(spacing: 8) {
+                    HStack(spacing: 10) {
                         paperclipButton
-                        modelPickerChip
-                        if let warning = contextWarning {
-                            contextChip(warning)
-                        }
-                        Spacer()
+                        Text("Return to send · ⇧Return for a new line")
+                            .sk(11.5, SK.tertiary)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
                         sendOrStopButton
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 8)
+                    .padding(.top, 10)
+                    .padding(.leading, -6)
                 }
-                .glassEffect(.regular, in: .rect(cornerRadius: 22))
+                .padding(.top, 11)
+                .padding(.leading, 16)
+                .padding(.trailing, 10)
+                .padding(.bottom, 10)
+                .background(RoundedRectangle(cornerRadius: 18).fill(MK.raised))
+                .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(MK.raisedRing, lineWidth: 1))
+                .shadow(color: .black.opacity(0.3), radius: 12, y: 8)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 14)
-        }
-    }
-
-    /// Nothing under the user's threshold; past it, the size in amber;
-    /// near the model's own window, red, whatever the threshold.
-    private var contextWarning: ContextWarning? {
-        guard !model.isDraft else { return nil }
-        return model.contextWarning(threshold: app.preferences.preferences.contextWarningTokens)
-    }
-
-    /// Clicking opens Compress: the warning carries its own remedy.
-    private func contextChip(_ warning: ContextWarning) -> some View {
-        let tint: Color = { if case .nearWindow = warning { return .red }; return .orange }()
-        return Button {
-            model.showingCompactView = true
-        } label: {
-            HStack(spacing: 3) {
-                Image(systemName: "gauge.with.needle")
-                    .scaledFont(.caption2, weight: .semibold)
-                Text(ContextWarning.compact(warning.tokens))
-                    .scaledFont(.caption, weight: .semibold, monospacedDigit: true)
-            }
-            .lineLimit(1)
-            .fixedSize()
-            .foregroundStyle(tint)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(tint.opacity(0.14), in: Capsule())
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .disabled(model.isStreaming || model.isCompacting || model.hasPendingCompression)
-        .help(contextChipHelp(warning))
-    }
-
-    private func contextChipHelp(_ warning: ContextWarning) -> String {
-        switch warning {
-        case .overThreshold(let t):
-            return "Context is \(t.formatted()) tokens, past your warning level. Click to compress."
-        case .nearWindow(let t, let w):
-            return "Context is \(t.formatted()) of the model's \(w.formatted()) tokens. Click to compress."
         }
     }
 
@@ -719,114 +756,42 @@ struct ConversationBody: View {
             Button {
                 model.cancelStream()
             } label: {
-                Image(systemName: "stop.fill")
+                ComposerRoundIcon(systemImage: "stop.fill", fill: SK.destructiveFill, size: 9)
             }
-            .buttonStyle(.glassProminent)
-            .tint(.red)
+            .buttonStyle(.plain)
             .keyboardShortcut(".", modifiers: [.command])
             .help("Stop (⌘.)")
+            .accessibilityLabel("Stop")
         } else if canReload {
             Button {
                 Task { await model.reloadLastUser() }
             } label: {
-                if model.sending { ProgressView().controlSize(.small) } else { Image(systemName: "arrow.clockwise") }
+                ComposerRoundIcon(systemImage: "arrow.clockwise", fill: theme.accent, busy: model.sending)
             }
-            .buttonStyle(.glassProminent)
+            .buttonStyle(.plain)
             .keyboardShortcut(.return, modifiers: [.command])
             .disabled(model.sending || model.hasPendingCompression || model.isCompacting)
             .help("Send your last message again (a new branch)")
+            .accessibilityLabel("Send again")
         } else {
-            Button {
-                Task { await model.send() }
-            } label: {
-                if model.sending || model.creatingConversation {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: "arrow.up")
-                        .fontWeight(.semibold)
-                }
-            }
-            .buttonStyle(.glassProminent)
-            .keyboardShortcut(.return, modifiers: [.command])
-            // Attachment-only sends are legal; an upload in flight blocks
-            // the send so a message can't race its own attachment.
-            .disabled(
-                (model.draft.trimmingCharacters(in: .whitespaces).isEmpty && model.pendingAttachments.isEmpty)
+            let disabled = (model.draft.trimmingCharacters(in: .whitespaces).isEmpty && model.pendingAttachments.isEmpty)
                 || model.attachmentUploadCount > 0
                 || !canSend
                 || (model.isDraft && model.draftProfile == nil)
-            )
-            .help("Send (Return)")
-        }
-    }
-
-    private var selectedModelLabel: String {
-        if let mid = model.selectedModelID, let pid = model.selectedProviderID,
-           let m = model.availableModels.first(where: { $0.modelID == mid && $0.providerID == pid }) {
-            return m.displayName
-        }
-        return model.selectedModelID ?? "Choose model"
-    }
-
-    @ViewBuilder
-    private var modelPickerChip: some View {
-        if !model.availableModels.isEmpty {
-            // Opens the full-pane picker, which lists models with their
-            // metadata; a system menu was unusable at many providers.
             Button {
-                model.showingModelPicker = true
+                Task { await model.send() }
             } label: {
-                HStack(spacing: 6) {
-                    if let slug = selectedProviderLogoSlug {
-                        ProviderLogo(slug: slug, size: 14)
-                    } else {
-                        Image(systemName: "cpu")
-                    }
-                    Text(selectedModelLabel)
-                        .lineLimit(1)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .imageScale(.small)
-                        .foregroundStyle(.tertiary)
-                }
-                .scaledFont(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Capsule().fill(Color.primary.opacity(0.06)))
-                .contentShape(Capsule())
+                ComposerRoundIcon(systemImage: "arrow.up",
+                                  fill: disabled && !(model.sending || model.creatingConversation) ? Color.white.opacity(0.12) : theme.accent,
+                                  busy: model.sending || model.creatingConversation)
             }
             .buttonStyle(.plain)
-            .help("Choose model")
-            .fixedSize()
-        }
-    }
-
-    /// Logo slug for the currently-selected model's provider. Drives
-    /// the composer chip's icon. Native drivers map by type; openai-
-    /// compatible providers carry the slug in their preset id (parsed
-    /// out of the JSON config and exposed via providerPresetIDs). Nil
-    /// when nothing is selected or when we have no logo for the
-    /// configured provider — caller falls back to the cpu glyph.
-    private var selectedProviderLogoSlug: String? {
-        guard let pid = model.selectedProviderID else { return nil }
-        return providerLogoSlug(providerID: pid,
-                                type: model.providerTypes[pid],
-                                presetID: model.providerPresetIDs[pid])
-    }
-
-    /// Logo slug for a provider — anthropic and google have static
-    /// slugs; openai-compatible providers carry the slug in their
-    /// preset id. Returns nil for custom (no preset) configs so the
-    /// caller can render a fallback (cpu glyph in the chip, generic
-    /// globe in ProviderLogo).
-    fileprivate func providerLogoSlug(providerID: String, type: String?, presetID: String?) -> String? {
-        switch type {
-        case "anthropic": return "anthropic"
-        case "google":    return "google"
-        case "openai-compatible":
-            return presetID
-        default:
-            return nil
+            .keyboardShortcut(.return, modifiers: [.command])
+            // Attachment-only sends are legal; an upload in flight blocks
+            // the send so a message can't race its own attachment.
+            .disabled(disabled)
+            .help("Send (Return)")
+            .accessibilityLabel("Send")
         }
     }
 
@@ -913,29 +878,40 @@ struct ConversationBody: View {
         return false
     }
 
+    private var dropDetail: String {
+        let ok = acceptedAttachmentTypes
+        var kinds: [String] = []
+        if ok.image { kinds.append("Images") }
+        if ok.document { kinds.append("PDFs") }
+        if ok.audioVideo { kinds.append("audio and video") }
+        let list = ListFormatter.localizedString(byJoining: kinds)
+        return "\(list), for \(selectedModelLabel)"
+    }
+
     private var paperclipButton: some View {
         Button {
             showingFileImporter = true
         } label: {
             Image(systemName: "paperclip")
-                .scaledFont(.callout)
-                .foregroundStyle(attachmentsSupported ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
-                .frame(width: 26, height: 26)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(attachmentsSupported ? SK.secondary : SK.tertiary)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(Color.white.opacity(0.06)))
                 .contentShape(Circle())
+                .opacity(attachmentsSupported ? 1 : 0.5)
         }
         .buttonStyle(.plain)
         .disabled(!attachmentsSupported)
         .help(attachmentsSupported
-            ? "Attach files — or drop them on the composer"
+            ? "Attach files, or drop them on the conversation"
             : (model.canAttachFiles
                ? "Attachments not supported by this model"
                : "\(model.harness?.providerLabel ?? "This provider") cannot receive attachments"))
+        .accessibilityLabel("Attach files")
     }
 
-    /// Pending-attachment strip above the composer: image thumbnails
-    /// from the in-memory preview bytes, icon chips for the rest, an
-    /// inline ✕ per chip, and a spinner chip while uploads are in
-    /// flight.
+    /// Waiting attachments above the composer: 56pt thumbnails, file
+    /// chips, an ✕ on each, and a chip while uploads are in flight.
     private var pendingAttachmentStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -944,18 +920,16 @@ struct ConversationBody: View {
                 }
                 if model.attachmentUploadCount > 0 {
                     HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text("Uploading…")
-                            .scaledFont(.caption)
-                            .foregroundStyle(.secondary)
+                        MKSpinner(size: 11)
+                        Text("Uploading…").sk(12, SK.secondary)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.horizontal, 12)
+                    .frame(height: 56)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.05)))
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 8)
+            .padding(.top, 6)
+            .padding(.trailing, 6)
         }
     }
 
@@ -968,36 +942,112 @@ struct ConversationBody: View {
                     .aspectRatio(contentMode: .fill)
                     .frame(width: 56, height: 56)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-                    )
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
             } else {
-                HStack(spacing: 6) {
-                    Image(systemName: att.mimeType == "application/pdf" ? "doc.richtext" : "doc")
-                        .foregroundStyle(.secondary)
-                    Text(att.originalFilename ?? "File")
-                        .scaledFont(.caption)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .padding(.horizontal, 10)
+                AttachmentFileChip(
+                    name: att.originalFilename ?? "File",
+                    detail: att.mimeType == "application/pdf" ? "PDF" : (att.mimeType.split(separator: "/").last.map { $0.uppercased() } ?? "File"),
+                    systemImage: att.mimeType == "application/pdf" ? "doc.richtext" : "doc"
+                )
                 .frame(height: 56)
-                .frame(maxWidth: 180)
-                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
             }
             Button {
                 model.removePendingAttachment(fileID: att.fileID)
             } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, .black.opacity(0.55))
-                    .scaledFont(size: 14)
+                Image(systemName: "xmark")
+                    .font(.system(size: 7, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .frame(width: 16, height: 16)
+                    .background(Circle().fill(Color.black.opacity(0.6)))
             }
             .buttonStyle(.plain)
             .offset(x: 5, y: -5)
             .help("Remove attachment")
         }
+    }
+}
+
+/// The composer's round buttons: send, send again, stop. 28pt.
+struct ComposerRoundIcon: View {
+    let systemImage: String
+    let fill: Color
+    var busy = false
+    var size: CGFloat = 12
+
+    var body: some View {
+        ZStack {
+            Circle().fill(fill)
+            if busy {
+                MKSpinner(size: 12, color: .white)
+            } else {
+                Image(systemName: systemImage).font(.system(size: size, weight: .bold)).foregroundStyle(.white)
+            }
+        }
+        .frame(width: 28, height: 28)
+        .contentShape(Circle())
+    }
+}
+
+/// Over the conversation while files are dragged onto it.
+struct DropOverlay: View {
+    let detail: String
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "arrow.down.to.line").font(.system(size: 24, weight: .light)).foregroundStyle(theme.accentInk)
+            Text("Drop to attach").sk(14, weight: .semibold)
+            Text(detail).sk(12, SK.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(RoundedRectangle(cornerRadius: 14).fill(theme.chrome.opacity(0.92)))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.accent, style: StrokeStyle(lineWidth: 2, dash: [6, 4])))
+        .padding(12)
+        .allowsHitTesting(false)
+    }
+}
+
+/// The reading column's header: title and subtitle at 20pt, controls on
+/// the right. With the list hidden, its show and new buttons move here,
+/// clear of the traffic lights.
+struct MKDetailHeader<Trailing: View>: View {
+    let title: String
+    var subtitle: String = ""
+    var divider = true
+    @ViewBuilder var trailing: Trailing
+    @Environment(Navigator.self) private var navigator
+
+    var body: some View {
+        MKHeaderBand(divider: divider) {
+            if !navigator.listShown {
+                Color.clear.frame(width: 72, height: 1)
+                MKIconButton(systemImage: "sidebar.leading", label: "Show the conversation list (⌃⌘S)") {
+                    withAnimation(.easeInOut(duration: 0.25)) { navigator.listShown = true }
+                }
+                MKIconButton(systemImage: "square.and.pencil", label: "New conversation (⌘N)") {
+                    navigator.startNewConversation()
+                }
+                Color.clear.frame(width: 6, height: 1)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).sk(13, weight: .semibold).lineLimit(1).frame(height: 15.6)
+                if !subtitle.isEmpty {
+                    Text(subtitle).sk(11, SK.secondary).lineLimit(1).frame(height: 13.2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            trailing
+        }
+        .padding(.leading, navigator.listShown ? 20 : 10)
+        .padding(.trailing, 12)
+    }
+}
+
+extension MKDetailHeader where Trailing == EmptyView {
+    init(title: String, subtitle: String = "", divider: Bool = true) {
+        self.init(title: title, subtitle: subtitle, divider: divider) { EmptyView() }
     }
 }
 
@@ -1052,26 +1102,20 @@ private struct PendingAreaMac: View {
     /// Drawn exactly like the user bubble it becomes, faded, so the row
     /// doesn't change shape when the send lands.
     private func pendingBubble(_ text: String, badge: String?) -> some View {
-        VStack(alignment: .trailing, spacing: 2) {
-            HuggingWidth(maxWidth: paneWidth > 0 ? paneWidth * 0.8 : 600) {
-                MarkdownText(text)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background { ThemedUserBubbleBackground(cornerRadius: 16) }
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+        VStack(alignment: .trailing, spacing: 0) {
+            HuggingWidth(maxWidth: paneWidth > 0 ? paneWidth * 0.8 : 576) {
+                UserBubble(text: text)
             }
-            .opacity(0.7)
             HStack(spacing: 6) {
                 if let badge {
-                    Text(badge)
-                        .scaledFont(.caption2, weight: .medium)
-                        .foregroundStyle(.orange)
+                    Text(badge).sk(11, SK.orange, weight: .medium)
                 }
-                ProgressView().controlSize(.mini)
+                MKSpinner(size: 10)
             }
-            .frame(height: 24)
+            .frame(height: 22)
             .padding(.horizontal, 4)
         }
+        .opacity(0.7)
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
@@ -1094,245 +1138,109 @@ private struct ScrollGeometrySample: Equatable {
     var distanceFromBottom: CGFloat
 }
 
-/// A strip above the composer for a state worth reading: a failure, or
-/// the server being away. Dismissible when the state is.
-private struct InlineBanner: View {
-    let systemImage: String
-    let text: String
-    let onDismiss: (() -> Void)?
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: systemImage)
-                .foregroundStyle(.orange)
-            Text(text)
-                .scaledFont(.caption)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-            Spacer(minLength: 0)
-            if let onDismiss {
-                Button {
-                    onDismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .scaledFont(.caption2, weight: .semibold)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Dismiss")
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-        .padding(.horizontal, 16)
-    }
-}
-
-// MARK: - Conversation menu
-
-/// The toolbar's "…": compress, contexts, and what the context has cost.
-/// A popover of buttons, because SwiftUI's Menu renders empty rows in
-/// this position on macOS 26.
-private struct ConversationMenuMac: View {
-    @Bindable var model: ConversationViewModel
-    let dismiss: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            RowActionButton(title: "Compress…", systemImage: "wand.and.stars") {
-                dismiss()
-                model.showingCompactView = true
-            }
-            .disabled(model.isStreaming || model.isCompacting || model.hasPendingCompression)
-            RowActionButton(title: "Contexts", systemImage: "tray.full") {
-                dismiss()
-                model.showingContextList = true
-            }
-            Divider().padding(.vertical, 4)
-            HStack(spacing: 8) {
-                Image(systemName: "dollarsign.circle")
-                    .foregroundStyle(.secondary)
-                Text(String(format: "$%.4f", accruedCost))
-                    .monospacedDigit()
-                Spacer()
-                Text("this context")
-                    .scaledFont(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
-            if !modelsMissingCost.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    Label("Approximate", systemImage: "exclamationmark.triangle")
-                        .scaledFont(.caption, weight: .semibold)
-                        .foregroundStyle(.orange)
-                    Text("No pricing for \(modelsMissingCost.joined(separator: ", ")), so those turns aren't counted.")
-                        .scaledFont(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-            }
-        }
-        .frame(width: 260)
-        .padding(.vertical, 6)
-    }
-
-    /// The server's per-context total, which counts every branch; the
-    /// visible chain's sum undercounts once the user forks. The sum is
-    /// the fallback until the contexts list loads.
-    private var accruedCost: Double {
-        if let ctx = model.activeContext, let row = model.contexts.first(where: { $0.id == ctx.id }) {
-            return row.cumulativeCostUsd
-        }
-        return model.messages.reduce(0) { $0 + ($1.usage?.totalCostUsd ?? 0) }
-    }
-
-    /// Models that produced metered turns with no price.
-    private var modelsMissingCost: [String] {
-        var seen = Set<String>()
-        for m in model.messages {
-            guard m.role == .assistant, m.usage != nil, m.usage?.totalCostUsd == nil, let mid = m.modelID else { continue }
-            let display = model.availableModels
-                .first(where: { $0.modelID == mid && (m.providerID == nil || $0.providerID == m.providerID) })?
-                .displayName ?? mid
-            seen.insert(display)
-        }
-        return seen.sorted()
-    }
-}
-
-// MARK: - Compacting, usage, archived
-
+/// The summary streaming in, where the card will land.
 private struct CompactingRow: View {
     let text: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Image(systemName: "wand.and.stars")
-                    .foregroundStyle(.orange)
-                Text("COMPACTING")
-                    .scaledFont(.caption2, weight: .semibold)
-                    .foregroundStyle(.orange)
-                ProgressView().controlSize(.mini)
+                Image(systemName: "wand.and.stars").font(.system(size: 10.5, weight: .medium))
+                Text("COMPACTING").sk(11, SK.orange, weight: .semibold)
+                MKSpinner(size: 10, color: SK.orange)
             }
+            .foregroundStyle(SK.orange)
             if text.isEmpty {
-                Text("Summarizing conversation…")
-                    .scaledFont(.callout)
-                    .foregroundStyle(.secondary)
+                Text("Summarizing the conversation…").sk(13, SK.secondary)
             } else {
-                // Chunked live view — this re-renders on every stream
-                // flush, and a multi-leg summary outgrows what a single
-                // document can re-lay out per tick; prefix-stable
-                // chunks mean only the growing tail re-parses. The
-                // settled card previews the head at terminal.
+                // Chunked: this re-renders on every stream flush, and
+                // prefix-stable chunks mean only the growing tail re-parses.
                 ChunkedMarkdownText(text)
-                    .scaledFont(.callout)
+                    .foregroundStyle(SK.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(Color.orange.opacity(0.07))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange.opacity(0.3)))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(SK.orange.opacity(0.07)))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(SK.orange.opacity(0.3), lineWidth: 1))
     }
 }
 
-struct MessageUsagePopover: View {
+// MARK: - Usage
+
+/// A reply's model, tokens, cache and cost, opened under the reply from
+/// its More menu (board AppMessageUsage). Four columns in one card.
+struct MessageUsageDetails: View {
     let message: PsmithMessage
     let model: ConversationViewModel
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            // Model / provider identification — show human-readable labels
-            // (provider nicename + model display name) instead of UUIDs / raw
-            // model_ids; fall back to the raw value when the lookup misses.
-            if message.modelID != nil || message.providerID != nil {
-                section("Model") {
-                    if let mid = message.modelID {
-                        let modelDisplay = model.availableModels
-                            .first(where: { $0.modelID == mid && (message.providerID == nil || $0.providerID == message.providerID) })?
-                            .displayName
-                        row("Model", modelDisplay ?? mid)
-                    }
-                    if let pid = message.providerID {
-                        row("Provider", model.providerLabels[pid] ?? pid)
-                    }
-                }
+    private typealias Line = (String, String)
+
+    private var columns: [(String, [Line])] {
+        var out: [(String, [Line])] = []
+        var m: [Line] = []
+        if let mid = message.modelID {
+            let name = model.availableModels.first(where: { $0.modelID == mid && (message.providerID == nil || $0.providerID == message.providerID) })?.displayName
+            m.append((name ?? mid, ""))
+        }
+        if let pid = message.providerID { m.append((model.providerLabels[pid] ?? pid, "")) }
+        if !m.isEmpty { out.append(("Model", m)) }
+        guard let u = message.usage else { return out }
+        var t: [Line] = []
+        if let n = u.inputTokens { t.append(("Input", n.formatted())) }
+        if let n = u.outputTokens { t.append(("Output", n.formatted())) }
+        if let n = u.cacheReadTokens { t.append(("Cache read", n.formatted())) }
+        if let n = u.cacheWriteTokens, n > 0 { t.append(("Cache write", n.formatted())) }
+        if let n = u.reasoningTokens { t.append(("Reasoning", n.formatted())) }
+        if !t.isEmpty { out.append(("Tokens", t)) }
+        let read = u.cacheReadTokens ?? 0
+        if read > 0 || u.explicitCacheAttached != nil {
+            var c: [Line] = []
+            if read > 0, let input = u.inputTokens, input > 0 {
+                let prompt = read > input ? input + read : input
+                c.append(("Hit", "\(Int((Double(read) / Double(prompt) * 100).rounded()))%"))
             }
+            if let attached = u.explicitCacheAttached {
+                c.append(("Source", attached ? "Explicit" : "Not attached"))
+            } else if read > 0 {
+                c.append(("Source", "Implicit"))
+            }
+            if read > 0, let savings = cacheSavings(message: message, cacheReadTokens: read) { c.append(("Saved", costStr(savings))) }
+            out.append(("Cache", c))
+        }
+        var k: [Line] = []
+        if let v = u.inputCostUsd { k.append(("Input", costStr(v))) }
+        if let v = u.outputCostUsd { k.append(("Output", costStr(v))) }
+        if let v = u.cacheReadCostUsd, v > 0 { k.append(("Cache read", costStr(v))) }
+        if let v = u.cacheWriteCostUsd, v > 0 { k.append(("Cache write", costStr(v))) }
+        if let v = u.toolCostUsd, v > 0 { k.append(("Tools", costStr(v))) }
+        if let v = u.totalCostUsd { k.append(("Total", costStr(v))) }
+        if !k.isEmpty { out.append(("Cost", k)) }
+        return out
+    }
 
-            if let u = message.usage {
-                // Token counts
-                let hasTokens = u.inputTokens != nil || u.outputTokens != nil
-                    || u.cacheReadTokens != nil || u.cacheWriteTokens != nil
-                    || u.reasoningTokens != nil
-                if hasTokens {
-                    section("Tokens") {
-                        if let n = u.inputTokens      { row("Input",       n.formatted()) }
-                        if let n = u.outputTokens     { row("Output",      n.formatted()) }
-                        if let n = u.cacheReadTokens  { row("Cache read",  n.formatted()) }
-                        if let n = u.cacheWriteTokens { row("Cache write", n.formatted()) }
-                        if let n = u.reasoningTokens  { row("Reasoning",   n.formatted()) }
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            ForEach(columns, id: \.0) { column in
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(column.0).sk(11, SK.tertiary, weight: .semibold).padding(.bottom, 5)
+                    ForEach(Array(column.1.enumerated()), id: \.offset) { _, line in
+                        HStack {
+                            Text(line.0).sk(12, line.1.isEmpty ? SK.text : SK.secondary).lineLimit(1)
+                            Spacer(minLength: 4)
+                            Text(line.1).sk(12).monospacedDigit()
+                        }
+                        .frame(height: 19)
                     }
                 }
-
-                // Cache section. Renders whenever there's any cache
-                // signal — cache_read tokens OR an explicit-cache
-                // toggle outcome to report. The "Source" / "Explicit
-                // cache" rows let the user distinguish implicit hits
-                // (Gemini's automatic) from explicit ones (Psmith
-                // attached a cachedContents reference) AND see when
-                // the toggle was on but no cache attached this turn
-                // (most often: prefix below the per-model minimum).
-                let cacheRead = u.cacheReadTokens ?? 0
-                let hasExplicitFlag = u.explicitCacheAttached != nil
-                if cacheRead > 0 || hasExplicitFlag {
-                    section("Cache") {
-                        if cacheRead > 0 {
-                            row("Cache read", cacheRead.formatted())
-                        }
-                        if let cw = u.cacheWriteTokens, cw > 0 {
-                            row("Cache write", cw.formatted())
-                        }
-                        if let attached = u.explicitCacheAttached {
-                            row(
-                                "Explicit cache",
-                                attached
-                                    ? "Attached"
-                                    : "Enabled — not attached this turn"
-                            )
-                        } else if cacheRead > 0 {
-                            row("Source", "Implicit (provider-side)")
-                        }
-                        if cacheRead > 0,
-                           let savings = cacheSavings(message: message, cacheReadTokens: cacheRead) {
-                            row("Estimated savings", costStr(savings), bold: true)
-                        }
-                    }
-                }
-
-                // Costs
-                let hasCosts = u.inputCostUsd != nil || u.outputCostUsd != nil
-                    || u.cacheReadCostUsd != nil || u.cacheWriteCostUsd != nil
-                    || u.toolCostUsd != nil
-                    || u.totalCostUsd != nil
-                if hasCosts {
-                    section("Cost (USD)") {
-                        if let c = u.inputCostUsd      { row("Input",       costStr(c)) }
-                        if let c = u.outputCostUsd     { row("Output",      costStr(c)) }
-                        if let c = u.cacheReadCostUsd  { row("Cache read",  costStr(c)) }
-                        if let c = u.cacheWriteCostUsd { row("Cache write", costStr(c)) }
-                        if let c = u.toolCostUsd       { row("Tools",       costStr(c)) }
-                        if let c = u.totalCostUsd      { row("Total",       costStr(c), bold: true) }
-                    }
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(14)
-        .frame(minWidth: 280)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(MK.card))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(SK.line, lineWidth: 1))
     }
 
     /// Estimate cache savings in USD for an assistant message. Computes
@@ -1361,62 +1269,8 @@ struct MessageUsagePopover: View {
     }
 
     private func costStr(_ v: Double) -> String {
-        v.formatted(.currency(code: "USD").precision(.fractionLength(6)))
+        v.formatted(.currency(code: "USD").precision(.fractionLength(4)))
     }
 
-    @ViewBuilder
-    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .scaledFont(.caption)
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-            content()
-        }
-    }
-
-    @ViewBuilder
-    private func row(_ label: String, _ value: String, bold: Bool = false) -> some View {
-        HStack {
-            Text(label)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text(value)
-                .fontWeight(bold ? .semibold : .regular)
-                .foregroundStyle(bold ? .primary : .secondary)
-        }
-        .scaledFont(.callout)
-    }
-}
-
-/// Replaces the composer while the conversation is archived. The
-/// transcript stays readable; the server refuses writes until it's restored.
-struct ArchivedBarMac: View {
-    let conversationID: String
-    let archivedAt: Date
-    @Environment(ConversationsModel.self) private var convos
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "archivebox")
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Archived")
-                    .scaledFont(.callout, weight: .semibold)
-                Text(archivedAt, style: .date)
-                    .scaledFont(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button("Unarchive") {
-                Task { await convos.unarchive(conversationID) }
-            }
-            .buttonStyle(.glassProminent)
-            .controlSize(.small)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.thinMaterial)
-    }
 }
 

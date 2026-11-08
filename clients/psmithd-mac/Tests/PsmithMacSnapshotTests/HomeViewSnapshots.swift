@@ -47,15 +47,23 @@ struct HomeViewSnapshots {
         assertViewSnapshots(view, sizes: defaultSizes)
     }
 
-    // MARK: - Settings mode
+    // MARK: - Settings window
 
+    /// Settings has its own window now; this is its content, with no back
+    /// button since there's nothing to go back to.
     @Test
-    func settingsMode() {
-        let env = SnapshotEnvironment.standard(navMode: .settings)
+    func settingsWindow() {
+        let env = SnapshotEnvironment.standard()
         let view = PsmithMacEnvironment(
             app: env.app, convos: env.convos,
             navigator: env.navigator, windowState: env.windowState
-        ) { HomeView(user: SnapshotFixtures.user()) }
+        ) {
+            SettingsView(
+                providersModel: env.app.providers,
+                profilesModel: env.app.profiles,
+                mcpServersModel: env.app.mcpServers
+            )
+        }
         assertViewSnapshots(view, sizes: defaultSizes)
     }
 }

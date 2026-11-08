@@ -92,9 +92,9 @@ struct ComposerTextViewTests {
         let hosted = try hostConversation(size: CGSize(width: 1100, height: 720))
         defer { hosted.window.orderOut(nil) }
         #expect(hosted.scroll.frame.height == ceil(hosted.lineHeight))
-        // The composer spans the reading column (820pt plus margins)
-        // less its padding, nowhere near a collapsed width.
-        #expect(hosted.scroll.frame.width > 760)
+        // The composer spans the reading column less its card's 16 and 10
+        // of padding, nowhere near a collapsed width.
+        #expect(hosted.scroll.frame.width == MK.column - 26)
         #expect(hosted.textView.frame.width == hosted.scroll.contentSize.width)
         #expect(hosted.containerWidth == hosted.textView.frame.width)
     }
@@ -126,7 +126,7 @@ struct ComposerTextViewTests {
         defer { hosted.window.orderOut(nil) }
         hosted.resize(to: CGSize(width: 1100, height: 720))
 
-        #expect(hosted.scroll.frame.width > 760)
+        #expect(hosted.scroll.frame.width == MK.column - 26)
         #expect(hosted.textView.frame.width == hosted.scroll.contentSize.width)
         #expect(hosted.containerWidth == hosted.textView.frame.width)
 

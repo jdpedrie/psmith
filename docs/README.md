@@ -57,6 +57,8 @@ Running it.
 - [clients/ios-reference.md](clients/ios-reference.md) — the iOS reference implementation: PsmithKit and PsmithUI layering, the stream hub, repositories, view models, account switching, the offline queue, the cache, device-tool dispatch, the screens.
 - [clients/building-ios.md](clients/building-ios.md) — building and running the iOS app: prerequisites, the simulator loop, the make targets, running on a physical device, signing, troubleshooting.
 - [clients/chat-scroll.md](clients/chat-scroll.md) — the chat transcript's scroll architecture: the estimate-error physics behind every historical scroll bug, the follow/park/backfill state machine, the width containment strategy, and the mid-stream repro harness.
+- [clients/mac-settings/inventory-app-panes.md](clients/mac-settings/inventory-app-panes.md) and [inventory-data-panes.md](clients/mac-settings/inventory-data-panes.md) — every screen, field, action and modal in the Mac Settings window before the no-modal redesign: General, Appearance, Usage, Integrations, the account menu, then Models, Profiles, Plugins and Servers. A snapshot for the rebuild, not a spec.
+- [clients/mac-main/inventory-shell.md](clients/mac-main/inventory-shell.md) and [inventory-conversation.md](clients/mac-main/inventory-conversation.md) — every screen, state, control and modal in the Mac main window before the no-modal redesign: window, list, account menu, sign-in, drafts, then the transcript, composer, compression, inspector and every sheet. A snapshot for the rebuild, not a spec.
 - [clients/web.md](clients/web.md) — the server-rendered web client: templ + htmx (with the SSE extension), in-process service calls, cookie sessions, SSE streaming. Early but functional.
 
 ## Project notes

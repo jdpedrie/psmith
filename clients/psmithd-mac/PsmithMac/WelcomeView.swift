@@ -2,10 +2,7 @@ import SwiftUI
 import PsmithKit
 import PsmithUI
 
-/// Detail-pane home shown when nothing is selected. Mirrors the layout
-/// shape of `EmptyStateView` (the original placeholder) so it doesn't
-/// disrupt the parent NavigationSplitView's size negotiation, but adds
-/// a prominent "New Conversation" button.
+/// The reading pane with nothing open (board AppWelcome).
 struct WelcomeView: View {
     @Environment(Navigator.self) private var navigator
     @Environment(ConversationsModel.self) private var convos
@@ -15,33 +12,40 @@ struct WelcomeView: View {
     }
 
     var body: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .scaledFont(size: 40, weight: .light)
-                .foregroundStyle(.tertiary)
-            Text("Welcome to Psmith")
-                .scaledFont(.title3)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
-            Text(canCreateConversation
-                 ? "Start a new conversation, or pick one from the sidebar."
-                 : "Add a profile in Settings to start your first conversation.")
-                .scaledFont(.caption)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
-            Button {
-                navigator.startNewConversation()
-            } label: {
-                Label("New Conversation", systemImage: "plus.bubble")
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
+        VStack(spacing: 0) {
+            MKDetailHeader(title: "", divider: false)
+            VStack(spacing: 0) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.system(size: 32, weight: .light))
+                    .foregroundStyle(SK.tertiary)
+                    .frame(height: 40)
+                Text("Nothing open").sk(15, SK.secondary, weight: .semibold).padding(.top, 12)
+                Text(canCreateConversation
+                     ? "Pick a conversation, or start a new one."
+                     : "Add a profile in Settings to start your first conversation.")
+                    .sk(12.5, SK.tertiary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 12)
+                if canCreateConversation {
+                    Button {
+                        navigator.startNewConversation()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus.bubble").font(.system(size: 11.5, weight: .medium))
+                            Text("New Conversation")
+                        }
+                    }
+                    .skButton(.primary)
+                    .padding(.top, 16)
+                    Text("⌘N").sk(11.5, SK.tertiary).padding(.top, 12)
+                } else {
+                    Button("Open Profiles Settings") { navigator.showSettings(.profiles) }
+                        .skButton(.primary)
+                        .padding(.top, 16)
+                }
             }
-            .buttonStyle(.glassProminent)
-            .controlSize(.regular)
-            .disabled(!canCreateConversation)
-            .padding(.top, 4)
+            .padding(.bottom, 52)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal)
     }
 }

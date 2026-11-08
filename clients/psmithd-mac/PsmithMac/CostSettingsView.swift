@@ -1,9 +1,9 @@
 import SwiftUI
 import PsmithKit
 
-/// Per-provider cost rollup for the Mac. One row per configured
-/// provider with the running USD total; the header carries the grand
-/// total so "how much have I spent?" has an answer without scanning.
+/// The Usage pane (boards "Usage" and "Usage · a custom range"): the total
+/// for a window, then one row per provider with a bar against the top
+/// spender.
 /// Reads cost_events server-side (populated forward from 2026-05;
 /// per-turn costs also live on messages for the in-conversation chip).
 struct CostSettingsView: View {
@@ -16,105 +16,113 @@ struct CostSettingsView: View {
     @State private var customSince: Date = Date().addingTimeInterval(-30 * 86_400)
     @State private var customUntil: Date = Date()
 
+    @State private var sinceText = ""
+    @State private var untilText = ""
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text("Cost")
-                            .scaledFont(.title2, weight: .semibold)
-                        Spacer()
-                        if !loading || !rows.isEmpty {
-                            Text(formatUSD(grandTotal))
-                                .scaledFont(.title3, weight: .medium, monospacedDigit: true)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    Text("Spend recorded per assistant turn (including compression and speech synthesis). Free-tier and subscription models don't contribute.")
-                        .scaledFont(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        SKFormPage(width: 700) {
+            HStack(alignment: .bottom, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(headline).sk(12.5, SK.secondary).skOneLine(12.5)
+                    Text(formatUSD(grandTotal))
+                        .sk(34, weight: .bold)
+                        .monospacedDigit()
+                        .skOneLine(34)
                 }
-
-                sectionCard("Range") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Picker("Range", selection: $range) {
-                            ForEach(CostRangeOption.allCases) { opt in
-                                Text(opt.label).tag(opt)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        if range == .custom {
-                            HStack(spacing: 16) {
-                                DatePicker("From", selection: $customSince, in: ...customUntil, displayedComponents: [.date])
-                                DatePicker("To", selection: $customUntil, in: customSince..., displayedComponents: [.date])
-                            }
-                        }
-                        Text(rangeFooter)
-                            .scaledFont(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
+                Spacer(minLength: 0)
+                SKSegmented(options: CostRangeOption.allCases.map { ($0, $0.label) }, selection: $range)
+                Button { Task { await reload() } } label: {
+                    Image(systemName: "arrow.counterclockwise").font(.system(size: 12, weight: .medium)).frame(width: 13)
                 }
+                .skButton(compact: true)
+                .accessibilityLabel("Refresh")
+            }
+            .padding(.bottom, 18)
 
-                if let errorText {
-                    Text(errorText)
-                        .scaledFont(.callout)
-                        .foregroundStyle(.red)
-                        .padding(10)
-                        .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            if range == .custom {
+                HStack(spacing: 8) {
+                    Spacer(minLength: 0)
+                    Text("From").sk(12.5, SK.secondary)
+                    TextField("From", text: $sinceText).skField(width: 110, mono: true).onSubmit(applyDates)
+                    Text("to").sk(12.5, SK.secondary)
+                    TextField("To", text: $untilText).skField(width: 110, mono: true).onSubmit(applyDates)
                 }
-
-                sectionCard("By provider") {
-                    if rows.isEmpty && !loading {
-                        Text("No cost events in this window yet.")
-                            .scaledFont(.callout)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        VStack(spacing: 0) {
-                            ForEach(rows) { row in
-                                HStack(alignment: .firstTextBaseline) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(row.providerLabel)
-                                        Text(subtitle(for: row))
-                                            .scaledFont(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer(minLength: 8)
-                                    Text(formatUSD(row.totalCostUsd))
-                                        .monospacedDigit()
-                                }
-                                .padding(.vertical, 6)
-                                if row.id != rows.last?.id {
-                                    Divider()
-                                }
-                            }
-                        }
-                    }
+                .padding(.top, -6)
+                .padding(.bottom, 18)
+                .onAppear {
+                    sinceText = Self.isoDay.string(from: customSince)
+                    untilText = Self.isoDay.string(from: customUntil)
                 }
             }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 24)
-            .frame(maxWidth: 720, alignment: .leading)
+
+            if let errorText {
+                SKBanner(.error, "Couldn't load spending", message: errorText)
+            }
+
+            SKGroup("By provider") {
+                if rows.isEmpty {
+                    SKRawRow {
+                        if loading {
+                            ProgressView().controlSize(.small).frame(maxWidth: .infinity)
+                        } else {
+                            Text("No spending in this range yet.").sk(13, SK.secondary)
+                        }
+                    }
+                } else {
+                    let top = max(rows.map(\.totalCostUsd).max() ?? 0, 0.000_001)
+                    ForEach(rows, id: \.providerID) { row in
+                        SKRow(row.providerLabel, detail: subtitle(for: row)) {
+                            HStack(spacing: 12) {
+                                Capsule().fill(Color.white.opacity(0.07))
+                                    .frame(width: 140, height: 6)
+                                    .overlay(alignment: .leading) {
+                                        if row.totalCostUsd > 0 {
+                                            Capsule().fill(SK.accent).frame(width: max(140 * row.totalCostUsd / top, 1.4), height: 6)
+                                        }
+                                    }
+                                Text(formatUSD(row.totalCostUsd)).sk(13, mono: true)
+                                    .frame(width: 64, alignment: .trailing)
+                            }
+                        }
+                    }
+                }
+            } trailing: {
+                SKChip.synced
+            } footer: {
+                Text("Every assistant turn, including compression and speech synthesis. Free-tier and subscription models count as $0.")
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // Keyed on the window, so a new range cancels the load still in
-        // flight for the old one; otherwise a slow earlier answer could
-        // land last and show its totals under the new range's label.
+        // Cancel an in-flight load when the window changes; a slow earlier
+        // answer would otherwise land last under the new range's label.
         .task(id: reloadKey) { await reload() }
     }
 
-    private var rangeFooter: String {
+    private static let isoDay: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    private func applyDates() {
+        if let d = Self.isoDay.date(from: sinceText) { customSince = d }
+        if let d = Self.isoDay.date(from: untilText) { customUntil = d }
+        if customSince > customUntil { swap(&customSince, &customUntil) }
+        sinceText = Self.isoDay.string(from: customSince)
+        untilText = Self.isoDay.string(from: customUntil)
+    }
+
+    private var headline: String {
         switch range {
-        case .day:   return "Trailing 24 hours."
-        case .week:  return "Trailing 7 days."
-        case .month: return "Trailing 30 days."
-        case .year:  return "Trailing 365 days."
+        case .day: return "Spent in the last 24 hours"
+        case .week: return "Spent in the last 7 days"
+        case .month: return "Spent in the last 30 days"
+        case .year: return "Spent in the last 365 days"
         case .custom:
-            let fmt = DateFormatter()
-            fmt.dateStyle = .medium
-            return "\(fmt.string(from: customSince)) – \(fmt.string(from: customUntil))."
+            let f = DateFormatter()
+            f.setLocalizedDateFormatFromTemplate("MMM d")
+            let y = DateFormatter()
+            y.setLocalizedDateFormatFromTemplate("MMM d, yyyy")
+            return "Spent from \(f.string(from: customSince)) to \(y.string(from: customUntil))"
         }
     }
 
@@ -163,28 +171,19 @@ struct CostSettingsView: View {
         default: typeLabel = row.providerType
         }
         if row.eventCount == 0 {
-            return "\(typeLabel) · no events in this window"
+            return "\(typeLabel) · no turns in this range"
         }
         return "\(typeLabel) · \(row.eventCount) \(row.eventCount == 1 ? "turn" : "turns")"
     }
 
-    /// Always 4 decimals — matches the in-conversation cost chip so the
-    /// rollup never reads as a different unit.
+    /// Cents, except a nonzero total under a cent, which gets decimals
+    /// down to its first significant digit so it doesn't read as $0.00.
     private func formatUSD(_ amount: Double) -> String {
-        String(format: "$%.4f", amount)
-    }
-
-    @ViewBuilder
-    private func sectionCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .scaledFont(.caption, weight: .semibold)
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-            content()
-                .padding(14)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        guard amount > 0, amount < 0.01 else {
+            return String(format: "$%.2f", amount)
         }
+        let decimals = min(6, max(3, Int((-log10(amount)).rounded(.up))))
+        return String(format: "$%.\(decimals)f", amount)
     }
 }
 

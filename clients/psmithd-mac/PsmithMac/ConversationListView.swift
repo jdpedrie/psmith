@@ -2,577 +2,577 @@ import SwiftUI
 import PsmithKit
 import PsmithUI
 
+/// The conversation list's content: offline note, search, filter chips,
+/// then the date-grouped rows (or search results, or the archive). Drawn
+/// to the main-window boards (AppConversation, AppList*): no system list,
+/// so a row measures what the board says. Rename and delete happen in the
+/// row; nothing opens a dialog.
 struct ConversationListView: View {
     @Environment(ConversationsModel.self) private var convos
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
-    @State private var conversationToDelete: PsmithConversation?
-    @State private var sortPopoverShown = false
-    /// Conversation being renamed via the alert. Owned at list level so
-    /// one alert serves every row.
-    @State private var renameCandidate: PsmithConversation?
-    @State private var renameDraft = ""
-    /// When true the sidebar browses the archive instead of the active
-    /// list. Presentation-only — the data lives on ConversationsModel so
-    /// HomeView's detail pane can resolve archived selections too.
     @Binding var showingArchived: Bool
 
+    @State private var searchText = ""
+    @State private var filter: SidebarFilter = .all
+    @State private var renamingID: String?
+    @State private var renameDraft = ""
+    @State private var deletingID: String?
+    @State private var lastClick: (id: String, at: Date)?
+    @FocusState private var listFocused: Bool
+
     var body: some View {
-        @Bindable var convos = convos
-        VStack(spacing: 0) {
-            List(selection: $convos.selectedID) {
-                if showingArchived {
-                    archivedContent
-                } else {
-                    // Mode pill row — first row of the list, no separator, no
-                    // background. Stays visible across all modes.
-                    modePillRow
-                    if convos.listMode == .search {
-                        searchFieldRow
-                    }
-                    modeContent
-                }
-            }
-            .listStyle(.sidebar)
-            .tint(theme.accent)
-            // In the list's top inset, not stacked above it: the sidebar
-            // runs under the title bar, and a sibling above the list sat
-            // under the window's traffic lights.
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if app.connectivity.state == .offline {
-                    offlineBanner
-                }
-            }
-            .task(id: showingArchived) {
-                if showingArchived { await convos.loadArchived() }
-            }
-            .alert(
-                "Rename conversation",
-                isPresented: Binding(
-                    get: { renameCandidate != nil },
-                    set: { if !$0 { renameCandidate = nil } }
-                )
-            ) {
-                TextField("Title", text: $renameDraft)
-                Button("Rename") {
-                    if let c = renameCandidate {
-                        let title = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !title.isEmpty {
-                            Task { await convos.rename(id: c.id, title: title) }
+        ScrollViewReader { proxy in
+            VStack(spacing: 0) {
+                header
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        if showingArchived {
+                            archivedContent
+                        } else if isSearching {
+                            searchContent
+                        } else {
+                            groupedContent
                         }
                     }
-                    renameCandidate = nil
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 8)
                 }
-                Button("Cancel", role: .cancel) { renameCandidate = nil }
+                .scrollIndicators(.automatic)
+                .scrollEdgeEffectHidden(true, for: .top)
+                .overlay { emptyState }
             }
-            .confirmationDialog(
-                conversationToDelete.map { c in
-                    let t = c.title ?? ""
-                    return "Delete \"\(t.isEmpty ? "Untitled" : t)\"?"
-                } ?? "Delete conversation?",
-                isPresented: Binding(
-                    get: { conversationToDelete != nil },
-                    set: { if !$0 { conversationToDelete = nil } }
-                ),
-                titleVisibility: .visible
-            ) {
-                Button("Delete", role: .destructive) {
-                    if let c = conversationToDelete {
-                        let fromArchive = showingArchived
-                        Task {
-                            if fromArchive {
-                                await convos.deleteArchived(c.id)
-                            } else {
-                                await convos.delete(c.id)
-                            }
-                        }
-                    }
-                    conversationToDelete = nil
-                }
-                Button("Cancel", role: .cancel) { conversationToDelete = nil }
-            } message: {
-                Text("This will permanently delete the conversation and all its messages.")
+            // Focusable as a whole, so clicking a row hands the arrow keys
+            // to the list; the key handlers sit on the focused view.
+            .focusable()
+            .focusEffectDisabled()
+            .focused($listFocused)
+            .onKeyPress(.upArrow) { move(-1, proxy) }
+            .onKeyPress(.downArrow) { move(1, proxy) }
+        }
+        .task(id: searchText) {
+            let query = searchText.trimmingCharacters(in: .whitespaces)
+            if query.isEmpty {
+                guard convos.listMode != .allChats else { return }
+                convos.listMode = .allChats
+                convos.searchQuery = ""
+                await convos.refresh()
+                return
             }
-            .overlay {
-                if let err = convos.loadError {
-                    VStack(spacing: 8) {
-                        Text("Failed to load").scaledFont(.headline)
-                        Text(err).scaledFont(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                        Button("Retry") { Task { await convos.refresh() } }
-                    }
-                    .padding()
-                } else if convos.isLoading && convos.conversations.isEmpty {
-                    ProgressView()
-                } else if convos.conversations.isEmpty, app.connectivity.state == .offline {
-                    // Terminal empty state, not a transient one. The
-                    // cache fallback swallows transport errors (so
-                    // `loadError` stays nil) and the load has finished
-                    // (so there's no spinner) — without this the pane
-                    // renders blank with no explanation.
-                    VStack(spacing: 8) {
-                        Text("Can't reach the server").scaledFont(.headline)
-                        Text("No cached chats to show. Check that psmithd is running and reachable.")
-                            .scaledFont(.caption)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                        Button("Retry") { Task { await convos.refresh() } }
-                    }
-                    .padding()
-                }
-            }
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            convos.listMode = .search
+            convos.searchQuery = query
+            await convos.refresh()
+        }
+        .task(id: showingArchived) {
+            if showingArchived { await convos.loadArchived() }
         }
     }
 
-    /// Strip above the sidebar when the connectivity monitor reports
-    /// the server unreachable. Mirrors the iOS ChatsRoot banner: the
-    /// list below still shows whatever the cache last saw, so the user
-    /// keeps context but knows it isn't live. Mac uses a material
-    /// capsule rather than iOS's glass effect to match sidebar chrome.
-    private var offlineBanner: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "wifi.exclamationmark")
-                .scaledFont(.caption2)
-            // Don't promise cached chats when there are none — the
-            // empty-cache branch below already says the opposite.
-            Text(convos.conversations.isEmpty
-                 ? "Server unavailable"
-                 : "Server unavailable. Showing cached chats.")
-                .scaledFont(.caption2)
-                .lineLimit(1)
+    private var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    // MARK: Header
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if app.connectivity.state == .offline {
+                HStack(spacing: 7) {
+                    Image(systemName: "wifi.exclamationmark").font(.system(size: 11, weight: .medium))
+                    Text(convos.conversations.isEmpty ? "Offline." : "Offline. Showing saved conversations.")
+                        .sk(12, SK.orange).skOneLine(12)
+                }
+                .foregroundStyle(SK.orange)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 8).fill(SK.orange.opacity(0.12)))
+                .padding(.bottom, 8)
+            }
+            if showingArchived {
+                archiveHeader
+            } else {
+                MKSearchField(text: $searchText)
+                if !isSearching {
+                    filterBar.padding(.top, 8)
+                }
+            }
         }
-        .foregroundStyle(.orange)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity)
-        .background(.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
-        .padding(.horizontal, 10)
-        .padding(.bottom, 4)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 
-    /// Pill at the top of the list — three buttons for All Chats / By
-    /// Profile / Search. Lives as a list row (not a VStack sibling above
-    /// the List) because the latter disrupts NavigationSplitView's size
-    /// negotiation in this layout. `Picker(.segmented)` rendered as zero
-    /// height inside `.listStyle(.sidebar)`, so we hand-roll the segments
-    /// as glass capsule buttons.
-    @ViewBuilder
-    private var modePillRow: some View {
-        HStack(spacing: 6) {
-            modeButton("All Chats", mode: .allChats)
-            modeButton("By Profile", mode: .byProfile)
-            modeButton("Search", mode: .search)
-        }
-        .listRowInsets(EdgeInsets(top: 8, leading: 10, bottom: 6, trailing: 10))
-        .listRowSeparator(.hidden)
-        .listRowBackground(Color.clear)
-        .selectionDisabled()
-    }
-
-    private func modeButton(_ label: String, mode: ConversationListMode) -> some View {
+    private var filterBar: some View {
         @Bindable var convos = convos
-        let active = convos.listMode == mode
-        return Button {
-            guard !active else { return }
-            convos.listMode = mode
-            Task { await convos.refresh() }
-        } label: {
-            Text(label)
-                .scaledFont(.caption)
-                .fontWeight(active ? .semibold : .regular)
-                .foregroundStyle(active ? Color.white : Color.primary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .frame(maxWidth: .infinity)
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .glassEffect(
-            active
-                ? .regular.tint(theme.accent.opacity(0.85)).interactive()
-                : .regular.interactive(),
-            in: .capsule
-        )
-    }
-
-    @ViewBuilder
-    private var searchFieldRow: some View {
-        @Bindable var convos = convos
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.tertiary)
-            TextField("Search titles…", text: Binding(
-                get: { convos.searchQuery },
-                set: { newValue in
-                    convos.searchQuery = newValue
-                    Task { await convos.refresh() }
+        let pickable = convos.profiles.filter { !$0.parentOnly }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        let profileOn: Bool = { if case .profile = filter { return true }; return false }()
+        return HStack(spacing: 6) {
+            Button("All") { filter = .all }.buttonStyle(MKChipStyle(on: filter == .all))
+            Button("Pinned") { filter = .pinned }.buttonStyle(MKChipStyle(on: filter == .pinned))
+            Menu {
+                ForEach(pickable) { p in
+                    Button(p.name) { filter = .profile(p.id) }
                 }
-            ))
-            .textFieldStyle(.plain)
-            if !convos.searchQuery.isEmpty {
-                Button {
-                    convos.searchQuery = ""
-                    Task { await convos.refresh() }
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.tertiary)
+            } label: {
+                HStack(spacing: 4) {
+                    Text(profileFilterTitle(pickable))
+                    Image(systemName: "chevron.down").font(.system(size: 7, weight: .bold))
                 }
-                .buttonStyle(.plain)
+                .modifier(MKChipLook(on: profileOn))
             }
-        }
-        .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
-        .listRowSeparator(.hidden)
-        .listRowBackground(Color.clear)
-        .selectionDisabled()
-    }
-
-    /// Mode-specific list sections. All Chats uses the sort-menu header;
-    /// By Profile groups by profile (one section each); Search renders a
-    /// flat unheaded list of matches.
-    @ViewBuilder
-    private var modeContent: some View {
-        switch convos.listMode {
-        case .allChats:
-            Section {
-                if convos.conversations.isEmpty && !convos.isLoading && convos.loadError == nil {
-                    Text("No conversations yet.")
-                        .foregroundStyle(.secondary)
-                        .listRowSeparator(.hidden)
-                }
-                ForEach(convos.conversations) { c in
-                    activeRow(c)
-                }
-                LoadMoreFooter(token: convos.nextPageToken) { await convos.loadMore() }
-                archiveFooterRow
-            } header: {
-                sortMenu
-            }
-        case .byProfile:
-            ForEach(profilesSorted) { profile in
-                let buckets = convos.conversations.filter { $0.profileID == profile.id }
-                Section {
-                    if buckets.isEmpty {
-                        Text("No conversations.")
-                            .foregroundStyle(.tertiary)
-                            .listRowSeparator(.hidden)
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            Spacer(minLength: 0)
+            Menu {
+                Picker("Sort By", selection: Binding(
+                    get: { convos.listOrder },
+                    set: { order in
+                        convos.listOrder = order
+                        Task { await convos.refresh() }
                     }
-                    ForEach(buckets) { c in
-                        activeRow(c, hideProfileLabel: true)
-                    }
-                } header: {
-                    Text(profile.name)
+                )) {
+                    Text("Last Activity").tag(PsmithConversationOrder.recentlyUsed)
+                    Text("Date Created").tag(PsmithConversationOrder.recentlyCreated)
                 }
+                .pickerStyle(.inline)
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(SK.secondary)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
             }
-            Section {
-                LoadMoreFooter(token: convos.nextPageToken) { await convos.loadMore() }
-                archiveFooterRow
-            }
-        case .search:
-            Section {
-                if convos.searchQuery.isEmpty {
-                    Text("Type to search.")
-                        .foregroundStyle(.tertiary)
-                        .listRowSeparator(.hidden)
-                } else if convos.conversations.isEmpty {
-                    Text("No matches.")
-                        .foregroundStyle(.tertiary)
-                        .listRowSeparator(.hidden)
-                } else {
-                    ForEach(convos.conversations) { c in
-                        activeRow(c)
-                    }
-                    LoadMoreFooter(token: convos.nextPageToken) { await convos.loadMore() }
-                }
-            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Sort conversations")
         }
     }
 
-    private func activeRow(_ c: PsmithConversation, hideProfileLabel: Bool = false) -> some View {
-        ConversationRowMac(
-            conversation: c,
-            hideProfileLabel: hideProfileLabel,
-            onPinToggle: { Task { await convos.togglePin(c.id) } },
-            onRename: {
-                renameDraft = c.title ?? ""
-                renameCandidate = c
-            },
-            onArchive: { Task { await convos.archive(c.id) } },
-            onDelete: { conversationToDelete = c }
-        )
-        .tag(c.id)
-    }
-
-    /// Quiet entry point to the archive, pinned under the active list.
-    private var archiveFooterRow: some View {
-        Button {
-            showingArchived = true
-        } label: {
-            Label("Archived", systemImage: "archivebox")
-                .scaledFont(.caption)
-                .foregroundStyle(.secondary)
+    private func profileFilterTitle(_ profiles: [PsmithProfile]) -> String {
+        if case .profile(let id) = filter, let p = profiles.first(where: { $0.id == id }) {
+            return p.name
         }
-        .buttonStyle(.plain)
-        .listRowSeparator(.hidden)
-        .selectionDisabled()
-        .help("Browse archived conversations")
+        return "Profile"
     }
 
-    // MARK: - Archived mode
-
-    /// Sidebar content while browsing the archive: a back header, then
-    /// the archived rows (read-only in the detail pane; the server
-    /// refuses mutations). Hover chrome offers Unarchive + Delete.
-    @ViewBuilder
-    private var archivedContent: some View {
-        Section {
-            if convos.archivedConversations.isEmpty && !convos.archivedLoading {
-                Text("Nothing archived.")
-                    .foregroundStyle(.tertiary)
-                    .listRowSeparator(.hidden)
-            }
-            ForEach(convos.archivedConversations) { c in
-                ArchivedRowMac(
-                    conversation: c,
-                    onUnarchive: { Task { await convos.unarchive(c.id) } },
-                    onDelete: { conversationToDelete = c }
-                )
-                .tag(c.id)
-            }
-            LoadMoreFooter(token: convos.archivedNextPageToken) { await convos.loadMoreArchived() }
-        } header: {
+    private var archiveHeader: some View {
+        HStack(spacing: 0) {
             Button {
                 showingArchived = false
             } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left").scaledFont(.caption2)
-                    Text("Archived")
+                HStack(spacing: 3) {
+                    Image(systemName: "chevron.left").font(.system(size: 10.5, weight: .semibold))
+                    Text("Conversations")
                 }
+            }
+            .skButton(.plain)
+            Text("Archived").sk(13, weight: .semibold).frame(maxWidth: .infinity).padding(.trailing, 88)
+        }
+    }
+
+    // MARK: Content
+
+    private var visible: [PsmithConversation] {
+        switch filter {
+        case .all: return convos.conversations
+        case .pinned: return convos.conversations.filter { $0.pinnedAt != nil }
+        case .profile(let id): return convos.conversations.filter { $0.profileID == id }
+        }
+    }
+
+    /// Rows in display order, for the arrow keys.
+    private var ordered: [PsmithConversation] {
+        if showingArchived { return convos.archivedConversations }
+        if isSearching { return convos.conversations }
+        return SidebarSections.group(visible, by: convos.listOrder, now: Date()).flatMap(\.conversations)
+    }
+
+    @ViewBuilder
+    private var groupedContent: some View {
+        let sections = SidebarSections.group(visible, by: convos.listOrder, now: Date())
+        ForEach(Array(sections.enumerated()), id: \.element.id) { i, section in
+            MKSectionLabel(text: section.title, first: i == 0)
+            ForEach(section.conversations) { row($0) }
+        }
+        LoadMoreFooter(token: convos.nextPageToken) { await convos.loadMore() }
+            .padding(.vertical, 8)
+        if !sections.isEmpty {
+            Button {
+                showingArchived = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "archivebox").font(.system(size: 11.5)).frame(width: 10)
+                    Text("Archived").sk(13, SK.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 7)
+                .padding(.leading, 6)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Back to conversations")
+            .foregroundStyle(SK.secondary)
+            .padding(.top, 6)
+            .help("Browse archived conversations")
         }
     }
 
-    private var profilesSorted: [PsmithProfile] {
-        convos.profiles.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    @ViewBuilder
+    private var searchContent: some View {
+        MKSectionLabel(text: "Titles matching “\(searchText.trimmingCharacters(in: .whitespaces))”", first: true)
+        ForEach(convos.conversations) { row($0) }
+        LoadMoreFooter(token: convos.nextPageToken) { await convos.loadMore() }
     }
 
-    /// Section header — current sort label + chevron, taps open a popover
-    /// with two buttons. `Menu` and `Picker(.menu)` both render empty on
-    /// macOS 26 (the same SwiftUI bug noted in HomeView's user tray);
-    /// popover-with-buttons is the reliable replacement.
-    private var sortMenu: some View {
-        Button {
-            sortPopoverShown = true
-        } label: {
-            HStack(spacing: 4) {
-                Text(convos.listOrder == .recentlyUsed ? "Recently Used" : "Recently Created")
-                Image(systemName: "chevron.down").scaledFont(.caption2)
+    @ViewBuilder
+    private var archivedContent: some View {
+        MKSectionLabel(text: "Archived", first: true)
+        ForEach(convos.archivedConversations) { c in
+            if deletingID == c.id {
+                deleteCard(c)
+            } else {
+                rowView(c, generating: false, unseen: false, muted: true)
+                    .contextMenu {
+                        Button("Unarchive") { Task { await convos.unarchive(c.id) } }
+                        Divider()
+                        Button("Delete…", role: .destructive) { deletingID = c.id }
+                    }
             }
         }
-        .buttonStyle(.plain)
-        .popover(isPresented: $sortPopoverShown, arrowEdge: .bottom) {
-            sortPopoverContent
-        }
+        LoadMoreFooter(token: convos.archivedNextPageToken) { await convos.loadMoreArchived() }
     }
 
-    private var sortPopoverContent: some View {
-        @Bindable var convos = convos
-        return VStack(alignment: .leading, spacing: 0) {
-            sortPopoverButton("Recently Used", target: .recentlyUsed)
-            sortPopoverButton("Recently Created", target: .recentlyCreated)
-        }
-        .frame(minWidth: 180)
-        .padding(.vertical, 4)
-    }
-
-    private func sortPopoverButton(_ title: String, target: PsmithConversationOrder) -> some View {
-        @Bindable var convos = convos
-        let active = convos.listOrder == target
-        return Button {
-            sortPopoverShown = false
-            guard convos.listOrder != target else { return }
-            convos.listOrder = target
-            Task { await convos.refresh() }
-        } label: {
-            HStack {
-                Text(title).foregroundStyle(.primary)
-                Spacer()
-                if active {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(.secondary)
-                        .scaledFont(.caption)
+    @ViewBuilder
+    private func row(_ c: PsmithConversation) -> some View {
+        if renamingID == c.id {
+            renameRow(c)
+        } else if deletingID == c.id {
+            deleteCard(c)
+        } else {
+            rowView(c,
+                    generating: app.streamHub.activeConversationIDs.contains(c.id),
+                    unseen: app.streamHub.unseenConversationIDs.contains(c.id))
+                .contextMenu {
+                    Button(c.pinnedAt == nil ? "Pin" : "Unpin") { Task { await convos.togglePin(c.id) } }
+                    Button("Rename") { startRename(c) }
+                    Button("Archive") { Task { await convos.archive(c.id) } }
+                    Divider()
+                    Button("Delete…", role: .destructive) { deletingID = c.id }
                 }
+        }
+    }
+
+    private func rowView(_ c: PsmithConversation, generating: Bool, unseen: Bool, muted: Bool = false) -> some View {
+        // A button, not a tap gesture: inside the scroll view a gesture
+        // never saw the click. A second click on the same row within the
+        // system's double-click interval renames it; by the time a button's
+        // action runs, NSApp.currentEvent no longer has the click count.
+        Button {
+            let now = Date()
+            if let last = lastClick, last.id == c.id, now.timeIntervalSince(last.at) < NSEvent.doubleClickInterval, !showingArchived {
+                lastClick = nil
+                startRename(c)
+            } else {
+                lastClick = (c.id, now)
+                convos.selectedID = c.id
+                listFocused = true
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        } label: {
+            SidebarRow(
+                conversation: c,
+                profile: convos.profiles.first { $0.id == c.profileID },
+                isGenerating: generating,
+                isUnseen: unseen,
+                order: convos.listOrder,
+                selected: convos.selectedID == c.id,
+                muted: muted
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .id(c.id)
+    }
+
+    private func startRename(_ c: PsmithConversation) {
+        deletingID = nil
+        renameDraft = c.title ?? ""
+        renamingID = c.id
+    }
+
+    private func renameRow(_ c: PsmithConversation) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Color.clear.frame(width: 10, height: 1)
+            VStack(alignment: .leading, spacing: 3) {
+                MKRenameField(text: $renameDraft) {
+                    let title = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !title.isEmpty, title != c.title { Task { await convos.rename(id: c.id, title: title) } }
+                    renamingID = nil
+                } onCancel: {
+                    renamingID = nil
+                }
+                Text("Return to rename · Escape to cancel").sk(11, SK.secondary).skOneLine(11)
+            }
+        }
+        .padding(.leading, 6)
+        .padding(.trailing, 10)
+        .padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 7).fill(theme.highlight))
+    }
+
+    private func deleteCard(_ c: PsmithConversation) -> some View {
+        let title = (c.title?.isEmpty == false) ? c.title! : "Untitled"
+        let fromArchive = showingArchived
+        return MKConfirmCard(question: "Delete “\(title)”?", detail: "Every message goes. This can’t be undone.", confirmLabel: "Delete") {
+            deletingID = nil
+        } onConfirm: {
+            deletingID = nil
+            Task { if fromArchive { await convos.deleteArchived(c.id) } else { await convos.delete(c.id) } }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func move(_ by: Int, _ proxy: ScrollViewProxy) -> KeyPress.Result {
+        let rows = ordered
+        guard !rows.isEmpty, renamingID == nil else { return .ignored }
+        let i = rows.firstIndex { $0.id == convos.selectedID }
+        let next = i.map { min(max($0 + by, 0), rows.count - 1) } ?? (by > 0 ? 0 : rows.count - 1)
+        convos.selectedID = rows[next].id
+        proxy.scrollTo(rows[next].id)
+        return .handled
+    }
+
+    // MARK: Empty states
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if let err = convos.loadError, convos.conversations.isEmpty {
+            MKEmptyList(systemImage: "exclamationmark.triangle", title: "Couldn’t load", detail: err) {
+                Button("Try Again") { Task { await convos.refresh() } }.skButton(small: true)
+            }
+        } else if convos.isLoading && convos.conversations.isEmpty && !showingArchived {
+            VStack { MKSpinner(size: 16).padding(.top, 60); Spacer() }
+        } else if showingArchived, convos.archivedConversations.isEmpty, !convos.archivedLoading {
+            MKEmptyList(systemImage: "archivebox", title: "Nothing archived", detail: "Archived conversations show here.")
+        } else if !showingArchived, isSearching, convos.conversations.isEmpty, !convos.isLoading {
+            MKEmptyList(systemImage: "magnifyingglass", title: "No titles match “\(searchText.trimmingCharacters(in: .whitespaces))”", detail: "Search looks at titles only.", top: 40)
+        } else if !showingArchived, !isSearching, visible.isEmpty, !convos.isLoading {
+            if app.connectivity.state == .offline {
+                MKEmptyList(systemImage: "wifi.exclamationmark", title: "Can’t reach the server", detail: "No saved conversations to show.")
+            } else if filter != .all {
+                MKEmptyList(systemImage: "line.3.horizontal.decrease", title: "No matches", detail: "No conversations fit this filter.")
+            } else {
+                MKEmptyList(systemImage: "bubble.left.and.bubble.right", title: "No conversations yet", detail: "Start one with ⌘N.")
+            }
+        }
     }
 }
 
-/// Mac wrapper around PsmithUI's shared `ConversationRow`. Adds the
-/// hover-ellipsis actions popover — Mac-specific because contextMenu on
-/// macOS 26 sidebar rows hits a Liquid Glass capture-path bug (renders
-/// as a window-wide black box), and single-item SwiftUI Menus render
-/// empty; popover-with-buttons is the reliable replacement. iOS uses
-/// `.swipeActions` and doesn't go through this wrapper.
-struct ConversationRowMac: View {
-    let conversation: PsmithConversation
-    /// In By-Profile mode the section header already names the profile, so
-    /// the subtitle would just repeat it. Hidden in that mode.
-    var hideProfileLabel: Bool = false
-    var onPinToggle: () -> Void
-    var onRename: () -> Void
-    var onArchive: () -> Void
-    var onDelete: () -> Void
-    @State private var hovering = false
-    @State private var actionsShown = false
-    @Environment(ConversationsModel.self) private var convos
-    @Environment(AppModel.self) private var app
+// MARK: - Parts
 
-    var body: some View {
-        HStack(spacing: 8) {
-            ConversationRow(
-                conversation: conversation,
-                profileChainName: hideProfileLabel
-                    ? nil
-                    : profileChainName(for: conversation, profiles: convos.profiles),
-                isGenerating: app.streamHub.activeConversationIDs.contains(conversation.id),
-                isUnseen: app.streamHub.unseenConversationIDs.contains(conversation.id)
-            )
-            Spacer(minLength: 0)
-            Button {
-                actionsShown = true
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .scaledFont(size: 12, weight: .regular)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 18, height: 18)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Conversation actions")
-            // Always reserve the layout slot so hover doesn't shift
-            // the title; only fade in/out. Stay visible while the
-            // popover is up so the anchor doesn't vanish under it.
-            .opacity(hovering || actionsShown ? 1 : 0)
-            .allowsHitTesting(hovering || actionsShown)
-            .popover(isPresented: $actionsShown, arrowEdge: .trailing) {
-                actionsPopover
-            }
-        }
-        .contentShape(Rectangle())
-        // .onHover with a plain @State write (no withAnimation wrapper)
-        // is the safe pattern on macOS 26 — wrapping the write in
-        // withAnimation has historically crashed mid-stream-churn.
-        .onHover { isOver in
-            hovering = isOver
-        }
-        .animation(.easeInOut(duration: 0.12), value: hovering)
-    }
-
-    private var actionsPopover: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            RowActionButton(
-                title: conversation.pinnedAt == nil ? "Pin" : "Unpin",
-                systemImage: conversation.pinnedAt == nil ? "pin" : "pin.slash"
-            ) {
-                actionsShown = false
-                onPinToggle()
-            }
-            RowActionButton(title: "Rename…", systemImage: "pencil") {
-                actionsShown = false
-                onRename()
-            }
-            RowActionButton(title: "Archive", systemImage: "archivebox") {
-                actionsShown = false
-                onArchive()
-            }
-            Divider().padding(.vertical, 4)
-            RowActionButton(title: "Delete…", systemImage: "trash", role: .destructive) {
-                actionsShown = false
-                onDelete()
-            }
-        }
-        .frame(minWidth: 180)
-        .padding(.vertical, 4)
-    }
+enum SidebarFilter: Equatable {
+    case all
+    case pinned
+    case profile(String)
 }
 
-/// Archived-mode counterpart: Unarchive + Delete only.
-struct ArchivedRowMac: View {
+typealias SidebarSections = ConversationSections
+
+/// One conversation: unread dot in a fixed gutter, title and time, the
+/// profile under it. 46pt tall; the selected row takes the theme's
+/// highlight.
+struct SidebarRow: View {
     let conversation: PsmithConversation
-    var onUnarchive: () -> Void
-    var onDelete: () -> Void
-    @State private var hovering = false
-    @State private var actionsShown = false
+    let profile: PsmithProfile?
+    let isGenerating: Bool
+    let isUnseen: Bool
+    let order: PsmithConversationOrder
+    var selected = false
+    var muted = false
+    @Environment(\.theme) private var theme
 
     var body: some View {
-        HStack(spacing: 8) {
-            ConversationRow(
-                conversation: conversation,
-                profileChainName: nil,
-                isGenerating: false,
-                isUnseen: false
-            )
-            Spacer(minLength: 0)
-            Button {
-                actionsShown = true
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .scaledFont(size: 12, weight: .regular)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 18, height: 18)
-                    .contentShape(Rectangle())
+        HStack(alignment: .top, spacing: 6) {
+            ZStack {
+                if isUnseen {
+                    Circle().fill(theme.accent).frame(width: 8, height: 8)
+                        .accessibilityLabel("Unread reply")
+                }
             }
-            .buttonStyle(.plain)
-            .help("Archive actions")
-            .opacity(hovering || actionsShown ? 1 : 0)
-            .allowsHitTesting(hovering || actionsShown)
-            .popover(isPresented: $actionsShown, arrowEdge: .trailing) {
-                VStack(alignment: .leading, spacing: 0) {
-                    RowActionButton(title: "Unarchive", systemImage: "tray.and.arrow.up") {
-                        actionsShown = false
-                        onUnarchive()
-                    }
-                    Divider().padding(.vertical, 4)
-                    RowActionButton(title: "Delete…", systemImage: "trash", role: .destructive) {
-                        actionsShown = false
-                        onDelete()
+            .frame(width: 10, height: 16)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .sk(13, muted ? SK.secondary : SK.text, weight: isUnseen ? .semibold : .medium)
+                        .skOneLine(13)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if isGenerating {
+                        HStack(spacing: 5) {
+                            Circle().fill(theme.accentInk).frame(width: 6, height: 6)
+                            Text("Replying").sk(11, theme.accentInk).skOneLine(11)
+                        }
+                        .fixedSize()
+                    } else {
+                        Text(stamp).sk(11, selected ? SK.secondary : SK.tertiary).monospacedDigit().skOneLine(11).fixedSize()
                     }
                 }
-                .frame(minWidth: 180)
-                .padding(.vertical, 4)
+                if let profile {
+                    Text(profile.name).sk(12, SK.secondary).skOneLine(12)
+                }
             }
         }
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
-        .animation(.easeInOut(duration: 0.12), value: hovering)
+        .padding(.top, 7)
+        .padding(.bottom, 7)
+        .padding(.leading, 6)
+        .padding(.trailing, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 7).fill(selected ? theme.highlight : .clear))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+    }
+
+    private var title: String {
+        let t = conversation.title ?? ""
+        return t.isEmpty ? "Untitled" : t
+    }
+
+    private var stamp: String {
+        let d = SidebarSections.date(of: conversation, by: order)
+        let cal = Calendar.current
+        if cal.isDateInToday(d) { return d.formatted(date: .omitted, time: .shortened) }
+        if let days = cal.dateComponents([.day], from: cal.startOfDay(for: d), to: cal.startOfDay(for: Date())).day, days < 7 {
+            return d.formatted(.dateTime.weekday(.abbreviated))
+        }
+        return d.formatted(.dateTime.month(.abbreviated).day())
     }
 }
 
-/// One row inside a row-actions popover: full-width, hover-highlit,
-/// leading icon + title. Destructive rows render red.
-struct RowActionButton: View {
-    let title: String
-    let systemImage: String
-    var role: ButtonRole? = nil
-    let action: () -> Void
-    @State private var hovering = false
+struct MKSectionLabel: View {
+    let text: String
+    var first = false
+    var body: some View {
+        Text(text).sk(11, SK.tertiary, weight: .semibold).skOneLine(11)
+            .padding(.top, first ? 8 : 14)
+            .padding(.bottom, 4)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// A 22pt filter chip: the accent when on.
+struct MKChipLook: ViewModifier {
+    let on: Bool
+    @Environment(\.theme) private var theme
+    func body(content: Content) -> some View {
+        content
+            .sk(12, on ? .white : SK.text, weight: on ? .semibold : nil)
+            .padding(.horizontal, 10)
+            .frame(height: 22)
+            .background(Capsule().fill(on ? theme.accent : Color.white.opacity(0.07)))
+            .contentShape(Capsule())
+    }
+}
+
+struct MKChipStyle: ButtonStyle {
+    let on: Bool
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.modifier(MKChipLook(on: on)).opacity(configuration.isPressed ? 0.8 : 1)
+    }
+}
+
+/// The list's search: the Settings search field, with a clear button and
+/// the accent ring while focused. Escape clears it.
+struct MKSearchField: View {
+    @Binding var text: String
+    @FocusState private var focused: Bool
+    @Environment(\.theme) private var theme
 
     var body: some View {
-        Button(role: role, action: action) {
-            Label(title, systemImage: systemImage)
-                .foregroundStyle(role == .destructive ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(SK.tertiary)
+            ZStack(alignment: .leading) {
+                if text.isEmpty { Text("Search").sk(12.5, SK.tertiary).allowsHitTesting(false) }
+                TextField("", text: $text)
+                    .textFieldStyle(.plain)
+                    .scaledFont(size: 12.5)
+                    .foregroundStyle(SK.text)
+                    .focused($focused)
+                    .onKeyPress(.escape) {
+                        text = ""
+                        focused = false
+                        return .handled
+                    }
+            }
+            if !text.isEmpty {
+                Button { text = "" } label: {
+                    Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(SK.tertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Clear search")
+            }
         }
-        .buttonStyle(.plain)
-        .background(hovering ? Color.primary.opacity(0.06) : Color.clear)
-        .onHover { hovering = $0 }
+        .padding(.horizontal, 8)
+        .frame(height: 26)
+        .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.06)))
+        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(focused ? theme.accent.opacity(0.6) : .clear, lineWidth: 1.5))
+        .accessibilityLabel("Search conversations")
+    }
+}
+
+/// The title field a row turns into while renaming. Takes focus on
+/// appear; Return commits, Escape and losing focus cancel.
+struct MKRenameField: View {
+    @Binding var text: String
+    let onCommit: () -> Void
+    let onCancel: () -> Void
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField("", text: $text)
+            .textFieldStyle(.plain)
+            .scaledFont(size: 13)
+            .foregroundStyle(SK.text)
+            .padding(.horizontal, 8)
+            .frame(height: 22)
+            .background(RoundedRectangle(cornerRadius: 6).fill(SK.fieldFill))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(SK.fieldRing, lineWidth: 0.5))
+            .focused($focused)
+            .onSubmit(onCommit)
+            .onKeyPress(.escape) { onCancel(); return .handled }
+            .onAppear { focused = true }
+            .onChange(of: focused) { _, now in if !now { onCancel() } }
+            .accessibilityLabel("Title")
+    }
+}
+
+/// An empty list: icon, title, a line of detail, maybe a button.
+struct MKEmptyList<Action: View>: View {
+    let systemImage: String
+    let title: String
+    let detail: String
+    var top: CGFloat = 60
+    @ViewBuilder var action: Action
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Image(systemName: systemImage).font(.system(size: 24, weight: .light)).foregroundStyle(SK.tertiary).frame(height: 30)
+            Text(title).sk(13, SK.secondary, weight: .semibold).multilineTextAlignment(.center).padding(.top, 10)
+            Text(detail).sk(12, SK.tertiary).multilineTextAlignment(.center).padding(.top, 4)
+            action.padding(.top, 10)
+            Spacer(minLength: 0)
+        }
+        .padding(.top, top)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+extension MKEmptyList where Action == EmptyView {
+    init(systemImage: String, title: String, detail: String, top: CGFloat = 60) {
+        self.init(systemImage: systemImage, title: title, detail: detail, top: top) { EmptyView() }
     }
 }

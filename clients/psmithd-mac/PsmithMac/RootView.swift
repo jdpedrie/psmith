@@ -39,18 +39,18 @@ struct RootView: View {
             // token. Same fix the iOS RootView applies — avoid the
             // flash of LoginView before we drop into HomeView for a
             // user with a valid stored session.
-            ProgressView()
-                .controlSize(.large)
+            MKSpinner(size: 22)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea()
         case .signedIn:
             if let user = app.authState.currentUser {
                 authed(user: user)
             } else {
                 // Defensive: phase reports signed-in without a user
                 // object. Bootstrap will reconcile shortly.
-                ProgressView()
-                    .controlSize(.large)
+                MKSpinner(size: 22)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea()
             }
         case .signedOut:
             // Seed the form with the active account's host + username
@@ -73,9 +73,9 @@ struct RootView: View {
         // cold start because `providers.providers` is empty until
         // the first list completes.
         if (!app.providers.hasLoadedOnce || convos == nil) && !splashExpired {
-            ProgressView()
-                .controlSize(.large)
+            MKSpinner(size: 22)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea()
                 .task {
                     // Independent of the loads below: whatever they do,
                     // the window stops being a spinner after this.
@@ -98,7 +98,7 @@ struct RootView: View {
                     }
                 }
         } else if needsOnboarding {
-            OnboardingView()
+            MacOnboarding()
         } else if let convos {
             HomeView(user: user)
                 .environment(convos)

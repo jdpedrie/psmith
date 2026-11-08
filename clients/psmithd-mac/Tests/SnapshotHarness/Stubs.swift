@@ -60,8 +60,8 @@ public enum SnapshotStubs {
     // MARK: - ConversationViewModel
 
     /// Builds a fully-populated ConversationViewModel for snapshot rendering.
-    /// Every property the ConversationBody / CompactPane / ContextListPane /
-    /// ConversationSettingsView views read is settable as `@Observable var`,
+    /// Every property the ConversationBody, its inspector and its pages
+    /// read is settable as `@Observable var`,
     /// so we just push fixture state into the live model. The underlying
     /// client is wired to `nullHost` — any RPC kicked off by a `.task { … }`
     /// will fail loudly rather than hanging the snapshot.

@@ -44,6 +44,8 @@ struct PsmithMacEnvironment<Content: View>: View {
             // deterministic snapshots want.
             .environment(AccountManager())
             .environment(AppPreferences())
+            // The Appearance pane lists and sets themes.
+            .environment(ThemeStore())
             .preferredColorScheme(.dark)
     }
 }

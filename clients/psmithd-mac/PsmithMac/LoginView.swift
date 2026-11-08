@@ -16,6 +16,10 @@ import PsmithKit
 /// All three route through `AccountManager.addAccount(...)` — the
 /// manager dedupes on `(host, username)`, so re-auth re-activates the
 /// existing AppModel instead of duplicating the account row.
+/// Signing in (boards AppLoginServer, AppLoginCredentials): the server
+/// first, probed before anything is sent, then the credentials. Shown on
+/// a cold start and when the active account is signed out; adding another
+/// account happens in Settings ▸ Accounts.
 struct LoginView: View {
     var initialHost: URL? = nil
     var initialUsername: String? = nil
@@ -38,97 +42,73 @@ struct LoginView: View {
     }
 
     var body: some View {
-        VStack(spacing: 24) {
-            switch phase {
-            case .server:
-                ServerURLEntry(initialText: pendingHost?.absoluteString) { newURL in
-                    urlStore.current = newURL
-                    pendingHost = newURL
-                    phase = .credentials
-                }
-            case .credentials:
-                if let host = pendingHost {
-                    CredentialsEntry(
-                        serverURL: host,
-                        initialUsername: initialUsernameDraft,
-                        onChangeServer: initialHost == nil ? { phase = .server } : nil,
-                        onSubmit: { username, password in
-                            try await accountManager.addAccount(
-                                host: host,
-                                username: username,
-                                password: password
-                            )
-                            dismiss()
-                        }
-                    )
-                }
-            }
-
-            let others = accountManager.otherSignedInAccounts
-            if !others.isEmpty {
-                otherAccountsSection(others)
-            }
-        }
-        .padding(40)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-
-    /// Tap-to-switch list of other signed-in accounts. Lives beneath the
-    /// form so the sign-back-in flow has a path back to a working
-    /// session on a different account.
-    @ViewBuilder
-    private func otherAccountsSection(_ others: [Account]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Rectangle()
-                    .fill(.tertiary)
-                    .frame(height: 1)
-                Text("OR CONTINUE AS")
-                    .scaledFont(.caption2, weight: .semibold)
-                    .foregroundStyle(.secondary)
-                    .fixedSize()
-                Rectangle()
-                    .fill(.tertiary)
-                    .frame(height: 1)
-            }
-
-            ForEach(others) { account in
-                Button {
-                    accountManager.switchAccount(to: account.id)
-                    dismiss()
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: "person.crop.circle")
-                            .scaledFont(size: 24, weight: .light)
-                            .foregroundStyle(.secondary)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(account.resolvedDisplayLabel)
-                                .scaledFont(.callout, weight: .semibold)
-                                .foregroundStyle(.primary)
-                            Text(account.host.host ?? account.host.absoluteString)
-                                .scaledFont(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .scaledFont(.caption, weight: .semibold)
-                            .foregroundStyle(.tertiary)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                switch phase {
+                case .server:
+                    ServerURLEntry(initialText: pendingHost?.absoluteString) { newURL in
+                        urlStore.current = newURL
+                        pendingHost = newURL
+                        phase = .credentials
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .contentShape(Rectangle())
+                case .credentials:
+                    if let host = pendingHost {
+                        CredentialsEntry(
+                            serverURL: host,
+                            initialUsername: initialUsernameDraft,
+                            onChangeServer: initialHost == nil ? { phase = .server } : nil,
+                            onSubmit: { username, password in
+                                try await accountManager.addAccount(host: host, username: username, password: password)
+                                dismiss()
+                            }
+                        )
+                    }
                 }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 8))
+                let others = accountManager.otherSignedInAccounts
+                if !others.isEmpty, phase == .server {
+                    SKGroup("Or continue as") {
+                        ForEach(others) { account in
+                            Button {
+                                accountManager.switchAccount(to: account.id)
+                                dismiss()
+                            } label: {
+                                SKRow(account.resolvedDisplayLabel) {
+                                    HStack(spacing: 8) {
+                                        Text(account.host.host ?? account.host.absoluteString).sk(12, SK.tertiary).lineLimit(1)
+                                        Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(SK.tertiary)
+                                    }
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.top, 22)
+                }
             }
+            .frame(width: 420)
+            .frame(maxWidth: .infinity)
+            .containerRelativeFrame(.vertical, alignment: .center) { h, _ in h }
         }
-        .frame(maxWidth: 380)
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollEdgeEffectHidden(true, for: .top)
+        .ignoresSafeArea()
     }
 }
 
-// MARK: - Phase 1: server URL entry
+/// A screen's centered title and one line under it.
+struct SoloHead: View {
+    let title: String
+    let subtitle: String
+    var body: some View {
+        VStack(spacing: 5) {
+            Text(title).sk(20, weight: .bold)
+            Text(subtitle).sk(12.5, SK.secondary).multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 22)
+    }
+}
 
 private struct ServerURLEntry: View {
     var initialText: String?
@@ -151,39 +131,29 @@ private struct ServerURLEntry: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-            Text("Connect to psmithd")
-                .scaledFont(.title2)
-            Text("Enter the URL where your Psmith server is running.")
-                .scaledFont(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-
-            VStack(alignment: .leading, spacing: 8) {
-                TextField("https://psmith.example.com", text: $urlText)
-                    .textFieldStyle(.roundedBorder)
-                    .disableAutocorrection(true)
-                    .onSubmit { Task { await test() } }
-            }
-            .frame(maxWidth: 380)
-
-            statusBanner
-
-            HStack {
-                Button("Test connection") {
-                    Task { await test() }
+        VStack(alignment: .leading, spacing: 0) {
+            SoloHead(title: "Connect to a Psmith server",
+                     subtitle: "Psmith keeps your providers, profiles and conversations on a server you run.")
+            SKGroup("Server") {
+                SKRow("Address") {
+                    SKTextField(label: "Address", text: $urlText, placeholder: "https://psmith.example.com", width: 230)
+                        .onSubmit { Task { await test() } }
                 }
-                .buttonStyle(.glass)
-                .disabled(inFlight || urlText.trimmingCharacters(in: .whitespaces).isEmpty)
-
+            } footer: {
+                statusLine
+            }
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                Button("Test Connection") { Task { await test() } }
+                    .skButton()
+                    .disabled(inFlight || urlText.trimmingCharacters(in: .whitespaces).isEmpty)
                 Button("Continue") {
                     if let url = parsedURL { onValidated(url) }
                 }
-                .buttonStyle(.glassProminent)
+                .skButton(.primary)
                 .disabled(!isReady)
                 .keyboardShortcut(.defaultAction)
             }
-            .frame(maxWidth: 380)
         }
     }
 
@@ -200,38 +170,29 @@ private struct ServerURLEntry: View {
     }
 
     @ViewBuilder
-    private var statusBanner: some View {
+    private var statusLine: some View {
         if inFlight {
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small)
-                Text("Probing…").foregroundStyle(.secondary)
-            }
-            .scaledFont(.callout)
+            HStack(spacing: 6) { MKSpinner(size: 11); Text("Checking…").sk(12, SK.secondary) }
         } else {
             switch status {
             case .idle:
                 EmptyView()
             case .ok(let version):
-                Label(version.isEmpty ? "Reachable — psmithd answered." : "Reachable — psmithd \(version).",
-                      systemImage: "checkmark.circle.fill")
-                    .scaledFont(.callout)
-                    .foregroundStyle(.green)
+                statusLabel("checkmark", version.isEmpty ? "Reachable. psmithd answered." : "Reachable. psmithd \(version) answered.", SK.green)
             case .wrong(let detail):
-                Label("Server responded but isn't a Psmith server: \(detail)",
-                      systemImage: "exclamationmark.triangle.fill")
-                    .scaledFont(.callout)
-                    .foregroundStyle(.orange)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: 380)
+                statusLabel("exclamationmark.triangle", "That server answered, but it isn’t Psmith: \(detail)", SK.orange)
             case .unreachable(let detail):
-                Label("Couldn't reach this URL: \(detail)",
-                      systemImage: "xmark.octagon.fill")
-                    .scaledFont(.callout)
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: 380)
+                statusLabel("exclamationmark.triangle", "Couldn’t reach this address: \(detail)", SK.red)
             }
         }
+    }
+
+    private func statusLabel(_ icon: String, _ text: String, _ color: Color) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: icon).font(.system(size: 10.5, weight: .semibold))
+            Text(text).sk(12, color).fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(color)
     }
 
     private func test() async {
@@ -286,60 +247,44 @@ private struct CredentialsEntry: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-            Text("Sign in to Psmith")
-                .scaledFont(.title2)
-
-            HStack(spacing: 6) {
-                Image(systemName: "server.rack")
-                    .foregroundStyle(.secondary)
-                Text(serverURL.absoluteString)
-                    .scaledFont(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                if let onChangeServer {
-                    Button("Change") { onChangeServer() }
-                        .buttonStyle(.link)
-                        .scaledFont(.callout)
+        VStack(alignment: .leading, spacing: 0) {
+            SoloHead(title: "Sign in", subtitle: "To \(serverURL.host ?? serverURL.absoluteString)")
+            SKGroup {
+                SKRow("Server") {
+                    HStack(spacing: 6) {
+                        Text(serverURL.host ?? serverURL.absoluteString).sk(13, SK.secondary).lineLimit(1).truncationMode(.middle)
+                        if let onChangeServer {
+                            Button("Change", action: onChangeServer).skButton(.plain)
+                        }
+                    }
+                }
+                SKRow("Username") {
+                    SKTextField(label: "Username", text: $username, width: 230)
+                        .textContentType(.username)
+                }
+                SKRow("Password") {
+                    SKTextField(label: "Password", text: $password, width: 230, secure: true)
+                        .textContentType(.password)
+                        .onSubmit { Task { await submit() } }
                 }
             }
-            .frame(maxWidth: 380)
-
-            VStack(alignment: .leading, spacing: 8) {
-                TextField("Username", text: $username)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.username)
-                    .disableAutocorrection(true)
-
-                SecureField("Password", text: $password)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.password)
-                    .onSubmit { Task { await submit() } }
-            }
-            .frame(maxWidth: 320)
-
             if let errorMessage {
-                Text(errorMessage)
-                    .scaledFont(.callout)
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 320)
+                Text(errorMessage).sk(12, SK.red).fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 2)
+                    .padding(.top, -12)
+                    .padding(.bottom, 14)
             }
-
-            Button {
-                Task { await submit() }
-            } label: {
-                if inFlight {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Text("Sign in").frame(maxWidth: .infinity)
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                Button {
+                    Task { await submit() }
+                } label: {
+                    Text(inFlight ? "Signing In…" : "Sign In")
                 }
+                .skButton(.primary)
+                .disabled(username.isEmpty || password.isEmpty || inFlight)
+                .keyboardShortcut(.defaultAction)
             }
-            .buttonStyle(.glassProminent)
-            .frame(maxWidth: 320)
-            .disabled(username.isEmpty || password.isEmpty || inFlight)
-            .keyboardShortcut(.defaultAction)
         }
     }
 

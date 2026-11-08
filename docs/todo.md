@@ -6,6 +6,60 @@ The architecture doc's "Open threads" section captures the *strategic* deferrals
 
 ---
 
+## Web redesign
+
+The web client is rebuilt to the "Psmith web design" canvas ([clients/web-redesign/plan.md](clients/web-redesign/plan.md), [clients/web.md](clients/web.md)). What's left:
+
+- **Show turn details** is saved (`psmith_turns`) and written onto `<html>`, but the transcript doesn't change with it. On the Mac, on adds role labels, the model, token counts and times to every reply, and off keeps only what's worth noticing. No web board draws the on state, so it needs a board first.
+- **Provider test results and discovered-model counts** live in memory (`seta_cache.go`) and are lost on restart, so the providers list's status dot and the "3 new" badge reset. A column for the last test would fix it.
+- **Failing MCP servers** in the Settings nav are only counted on the pages that test servers anyway; testing every server on every Settings page would be slow. Same fix: store test results.
+- **Plugin choices inside messages** can't run `plugin:` actions, because a fragment doesn't carry its plugin's name. `send:` and `compose:` work.
+- **The elicitation card** says "A tool needs input": the stream's elicit chunk carries neither the MCP server's name nor the tool's. Adding `server` and `tool` to the payload would let it say "GitHub needs input".
+- **The draft loses its typed message** when the first send fails after the conversation was created; it opens the new conversation instead.
+- **First-run setup** turns on the first three discovered models when none are enabled. That's a choice, not a board.
+- **The live Thinking chip** can't be opened while the reply is still streaming.
+- **Review's summary** sits 3px higher inside its box than on the board. The box itself lines up; the gap is somewhere in the rendered markdown's spacing.
+- **Offline**: the list column shows the banner and "Reconnecting"; the conversation column's "Lost the connection" line and "Send when back" composer (board Offline) aren't built.
+
+## iOS redesign
+
+The iOS app is rebuilt to the "Psmith iOS redesign" canvas ([clients/ios-redesign/plan.md](clients/ios-redesign/plan.md)). What's left:
+
+- **Not compared to the pixel.** These are system-drawn or need state tests can't set: the long-press and account menus, an open swipe lane, text selection handles and the edit menu, the read-aloud state, recent-photo thumbnails, and the parked scroll position. Liquid Glass refraction shifts the slot cards a little (Review, ReviewTruncated, Compress).
+- **iOS 26 switches are 63×28; the boards draw 51×31.** Rows are padded to the boards' heights. Redraw the boards' switches next time they change.
+- **Plugin fragment renderers** (choice list, cards, key-value) are PsmithUI's and still carry the old styling, because the Mac shares them. Restyle them for both platforms together.
+- **Fixtures can't set the context-warning threshold or a live reply** (`PreferencesViewModel.preferences` and `StreamHub.activeConversationIDs` are private(set)), so Compress shows 90% where its board shows 86%, and ConversationInfo says "No warning set".
+- **Glyphs are SF Symbols**; the boards' SVGs are stand-ins. Sizes and positions match, shapes don't.
+- **Light mode on the Mac** is still undesigned (see "Mac main window rebuild").
+- **A send that vanishes on screen** (reported: the user's message doesn't show until the conversation is reopened, and the streamed reply disappears) hasn't been reproduced. `make ios-e2e` drives the real screen against a real psmithd with a fake streaming model and records what's on screen every quarter second (`E2ETimeline`); new, existing and long conversations all keep both messages visible. `TranscriptTrace` (PsmithKit) now logs every send, terminal path, load and stale check with ids and row counts. To capture it on a device: `log stream --predicate 'category == "TranscriptTrace"' --level info` while reproducing.
+
+## Mac Settings rebuild
+
+The Settings window is built to the boards on the "Settings" page of the redesign canvas, every pane compared against its board offscreen and checked at 1052×600, 1440×900 and 1920×1200. The kit is `clients/psmithd-mac/PsmithMac/Settings/SettingsKit.swift`; its measurements are the boards' and change together with them. Where a board was wrong (a control the platform draws differently, data the server doesn't have), the board was corrected first.
+
+- Light mode isn't designed. The Settings window forces dark appearance and the kit's colors are the boards' dark values. Needs boards before it needs code.
+- Two states weren't compared against their boards because the test server has no data for them: a plugin's settings drilled into from a profile, and the import review. Both use only kit parts that were compared elsewhere.
+- Disabling an inherited plugin on a child profile (the pipeline supports it) has no control yet, on the boards or in the app.
+- The Accounts pane's sign-out test can't tell a working sign-out from a no-op without a server; it covers bookkeeping only.
+- On a Mac with always-visible scroll bars, long panes lose about 15pt of width to the scroller. The boards assume overlay scrollers.
+
+## Mac main window rebuild
+
+The main window is built to the boards on the "Main window" page of the redesign canvas, with the same rules as Settings: no sheets, popovers, alerts or confirmation dialogs; Settings' controls, groups, banners and strips; every pixel ours, so a board and a capture compare. The window's own kit is `clients/psmithd-mac/PsmithMac/Main/MainKit.swift`. `BoardProbe` (in the Mac snapshot tests, run with `PSMITH_LIVE_PROBE` set) mounts the real list and reading pane with the boards' own content and writes offscreen captures; the shell, inspector tabs, composer slot, pages, message states, draft and offline states were compared at 1080×600, 1280×800 and 1680×1050. Where the app's established behavior differed (the markdown renderer's line and paragraph spacing, which iOS shares; the failed-reply header; the streaming label), the board was corrected to it.
+
+- Light mode isn't designed. The main window forces dark appearance, as Settings does, and each theme shows its dark variant.
+- Not compared pixel for pixel, for want of a way to reach the state offscreen: the row menu and account menu (native menus), searching, the in-place rename and delete strips (covered by event tests instead), attachments and the image page, elicitation, plugin fragments and the fork strip, text selection, and onboarding's three steps. All are built from parts compared elsewhere.
+- The boards' icons are stand-ins for SF Symbols, so glyph ink differs by a point or two where the drawing does.
+- Clicking a "reply ready" notification still only brings the app forward; `pendingConversationSelection` has no reader (found by the inventory, not caused by the rebuild).
+- The Mac writes unsent draft text to `DraftStore` only when a send fails; iOS writes on every keystroke.
+- The model page can't put a conversation back on its profile's default model: `selectModel` has no way to clear the override.
+- The probe's screenshots are layer renders. ScreenCaptureKit captures (which would include the system's own drawing of the traffic lights and menus) failed with -3811 during the rebuild and weren't used.
+
+## Embeddings
+
+- **Only 768-dimension models can be stored.** `messages.embedding` is `vector(768)` with an HNSW index, which needs a fixed length, so `UpdateEmbedderConfig` refuses any other size rather than letting every write fail. Supporting others needs a schema change: a column per size, or an untyped column with a partial index per size.
+- A model change clears the user's vectors from other models and the backfill worker re-embeds everything. A worker batch in flight with the old model can still land a few old vectors after the clear; the next save clears those.
+
 ## Main system priorities — what's not done yet
 
 Ordered by impact on getting Psmith to a "useful for sustained personal chat" state. Refer to the categorized sections below for implementation detail.
@@ -262,6 +316,7 @@ Deferred:
 - **Web conversation settings: JSON-oneof call-settings editors not built** (`server/web/convsettings.go`). The Call settings tab covers the scalar/tri-state knobs (temperature, top_p, max output, top_k, stop sequences, thinking, explicit cache, include-thinking-in-history) plus per-provider scalar extras (Anthropic prompt-cache, OpenAI seed/penalties/parallel-tools, Google candidate count). Skipped: OpenAI `response_format` (text/json-object/json-schema oneof) and `logit_bias`, Anthropic `cache_ttl`, and Google `safety_settings`/`response_schema`. Add these as JSON/structured editors when a user needs them; iOS has them in `CallSettingsForm`.
 - ~~**`CompressionSummaryCard` still uses `.contextMenu` on iOS**~~ **Done**: it bit. A fresh summary card didn't render until the conversation was re-entered. The card's `.contextMenu` is macOS-only now and the iOS transcript gives it the action menu.
 - **Expanded thinking/tool-call disclosure text keeps `.textSelection(.enabled)`** (`ThinkingDisclosure`/`ToolCallDisclosure`). A long-press that starts inside that text opens the selection menu, not the message action menu — deliberate for now (selection is useful there and the menu is reachable from the message body); revisit if it reads as inconsistent.
+- **Mac redesign, direction A, 2026-11-06.** The conversation window is now a docked list grouped by date with its own search field, filters and context menus (it lives in the split view's middle column: macOS 26 floats a sidebar column as an inset glass panel and has no switch to dock it); the title drawn in a solid band at the top of the reading pane (the system title would sit over the list in that layout); a model menu and context gauge in the toolbar; and an inspector (Context with the run charts, Settings as a summary with the full form in a sheet, Plugins). Compression and the full model catalog are sheets; a new conversation starts on a profile-card screen; Settings is its own window. The page swaps (Contexts, Compact, Settings, model picker) are gone. Native `Menu`, `Picker(.menu)` and `.contextMenu` are back in use: the "renders empty / black box on macOS 26" behavior the old comments describe came from the window setup pass resizing menu windows, fixed with `WindowChromeTests`. Still to verify in the running app, since offscreen captures can't show it: menus and context menus drawing correctly, the glass toolbar groups, and the sidebar's hard scroll edge under the account row. `ContextListPane` is no longer reachable and can go once the inspector's contexts list covers renaming. Mockups: https://claude.ai/artifact/FHDBjbnRx9nP2cefiYuYQ4
 - **Offscreen captures can't show glass, materials, or Settings' split columns.** The snapshot harness and `LiveProbe` render outside the window server, so Liquid Glass, `.regularMaterial`, the sidebar's glass plate, and the HSplitView columns in Settings come out white or missing. The settings baselines have been mostly white for months for this reason, not because the panes are. `LiveProbe` works around the worst of it (backdrop and pocket layers hidden, columns drawn directly); judge those surfaces in the running app.
 - **Mac settings audit, 2026-11-06.** Fixed: plugin settings seeding defaults over a config that hadn't loaded and writing them on view; conversation plugin overrides replaced by an empty list when their fetch failed (shared view model, iOS too); a quick exit from conversation settings saving an unseeded draft; profile saves on both clients erasing `include_thinking_in_history`; a failed profile-plugins load reading as "no plugins" and detaching them on save; a slow provider fetch landing on a newer selection; Langfuse, Embedder and Speech spinning forever on a failed load; provider defaults reverting another device's change or dropping a failed save silently; Cost totals from a superseded range. Pinned by `SettingsWriteSafetyTests`. Open: `MCPServersView` jumps the selection back to a server whose save was in flight when the user picked another one (navigation only, no data at risk).
 - **Mac sidebar mode pill renders the ACTIVE segment white-on-white in snapshots** (`ConversationListView.modePillRow`). Visible in every committed `ConversationListViewSnapshots` baseline since Jul 21, so it predates the offline work and may be a harness-only artifact rather than a real rendering bug — check against a running app before chasing it.

@@ -136,7 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static func configureAndTrackAllWindows() {
         var largest: NSWindow?
         var largestArea: CGFloat = -1
-        for window in NSApp.windows {
+        for window in NSApp.windows where isAppWindow(window) {
             configure(window)
             let area = window.frame.width * window.frame.height
             if window.isVisible, area > largestArea {
@@ -149,8 +149,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// The app's own content windows. Menus, tooltips, popovers and
+    /// sheets are NSWindows too, and the notifications this pass runs
+    /// from fire for them: given the main window's 1080×520 floor they
+    /// grew to window size, mostly off screen.
+    /// The Settings window keeps standard chrome and its own size.
+    @MainActor
+    static func isAppWindow(_ window: NSWindow) -> Bool {
+        window.styleMask.contains(.titled) && !(window is NSPanel) && window.canBecomeMain
+            && !(window.identifier?.rawValue.contains("Settings") ?? false)
+    }
+
     @MainActor
     static func configure(_ window: NSWindow) {
+        guard isAppWindow(window) else { return }
         // Don't reset `window.title` or `titleVisibility` here — those are
         // managed by SwiftUI's `.navigationTitle` modifier on each pane.
         // Resetting them on every focus/move notification (this method is
@@ -159,20 +171,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.titlebarAppearsTransparent = true
         window.styleMask.insert(.fullSizeContentView)
         window.isMovableByWindowBackground = false
-        // Match the title-bar fill to the active theme's chrome so the area
-        // above the headers reads as one uniform themed surface in normal,
-        // maximized, and fullscreen states. The dynamic NSColor under the
-        // Color resolves light/dark per the window's effectiveAppearance.
+        // The main window is drawn dark, like Settings: its boards and
+        // its controls are the dark variants. Themes keep their hue.
+        window.appearance = NSAppearance(named: .darkAqua)
+        // An empty unified toolbar: no items, but macOS centers the
+        // traffic lights in a 52pt band (x 19, 42, 65; y 19), which is
+        // where every column's header puts its contents.
+        if window.toolbar == nil {
+            let toolbar = NSToolbar(identifier: "psmith.main")
+            toolbar.showsBaselineSeparator = false
+            window.toolbar = toolbar
+        }
+        window.toolbarStyle = .unified
+        window.titleVisibility = .hidden
         window.backgroundColor = NSColor(sharedThemeStore.current.chrome)
-        // AppKit-level minimum — SwiftUI's `.frame(minWidth:minHeight:)` on
-        // the WindowGroup root doesn't reliably propagate to NSWindow, so
-        // without this the user could drag below the three-column floor
-        // and the detail pane's content would clip on the leading edge.
-        // Bumped from 880 → 1080 once the model edit form (with full-width
-        // segmented pickers for Service tier / Response format / etc.) was
-        // unified in. Below ~1080 the form's intrinsic content overflows the
-        // detail column and bleeds left over the categories sidebar.
-        let minSize = NSSize(width: 1080, height: 520)
+        // AppKit-level minimum: SwiftUI's `.frame(minWidth:minHeight:)` on
+        // the WindowGroup root doesn't reliably reach NSWindow. The floor is
+        // the boards' smallest window, where the list, a 470pt reading pane
+        // and the inspector still fit.
+        let minSize = MK.windowFloor
         window.contentMinSize = minSize
 
         // One-shot snap-up: state restoration can hand us a frame below
@@ -258,7 +275,7 @@ struct PsmithMacApp: App {
                     ? nil
                     : .system(size: baseSize(for: .body) * prefs.fontScale))
                 .tint(themeStore.current.accent)
-                .frame(minWidth: 1080, minHeight: 560)
+                .frame(minWidth: 1080, minHeight: 600)
                 .background(themeStore.current.chrome.ignoresSafeArea())
                 .background(WindowChrome())
                 .navigationTitle("")
@@ -282,7 +299,7 @@ struct PsmithMacApp: App {
         // (contentMinSize + setFrame) forces a restored window that comes
         // back below the SettingsView floor up to it; restored sessions
         // don't reliably honor the SwiftUI .frame(minWidth:) modifier.
-        .defaultSize(width: 1100, height: 720)
+        .defaultSize(width: 1280, height: 800)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Conversation") {
@@ -290,19 +307,16 @@ struct PsmithMacApp: App {
                 }
                 .keyboardShortcut("n", modifiers: .command)
             }
-            // Replace the standard "Settings…" menu item under the app menu
-            // so ⌘, jumps the existing window into settings mode instead of
-            // spawning a separate settings scene.
-            CommandGroup(replacing: .appSettings) {
-                Button("Settings…") {
-                    sharedNavigator.mode = .settings
-                }
-                .keyboardShortcut(",", modifiers: .command)
-            }
             // Text-size zoom under the View menu. ⌘= is what the
             // "⌘+" keystroke produces unshifted; ⌘0 resets — the
             // browser convention.
-            CommandGroup(after: .sidebar) {
+            // Replaces the system's Show Sidebar: in our split view that
+            // command revealed the empty first column instead of the list.
+            CommandGroup(replacing: .sidebar) {
+                Button(sharedNavigator.listShown ? "Hide Conversation List" : "Show Conversation List") {
+                    withAnimation { sharedNavigator.listShown.toggle() }
+                }
+                .keyboardShortcut("s", modifiers: [.control, .command])
                 Divider()
                 // Manual reconcile-with-server: refreshes the sidebar
                 // list and runs the open conversation's staleness
@@ -330,6 +344,43 @@ struct PsmithMacApp: App {
                 .keyboardShortcut("0", modifiers: .command)
                 Divider()
             }
+        }
+
+        // Settings in a window of its own, opened by ⌘, and the app menu
+        // like every Mac app's, instead of a mode that takes over the
+        // conversation window.
+        Settings {
+            SettingsWindowRoot()
+                .environment(accountManager)
+                .environment(sharedWindowState)
+                .environment(sharedNavigator)
+                .environment(themeStore)
+                .environment(prefs)
+                .environment(\.theme, themeStore.current)
+                .environment(\.clipboard, AppKitClipboard())
+                .environment(\.fontScale, prefs.fontScale)
+                .tint(themeStore.current.accent)
+        }
+        .windowResizability(.contentMinSize)
+    }
+}
+
+/// The Settings window's content: the active account's settings, or a
+/// note when nobody is signed in.
+private struct SettingsWindowRoot: View {
+    @Environment(AccountManager.self) private var accountManager
+
+    var body: some View {
+        if let app = accountManager.active, app.authState.phase == .signedIn {
+            SettingsView(
+                providersModel: app.providers,
+                profilesModel: app.profiles,
+                mcpServersModel: app.mcpServers
+            )
+            .environment(app)
+        } else {
+            ContentUnavailableView("Not Signed In", systemImage: "person.crop.circle.badge.questionmark", description: Text("Sign in to a server to change its settings."))
+                .frame(width: 480, height: 320)
         }
     }
 }

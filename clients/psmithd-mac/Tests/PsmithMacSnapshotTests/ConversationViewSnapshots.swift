@@ -24,6 +24,15 @@ struct ConversationViewSnapshots {
     /// Builds an environment + ConversationBody with the given model state.
     /// Wraps in NavigationStack because ConversationBody declares
     /// `.navigationTitle(…)` / `.toolbar(…)` modifiers that need a host.
+    private func inEnvironment<V: View>(_ model: ConversationViewModel, @ViewBuilder _ content: () -> V) -> some View {
+        let env = SnapshotEnvironment.standard(conversations: [model.conversation], selectedID: model.conversation.id)
+        // Sheets and the inspector draw on the window's background, which
+        // a bare hosting view doesn't have.
+        return PsmithMacEnvironment(app: env.app, convos: env.convos, navigator: env.navigator, windowState: env.windowState) {
+            content().background(Color(nsColor: .windowBackgroundColor))
+        }
+    }
+
     private func body(
         for model: ConversationViewModel,
         liveConversation: PsmithConversation? = nil
@@ -521,45 +530,39 @@ struct ConversationViewSnapshots {
     // MARK: - Page-replaces-pane variants
 
     @Test
-    func compactModePage() {
-        let model = SnapshotStubs.makeConversationViewModel(
-            messages: SnapshotFixtures.sampleMessages(),
-            showingCompactView: true,
-            compactPromptDraft: "Summarize this conversation focusing on testing strategy.",
-            compactProviderID: "provider-anthropic",
-            compactModelID: "claude-opus-4-7"
-        )
-        assertViewSnapshots(body(for: model), sizes: columnSizes)
-    }
-
-    @Test
-    func settingsModePage() {
+    func inspectorSettings() {
         var draft = PsmithCallSettings()
         draft.temperature = 0.7
         let inherited = PsmithCallSettings(temperature: 1.0)
         let model = SnapshotStubs.makeConversationViewModel(
             messages: SnapshotFixtures.sampleMessages(),
-            showingSettingsView: true,
             conversationCallSettingsDraft: draft,
             resolvedCallSettings: inherited,
             settingsResolvedProfile: SnapshotFixtures.profile()
         )
-        assertViewSnapshots(body(for: model), sizes: columnSizes)
+        assertViewSnapshot(
+            inEnvironment(model) { ConversationInspector(model: model, tab: .constant(.settings), preparesSettings: false) },
+            size: CGSize(width: 340, height: 600)
+        )
     }
 
     @Test
-    func contextsModePage() {
+    func inspectorContext() {
         let chain = SnapshotFixtures.contextChain()
         let convo = SnapshotFixtures.conversation()
         let model = SnapshotStubs.makeConversationViewModel(
             conversation: convo,
             messages: SnapshotFixtures.sampleMessages(),
             contexts: chain,
-            showingContextList: true
+            tokenCount: 82_140,
+            contextWindow: 200_000
         )
         // activate the leaf so the highlight renders on a non-root row.
         model.activeContext = chain.last
-        assertViewSnapshots(body(for: model), sizes: columnSizes)
+        assertViewSnapshot(
+            inEnvironment(model) { ConversationInspector(model: model, tab: .constant(.context)) },
+            size: CGSize(width: 340, height: 760)
+        )
     }
 
     // SKIP: usage popover open with cache-read split — popovers render via

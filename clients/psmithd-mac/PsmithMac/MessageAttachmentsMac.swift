@@ -2,24 +2,17 @@ import SwiftUI
 import PsmithKit
 import UniformTypeIdentifiers
 
-/// Mac rendering for message attachments. Mirrors the iOS trio
-/// (thumbnail / chip / lightbox) with Mac presentation: the lightbox
-/// is a sheet (macOS has no fullScreenCover) and dismissal is the
-/// close button or Escape rather than drag-down.
-
-/// One image attachment on a historical message. Mints a signed URL
-/// via FilesRepository on first appear; AsyncImage handles fetch +
-/// URLSession disk cache below us.
+/// A sent image: a 140pt thumbnail. Clicking opens it as a page in the
+/// reading column (board AppImage).
 struct MessageAttachmentImageMac: View {
     let attachment: PsmithMessageAttachment
+    var messageID: String = ""
     @Environment(AppModel.self) private var app
+    @Environment(Navigator.self) private var navigator
 
     @State private var url: URL?
     @State private var failed = false
-    @State private var showingLightbox = false
 
-    /// Square thumbnail — matches the composer's pending-chip size so
-    /// a sent message visually echoes the chip it replaces.
     private let side: CGFloat = 140
 
     var body: some View {
@@ -29,15 +22,11 @@ struct MessageAttachmentImageMac: View {
             } else if let url {
                 AsyncImage(url: url, transaction: Transaction(animation: .easeInOut(duration: 0.15))) { phase in
                     switch phase {
-                    case .empty:
-                        placeholder(systemImage: "photo")
                     case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
+                        image.resizable().aspectRatio(contentMode: .fill)
                     case .failure:
                         placeholder(systemImage: "exclamationmark.triangle")
-                    @unknown default:
+                    default:
                         placeholder(systemImage: "photo")
                     }
                 }
@@ -47,24 +36,13 @@ struct MessageAttachmentImageMac: View {
         }
         .frame(width: side, height: side)
         .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-        )
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
         .contentShape(Rectangle())
         .onTapGesture {
             guard url != nil, !failed else { return }
-            showingLightbox = true
-        }
-        .sheet(isPresented: $showingLightbox) {
-            if let url {
-                MessageAttachmentLightboxMac(url: url, filename: attachment.originalFilename)
-            }
+            navigator.page = .image(messageID: messageID, fileID: attachment.fileID, filename: attachment.originalFilename ?? "Image")
         }
         .task(id: attachment.fileID) {
-            // Signed URLs are short-lived; task(id:) mints once per
-            // attachment. If the URL expires while visible, AsyncImage
-            // shows the warning glyph and a scroll-out/in re-mints.
             if url != nil { return }
             do {
                 url = try await app.client.files.signedURL(fileID: attachment.fileID)
@@ -76,41 +54,21 @@ struct MessageAttachmentImageMac: View {
 
     private func placeholder(systemImage: String) -> some View {
         ZStack {
-            Color.primary.opacity(0.05)
-            Image(systemName: systemImage)
-                .scaledFont(.title2)
-                .foregroundStyle(.tertiary)
+            Color.white.opacity(0.05)
+            Image(systemName: systemImage).font(.system(size: 18, weight: .light)).foregroundStyle(SK.tertiary)
         }
     }
 }
 
-/// Non-image attachment (PDF / audio / video): icon + filename + size.
-/// Informational — the model saw the bytes; the chip records what rode
-/// along with the message.
+/// A file on a sent message: icon, name, size.
 struct MessageAttachmentChipMac: View {
     let attachment: PsmithMessageAttachment
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: iconName)
-                .scaledFont(.title3)
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(attachment.originalFilename ?? defaultName)
-                    .scaledFont(.caption)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(sizeLabel)
-                    .scaledFont(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+        AttachmentFileChip(
+            name: attachment.originalFilename ?? defaultName,
+            detail: ByteCountFormatter.string(fromByteCount: attachment.sizeBytes, countStyle: .file),
+            systemImage: iconName
         )
         .frame(maxWidth: 240, alignment: .leading)
     }
@@ -132,68 +90,85 @@ struct MessageAttachmentChipMac: View {
         default:          return "File"
         }
     }
+}
 
-    private var sizeLabel: String {
-        ByteCountFormatter.string(fromByteCount: attachment.sizeBytes, countStyle: .file)
+/// The file chip the transcript and the composer share.
+struct AttachmentFileChip: View {
+    let name: String
+    let detail: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage).font(.system(size: 14)).foregroundStyle(SK.secondary).frame(width: 16)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(name).sk(12).lineLimit(1).truncationMode(.middle).frame(height: 15)
+                Text(detail).sk(11, SK.tertiary).lineLimit(1).frame(height: 13.75)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .frame(maxHeight: .infinity)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.05)))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5))
     }
 }
 
-/// Sheet-presented image viewer. Double-click toggles 2× zoom;
-/// Escape / the close button dismisses.
-struct MessageAttachmentLightboxMac: View {
-    let url: URL
-    var filename: String?
-    @Environment(\.dismiss) private var dismiss
+/// An image as a page in the reading column: black ground, fitted,
+/// double-click to zoom. Escape and the breadcrumb go back.
+struct ImagePage: View {
+    let fileID: String
+    let filename: String
+    let back: () -> Void
+    let backTitle: String
+    @Environment(AppModel.self) private var app
+    @State private var url: URL?
+    @State private var failed = false
     @State private var zoomed = false
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Color.black
-            ScrollView([.horizontal, .vertical]) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: zoomed ? .infinity : 760, maxHeight: zoomed ? .infinity : 560)
-                            .scaleEffect(zoomed ? 2 : 1, anchor: .center)
-                            .onTapGesture(count: 2) {
-                                withAnimation(.easeInOut(duration: 0.18)) { zoomed.toggle() }
-                            }
-                    case .failure:
-                        VStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .scaledFont(.largeTitle)
-                                .foregroundStyle(.orange)
-                            Text("Couldn't load image")
-                                .scaledFont(.callout)
-                                .foregroundStyle(.white.opacity(0.8))
-                        }
-                        .padding(60)
-                    case .empty:
-                        ProgressView()
-                            .controlSize(.large)
-                            .tint(.white)
-                            .padding(120)
-                    @unknown default:
-                        EmptyView()
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                SKBreadcrumb(parts: [(backTitle, back)], current: filename).padding(.bottom, -10)
+                Spacer(minLength: 0)
+                Text("Double-click to zoom · Escape to go back").sk(11.5, SK.tertiary)
+            }
+            .padding(.bottom, 12)
+            ZStack {
+                Color.black
+                if failed {
+                    VStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle").font(.system(size: 24)).foregroundStyle(SK.orange)
+                        Text("Couldn’t load the image").sk(13, .white.opacity(0.8))
                     }
+                } else if let url {
+                    ScrollView([.horizontal, .vertical]) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().aspectRatio(contentMode: .fit)
+                                    .scaleEffect(zoomed ? 2 : 1)
+                                    .onTapGesture(count: 2) { withAnimation(.easeInOut(duration: 0.18)) { zoomed.toggle() } }
+                            case .failure:
+                                Text("Couldn’t load the image").sk(13, .white.opacity(0.8))
+                            default:
+                                MKSpinner(size: 20, color: .white)
+                            }
+                        }
+                        .containerRelativeFrame([.horizontal, .vertical])
+                    }
+                } else {
+                    MKSpinner(size: 20, color: .white)
                 }
             }
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, .black.opacity(0.4))
-                    .scaledFont(.title)
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.cancelAction)
-            .padding(12)
-            .help("Close")
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
-        .frame(minWidth: 480, idealWidth: 800, minHeight: 360, idealHeight: 600)
+        .padding(.horizontal, 24)
+        .padding(.top, 14)
+        .padding(.bottom, 20)
+        .task(id: fileID) {
+            do { url = try await app.client.files.signedURL(fileID: fileID) } catch { failed = true }
+        }
     }
 }
