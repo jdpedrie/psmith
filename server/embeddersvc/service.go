@@ -145,6 +145,11 @@ func (s *Service) UpdateEmbedderConfig(ctx context.Context, req *connect.Request
 		}
 		nonSecret.Dimensions = int(*req.Msg.Dimensions)
 	}
+	if nonSecret.Dimensions != embeddings.StoredDimensions {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			"this server stores %d-dimension embeddings; choose a model that produces %d (got %d)",
+			embeddings.StoredDimensions, embeddings.StoredDimensions, nonSecret.Dimensions))
+	}
 	if req.Msg.ApiKey != nil {
 		v := strings.TrimSpace(*req.Msg.ApiKey)
 		if v == "" {
@@ -187,6 +192,18 @@ func (s *Service) UpdateEmbedderConfig(ctx context.Context, req *connect.Request
 	// Drop the cache so the next embed / search builds the new config.
 	if s.invalidateCache != nil {
 		s.invalidateCache(user.ID)
+	}
+
+	// Vectors from another model can't be searched with this one's, so a
+	// model change clears them and the backfill worker re-embeds every row.
+	// A worker batch already in flight with the old embedder can still land
+	// a few old-model vectors after this; the next save under this model
+	// clears those too.
+	if _, err := s.queries.ClearUserEmbeddingsNotFromModel(ctx, store.ClearUserEmbeddingsNotFromModelParams{
+		UserID: user.ID,
+		Model:  nonSecret.Model,
+	}); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("clear old embeddings: %w", err))
 	}
 
 	return connect.NewResponse(&psmithv1.UpdateEmbedderConfigResponse{

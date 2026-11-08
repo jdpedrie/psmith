@@ -26,6 +26,12 @@ type Querier interface {
 	// their result; the FK has no ON DELETE action, so null the pointer
 	// before the context row goes.
 	ClearStreamRunResultContext(ctx context.Context, resultContextID *uuid.UUID) error
+	// Drops a user's vectors produced by any model but the given one, after
+	// they change embedders. Vectors from different models live in different
+	// spaces and can't be searched together, so the old ones are useless;
+	// clearing them hands every row back to the backfill worker, which
+	// re-embeds it under the new model.
+	ClearUserEmbeddingsNotFromModel(ctx context.Context, arg ClearUserEmbeddingsNotFromModelParams) (int64, error)
 	// ConversationHarnessProvider returns the provider that owns this
 	// conversation's harness session, or NULL if it has never had one.
 	//

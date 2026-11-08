@@ -101,7 +101,7 @@ func TestUpdateEmbedderConfig_FullWrite(t *testing.T) {
 		Type:       strPtr("openai"),
 		BaseUrl:    strPtr("https://api.openai.com/v1"),
 		Model:      strPtr("text-embedding-3-small"),
-		Dimensions: int32Ptr(1536),
+		Dimensions: int32Ptr(768),
 		ApiKey:     &apiKey,
 		Enabled:    &enabled,
 	}))
@@ -112,7 +112,7 @@ func TestUpdateEmbedderConfig_FullWrite(t *testing.T) {
 	if c.BaseUrl != "https://api.openai.com/v1" {
 		t.Errorf("BaseUrl=%q", c.BaseUrl)
 	}
-	if c.Model != "text-embedding-3-small" || c.Dimensions != 1536 {
+	if c.Model != "text-embedding-3-small" || c.Dimensions != 768 {
 		t.Errorf("model/dim wrong: %s/%d", c.Model, c.Dimensions)
 	}
 	if !c.ApiKeySet {
@@ -143,7 +143,7 @@ func TestUpdateEmbedderConfig_SparseMergePreservesUnchanged(t *testing.T) {
 		Type:       strPtr("openai"),
 		BaseUrl:    strPtr("https://api.openai.com/v1"),
 		Model:      strPtr("text-embedding-3-small"),
-		Dimensions: int32Ptr(1536),
+		Dimensions: int32Ptr(768),
 		ApiKey:     &apiKey,
 		Enabled:    &enabled,
 	}))
@@ -165,7 +165,7 @@ func TestUpdateEmbedderConfig_SparseMergePreservesUnchanged(t *testing.T) {
 	if c.BaseUrl != "https://api.openai.com/v1" {
 		t.Errorf("BaseUrl reset to %q on sparse update", c.BaseUrl)
 	}
-	if c.Dimensions != 1536 {
+	if c.Dimensions != 768 {
 		t.Errorf("Dimensions reset to %d", c.Dimensions)
 	}
 	if !c.ApiKeySet {
@@ -185,7 +185,7 @@ func TestUpdateEmbedderConfig_EmptyAPIKeyClearsIt(t *testing.T) {
 		Type:       strPtr("openai"),
 		BaseUrl:    strPtr("https://api.openai.com/v1"),
 		Model:      strPtr("text-embedding-3-small"),
-		Dimensions: int32Ptr(1536),
+		Dimensions: int32Ptr(768),
 		ApiKey:     &apiKey,
 	}))
 	if err != nil {
@@ -224,7 +224,7 @@ func TestDeleteEmbedderConfig_RemovesAndInvalidates(t *testing.T) {
 	apiKey := "sk"
 	_, _ = f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&psmithv1.UpdateEmbedderConfigRequest{
 		Type: strPtr("openai"), BaseUrl: strPtr("https://x"), Model: strPtr("m"),
-		Dimensions: int32Ptr(8), ApiKey: &apiKey,
+		Dimensions: int32Ptr(768), ApiKey: &apiKey,
 	}))
 	f.invalCnt.n = 0 // reset so we can assert Delete invalidates
 
@@ -282,7 +282,7 @@ func TestNewDBResolver_DisabledRowSurfacesSentinel(t *testing.T) {
 		Type:       strPtr("openai"),
 		BaseUrl:    strPtr("https://x"),
 		Model:      strPtr("m"),
-		Dimensions: int32Ptr(8),
+		Dimensions: int32Ptr(768),
 		ApiKey:     &apiKey,
 		Enabled:    &disabled,
 	}))
@@ -302,7 +302,7 @@ func TestNewDBResolver_BuildsEmbedderForEnabledRow(t *testing.T) {
 		Type:       strPtr("openai"),
 		BaseUrl:    strPtr("https://api.openai.com/v1"),
 		Model:      strPtr("text-embedding-3-small"),
-		Dimensions: int32Ptr(1536),
+		Dimensions: int32Ptr(768),
 		ApiKey:     &apiKey,
 		Enabled:    &enabled,
 	}))
@@ -314,7 +314,7 @@ func TestNewDBResolver_BuildsEmbedderForEnabledRow(t *testing.T) {
 	if e.Model() != "text-embedding-3-small" {
 		t.Errorf("Model=%q", e.Model())
 	}
-	if e.Dimensions() != 1536 {
+	if e.Dimensions() != 768 {
 		t.Errorf("Dimensions=%d", e.Dimensions())
 	}
 }

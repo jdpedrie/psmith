@@ -30,6 +30,37 @@ func (q *Queries) ClearMessageEmbedding(ctx context.Context, id uuid.UUID) error
 	return err
 }
 
+const clearUserEmbeddingsNotFromModel = `-- name: ClearUserEmbeddingsNotFromModel :execrows
+UPDATE messages m
+SET embedding       = NULL,
+    embedding_model = NULL,
+    embedding_at    = NULL
+FROM contexts ctx
+JOIN conversations c ON c.id = ctx.conversation_id
+WHERE ctx.id = m.context_id
+  AND c.user_id = $1
+  AND m.embedding IS NOT NULL
+  AND m.embedding_model <> $2::TEXT
+`
+
+type ClearUserEmbeddingsNotFromModelParams struct {
+	UserID uuid.UUID
+	Model  string
+}
+
+// Drops a user's vectors produced by any model but the given one, after
+// they change embedders. Vectors from different models live in different
+// spaces and can't be searched together, so the old ones are useless;
+// clearing them hands every row back to the backfill worker, which
+// re-embeds it under the new model.
+func (q *Queries) ClearUserEmbeddingsNotFromModel(ctx context.Context, arg ClearUserEmbeddingsNotFromModelParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearUserEmbeddingsNotFromModel, arg.UserID, arg.Model)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const conversationHarnessProvider = `-- name: ConversationHarnessProvider :one
 SELECT m.provider_id
 FROM messages m

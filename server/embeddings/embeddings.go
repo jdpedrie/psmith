@@ -20,6 +20,12 @@ import (
 	"fmt"
 )
 
+// StoredDimensions is the length of `messages.embedding` (vector(768),
+// migration 00034). The HNSW index needs a fixed length, so a model that
+// produces any other size can't be stored without a schema change; the
+// settings RPC refuses such a config rather than letting every write fail.
+const StoredDimensions = 768
+
 // Embedder turns text into a fixed-dimensional vector. Implementations
 // should batch efficiently — Search and backfill both call Embed with
 // dozens to hundreds of inputs at a time.
