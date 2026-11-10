@@ -120,8 +120,8 @@ struct LiveProbe {
             await real(name)
         }
 
-        func snap(_ name: String) {
-            guard let image = render() else { return }
+        func snap(_ name: String, titlebar: Bool = true) {
+            guard let image = Self.render(window, titlebar: titlebar) else { return }
             let rep = NSBitmapImageRep(cgImage: image)
             let png = rep.representation(using: .png, properties: [:])
             try? png?.write(to: URL(fileURLWithPath: "\(LiveProbe.shots)/mac-\(name).png"))
@@ -130,7 +130,7 @@ struct LiveProbe {
         func render() -> CGImage? { Self.render(window) }
 
         /// The window as drawn offscreen, title bar included.
-        static func render(_ window: NSWindow) -> CGImage? {
+        static func render(_ window: NSWindow, titlebar: Bool = true) -> CGImage? {
             guard let view = window.contentView?.superview ?? window.contentView else { return nil }
             view.layoutSubtreeIfNeeded()
             view.displayIfNeeded()
@@ -208,7 +208,7 @@ struct LiveProbe {
                 ctx.draw(cg, in: r)
             }
             // The title bar on top again, so titles and toolbar show.
-            if let bar = Self.find(view, where: { String(describing: type(of: $0)) == "NSTitlebarContainerView" }).first,
+            if titlebar, let bar = Self.find(view, where: { String(describing: type(of: $0)) == "NSTitlebarContainerView" }).first,
                let rep = bar.bitmapImageRepForCachingDisplay(in: bar.bounds) {
                 bar.cacheDisplay(in: bar.bounds, to: rep)
                 if let cg = rep.cgImage { ctx.draw(cg, in: bar.convert(bar.bounds, to: nil)) }
@@ -412,6 +412,32 @@ struct LiveProbe {
                 }
             }
         }
+    }
+
+    /// The README's Mac shots, against a demo-seeded server
+    /// (`cmd/demo-seed`). Writes mac-readme-*.png, rendered offscreen.
+    @Test(.enabled(if: !shots.isEmpty))
+    func readmeShots() async throws {
+        let app = try await Self.signedIn()
+        let rig = Rig(app: app, size: CGSize(width: 1100, height: 720))
+        await app.providers.load()
+        await app.profiles.load()
+        await app.mcpServers.load()
+        let convos = ConversationsModel(client: app.client, profiles: app.profiles, hub: app.streamHub)
+        await convos.refresh()
+        rig.mount(HomeView(user: app.authState.currentUser!).environment(convos))
+        await rig.pump(2)
+        if let c = convos.conversations.first(where: { $0.title == "Architecture tour" }) { convos.selectedID = c.id }
+        await rig.pump(4)
+        // The title bar redraw paints over the header, which sits under it
+        // in a full-size-content window.
+        rig.snap("readme-conversation", titlebar: false)
+
+        let settings = Rig(app: app, size: CGSize(width: 1100, height: 720))
+        settings.mount(SettingsView(providersModel: app.providers, profilesModel: app.profiles, mcpServersModel: app.mcpServers).environment(convos))
+        settings.navigator.settingsCategory = .profiles
+        await settings.pump(3)
+        settings.snap("readme-settings")
     }
 
     /// Every pane at the window's minimum and at two larger sizes.
