@@ -216,7 +216,7 @@ struct ConversationScreen: View {
     private var elicit: ElicitRequest? {
         if let elicitOverride { return elicitOverride }
         guard let p = app.streamHub.activeStream(conversationID: model.conversation.id)?.pendingElicitations.first else { return nil }
-        return ElicitRequest(id: p.id, message: p.message, schemaJSON: p.schemaJSON)
+        return ElicitRequest(id: p.id, message: p.message, schemaJSON: p.schemaJSON, title: p.title)
     }
 
     @State private var showingSettings = false
@@ -1081,8 +1081,13 @@ private struct ChatHistoryArea: View, @MainActor Equatable {
     @Environment(\.chatPaneWidth) private var paneWidth
 
     /// Parent re-renders never need to re-diff the whole ForEach;
-    /// message changes still re-render through observation.
-    static func == (_: ChatHistoryArea, _: ChatHistoryArea) -> Bool { true }
+    /// message changes still re-render through observation. Observation
+    /// only covers the model this body last read, and ConversationView
+    /// builds a new view model each time the screen reappears (a pushed
+    /// page popping), so a new model has to count as a change: otherwise
+    /// the history keeps showing the old one and every later message is
+    /// missing until the conversation is reopened.
+    static func == (a: ChatHistoryArea, b: ChatHistoryArea) -> Bool { a.model === b.model && a.ui === b.ui }
 
     /// Exact per-row width: transition passes (keyboard show, send) can
     /// re-solve a single row against a loose proposal and render it

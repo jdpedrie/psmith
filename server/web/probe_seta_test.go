@@ -21,5 +21,7 @@ func TestProbeSettingsA(t *testing.T) {
 		{"SettingsUsers", func() templ.Component { return usersScreen(nav("users"), saBoardUsers()) }},
 		{"PhoneSettings", func() templ.Component { return generalScreen(nav(""), saBoardGeneral(true)) }},
 		{"PhoneSettingsPage", func() templ.Component { return providerScreen(nav("providers"), boardProvider()) }},
+		{"SettingsProviderCompat", func() templ.Component { return providerScreen(nav("providers"), saBoardProviderCompat()) }},
+		{"SettingsModelManual", func() templ.Component { return modelScreen(nav("providers"), saBoardModelManual()) }},
 	}, map[string]bool{"SettingsAppearance": true})
 }

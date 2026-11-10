@@ -11,6 +11,8 @@
 .seta .btn.phone{display:none}
 .seta .wide-only{display:inline}
 .seta .result.inrow{flex:1;margin:0}
+/* Holds a header result line that an action swaps in place. */
+.seta .sa-live{display:contents}
 
 /* --- rows --- */
 .seta .grow .hint{font-size:12.5px;color:var(--t3)}
@@ -29,17 +31,33 @@
 .seta .field.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
 .seta .field.area{flex:1;min-width:200px;height:auto;min-height:80px;padding:8px 10px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical}
 .seta .field.is-changed,.seta .field.is-changed:focus{box-shadow:inset 0 0 0 1.5px var(--accent)}
+.seta .field.date{width:150px;font-variant-numeric:tabular-nums;color-scheme:light dark}
+/* A setting the model fixes: its value, read only, behind a lock. */
+.seta .field.locked{display:inline-flex;align-items:center;gap:7px;width:120px;background:transparent;box-shadow:inset 0 0 0 1px var(--line);color:var(--t2)}
+.seta .field.locked input{flex:1;min-width:0;width:100%;height:100%;padding:0;border:0;background:none;color:inherit;font:inherit;font-variant-numeric:tabular-nums;outline:0}
+.seta .field.locked svg{flex:none}
 .seta .reset{width:32px;height:32px;border:0;border-radius:8px;background:var(--fill);color:var(--t2);display:flex;align-items:center;justify-content:center;padding:0}
 .seta .glink{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-top:1px solid var(--line);color:var(--accentInk);text-decoration:none;font-size:13.5px;font-weight:500}
 .seta .glink span{flex:1}
 .seta .tbl-empty{margin:0;padding:16px;font-size:13px;color:var(--t3)}
+/* Provider models table: a row's Test, off hand-added rows, and Delete in place. */
+.seta .mtbl .result{margin-top:4px;font-size:12.5px;gap:6px}
+.seta .mtbl .result .dot{width:6px;height:6px}
+.seta .mtbl .byhand{margin-left:8px;font-size:11.5px;font-weight:600;padding:2px 7px;border-radius:5px;background:var(--fill);color:var(--t2)}
+.seta .mtbl td.mtest{text-align:right}
+.seta .mtbl tr.confirm td{padding:8px 12px;text-align:left}
+.seta .rowconfirm{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:11px 12px;border-radius:9px;background:var(--redFill)}
+.seta .rowconfirm .q{flex:1;min-width:240px;line-height:1.35;color:var(--t1)}
+.seta .rowconfirm .q b{display:block;font-weight:600}
+.seta .rowconfirm .q span{display:block;margin-top:3px;color:var(--t2);font-size:12.5px}
+.seta .btn.h28.cancel{background:var(--fill2)}
 .seta .formfoot{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:10px}
 .seta .formfoot p{flex:1;min-width:240px;margin:0;font-size:12.5px;color:var(--t3)}
 .seta .mono-av{flex:none;width:32px;height:32px;border-radius:8px;background:var(--fill2);color:var(--strong);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
 
 /* --- segmented control, chip toggles, stop chips --- */
-.seta .seg{box-sizing:border-box;display:flex;height:34px;border-radius:9px;background:var(--fill);padding:3px}
-.seta .seg > *{position:relative;display:flex;align-items:center;padding:0 12px;border:0;border-radius:7px;background:transparent;color:var(--t2);font-size:13px;text-decoration:none;cursor:pointer}
+.seta .seg{box-sizing:border-box;display:flex;width:auto;height:34px;border-radius:9px;background:var(--fill);padding:3px}
+.seta .seg > *{position:relative;display:flex;white-space:nowrap;align-items:center;padding:0 12px;border:0;border-radius:7px;background:transparent;color:var(--t2);font-size:13px;text-decoration:none;cursor:pointer}
 .seta .seg input{position:absolute;opacity:0;width:0;height:0;margin:0}
 .seta .seg > [aria-checked="true"],.seta .seg > label:has(input:checked){background:var(--raise);color:var(--t1);font-weight:600;box-shadow:0 1px 2px var(--shadow)}
 .seta .seg > label:has(input:focus-visible){outline:2px solid var(--accent)}
@@ -145,7 +163,7 @@
 .seta .tcard[aria-checked="true"] .tdot{background:var(--accent);box-shadow:none}
 .seta .tcard[aria-checked="true"] .tdot svg{display:block}
 .seta .tcard .sw{display:flex;gap:6px;width:100%}
-.seta .tcard .sw > span{flex:1;display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--t3)}
+.seta .tcard .sw > span{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .seta .tcard .sw i{display:block;height:22px;border-radius:6px;box-shadow:inset 0 0 0 1px var(--line)}
 .seta .tcard .sw .a{background:var(--accent)}
 .seta .tcard .sw .b{background:var(--bubble)}
@@ -245,7 +263,7 @@
   .seta .crumbs{display:none}
   .seta .page-title{display:contents}
   .seta .page-title h2{order:1;flex:none;margin:0;font-size:26px}
-  .seta .phead > .result{order:2;margin-top:8px}
+  .seta .phead > .result,.seta .phead > .sa-live > .result{order:2;margin-top:8px}
   .seta .page-title .lede{order:2}
   .seta .ptacts{order:3;margin-top:12px;gap:8px}
   .seta .ptacts .btn{height:44px;border-radius:10px;font-size:14px}
@@ -255,6 +273,9 @@
   .seta .sec-title{margin:0 0 8px 4px}
   .seta .grow{flex-direction:column;align-items:stretch;gap:6px;min-height:0;padding:12px 16px}
   .seta .grow > .lbl{flex:none;font-size:13px}
+  .seta .grow > .tag{align-self:flex-start}
+  .seta .who{min-width:0}
+  .seta .who b,.seta .who .mono-sm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .seta .grow .field.wide,.seta .grow .field.num{flex:none;width:100%;min-width:0;height:44px;padding:0 12px;border-radius:9px;font-size:16px}
   .seta .grow.keyrow{display:grid;grid-template-columns:1fr auto;grid-template-rows:1fr auto auto 1fr;column-gap:12px;row-gap:0;align-items:center;padding:12px 8px 12px 16px}
   .seta .keyrow .lbl{grid-row:2}
@@ -282,6 +303,13 @@
   .seta .mtbl td.mcost{margin-right:8px}
   .seta .mtbl td.mcaps{margin-top:6px}
   .seta .mtbl td.mon{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:52px;height:44px;display:flex;align-items:center;justify-content:center}
+  .seta .mtbl tr:has(td.mtest){padding-right:120px}
+  .seta .mtbl td.mtest{position:absolute;right:56px;top:50%;transform:translateY(-50%)}
+  .seta .mtbl td.mtest .btn{height:44px;padding:0 10px;border-radius:9px;background:transparent;font-size:14px;font-weight:500;color:var(--accentInk)}
+  .seta .mtbl td.mtest .btn.danger{color:var(--red)}
+  .seta .mtbl tr.confirm{padding:8px 12px}
+  .seta .mtbl tr.confirm td{flex-basis:100%}
+  .seta .rowconfirm .btn{height:44px;padding:0 14px;border-radius:9px;font-size:14px}
   .settings:has(.seta) .savebar{left:10px;right:10px;bottom:14px;padding:0}
   .settings:has(.seta) .savebar > div{padding:6px 6px 6px 16px;border-radius:16px;gap:6px}
   .settings:has(.seta) .savebar .msg{font-size:14px}

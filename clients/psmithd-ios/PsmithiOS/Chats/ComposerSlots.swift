@@ -49,7 +49,6 @@ struct CompressCard: View {
     let ui: ConversationUIState
 
     private var tokens: Int32? { model.contextTokens }
-    private var empty: Bool { model.compactPromptDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
         SlotCard {
@@ -107,7 +106,7 @@ struct CompressCard: View {
                     Button("Cancel") { ui.cancelCompress(model: model) }.ikButton(height: 40, fill: true)
                     Button("Compress") { ui.startCompress(model: model) }
                         .ikButton(.primary, height: 40, fill: true)
-                        .disabled(model.compactProviderID == nil || model.compactModelID == nil || empty || model.isCompacting)
+                        .disabled(!model.compactFormReady)
                 }
                 .padding(.top, 12)
             }
@@ -153,9 +152,12 @@ struct ReviewCard: View {
             } else {
                 VStack(alignment: .leading, spacing: 0) {
                     SlotTitle(systemImage: "rectangle.expand.vertical",
-                              title: truncated ? "Truncated summary awaiting review" : "Compression awaiting review",
+                              title: message.wasStoppedByUser ? "Summary stopped"
+                                : truncated ? "Truncated summary awaiting review" : "Compression awaiting review",
                               color: IK.orange,
-                              detail: truncated
+                              detail: message.wasStoppedByUser
+                                ? "You stopped the summary before it finished. Edit it to finish it by hand, or delete it and compress again."
+                                : truncated
                                 ? "The summary is incomplete. Delete it and compress again."
                                 : "Confirm to continue in a fresh context, or delete the summary to carry on here.")
                     if truncated {
@@ -283,6 +285,8 @@ struct ElicitRequest: Identifiable, Equatable {
     let id: String
     let message: String
     let schemaJSON: Data
+    /// "GitHub needs input", or Psmith's when the stream doesn't say.
+    var title: String = "Psmith needs input"
 }
 
 struct ElicitCard: View {
@@ -300,7 +304,7 @@ struct ElicitCard: View {
         let schema = ElicitSchema(request.schemaJSON)
         SlotCard(ring: theme.accent.opacity(0.5)) {
             VStack(alignment: .leading, spacing: 0) {
-                SlotTitle(systemImage: "key.horizontal", title: "Psmith needs input", color: theme.accentInk,
+                SlotTitle(systemImage: "key.horizontal", title: request.title, color: theme.accentInk,
                           detail: request.message)
                 VStack(spacing: 8) {
                     ForEach(schema.fields, id: \.name) { field in row(field) }

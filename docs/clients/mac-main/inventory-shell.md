@@ -21,7 +21,7 @@ Files read:
 1. **There is no command palette, no global search, no swipe actions, and no multi-select** in the main window. The list is single-selection (`List(selection: $convos.selectedID)` bound to one optional id). Search is title-only, server-side, inside the list column.
 2. **"By Profile" grouping does not exist on Mac anymore.** `ConversationListMode.byProfile` exists in PsmithKit and three snapshot tests set it (`byProfileSingleProfileEmpty`, `byProfileSingleProfileMany`, `byProfileTwoProfiles`), but `ConversationListView` never reads `listMode` for grouping. The Mac replaced it with a client-side **Profile filter chip** (one profile at a time). Those snapshots render the date-grouped list.
 3. **Toasts exist in PsmithUI (`Toast.swift`) but the Mac main window shows none.** Nothing in `psmithd-mac/PsmithMac` calls `.toast(...)`. All transient feedback is inline banners.
-4. **Notification click does not select the conversation.** `MacNotifier` sets `navigator.pendingConversationSelection`, but no Mac view consumes it. Clicking a "reply ready" notification only activates the app. (Bug or gap worth knowing if the redesign draws that flow.)
+4. **Notification click selects the conversation.** `MacNotifier` sets `navigator.pendingConversationSelection`; `HomeView` takes it, closes any draft or page, and selects the conversation, refreshing the list once if it hasn't loaded it.
 5. `Navigator.mode` (`.chats` / `.settings`) is vestigial: Settings is its own window now. `startNewConversation()` still sets `mode = .chats`.
 6. Theme tokens actually used in the shell: `accent`, `chrome`. `highlight` is not used anywhere in `psmithd-mac/PsmithMac` (row selection uses the system sidebar selection tinted by `theme.accent`). `bubbleTint` and `personaColors` are used by transcript rows in PsmithUI, not by shell chrome.
 
@@ -374,7 +374,7 @@ So offline shows in three places at once: the list's offline banner, the footer'
 
 ## 12. System notifications
 
-`MacNotifier`: when a reply completes while the app is not active and the "notify on unfocused completion" preference is on, posts a user notification: title "Psmith", subtitle = conversation title (or "Untitled"), body = reply preview, default sound, threaded per conversation. Requests permission lazily the first time. Foreground presentation suppressed. Click activates the app; conversation selection is not wired (section 0, item 4).
+`MacNotifier`: when a reply completes while the app is not active and the "notify on unfocused completion" preference is on, posts a user notification: title "Psmith", subtitle = conversation title (or "Untitled"), body = reply preview, default sound, threaded per conversation. Requests permission lazily the first time. Foreground presentation suppressed. Click activates the app and opens the conversation (section 0, item 4).
 
 ---
 
@@ -431,7 +431,7 @@ Banners: list offline banner; InlineBanner x4 in the conversation. Toasts: none 
 ## 15. Gaps and inconsistencies worth a design decision
 
 1. `byProfile` grouping: dead in the Mac UI, alive in PsmithKit and in three snapshot names. Decide whether the redesign brings back grouping by profile or drops the mode.
-2. Notification click doesn't open the conversation (`pendingConversationSelection` unconsumed).
+2. ~~Notification click doesn't open the conversation.~~ Fixed: `HomeView` consumes `pendingConversationSelection`.
 3. No way to focus search by keyboard (no ⌘F); no keyboard Delete/Archive on rows; no multi-select bulk actions.
 4. Rows show no pin glyph and no profile color; the profile color system (`ProfileColor`) appears only on the draft start cards and uses hues (orange, gold) that the theme rules reserve for warnings.
 5. Offline appears three times (list banner, footer dot, composer banner).

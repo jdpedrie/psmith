@@ -17,6 +17,7 @@ struct ConversationView: View {
     @Environment(AppModel.self) private var app
     @Environment(ConversationsModel.self) private var convos
     @Environment(\.notifier) private var notifier
+    @Environment(\.onConversationModel) private var onModel
     @State private var model: ConversationViewModel?
 
     init(conversation: PsmithConversation) {
@@ -69,6 +70,7 @@ struct ConversationView: View {
         }
         .task(id: existing?.id ?? draftID?.uuidString ?? "") {
             let m = makeModel()
+            onModel(m)
             m.localTitleProfilesByID = Dictionary(uniqueKeysWithValues: convos.profiles.map { ($0.id, $0) })
             if existing == nil {
                 m.onConversationCreated = { [weak convos] created in
@@ -126,6 +128,12 @@ struct ConversationView: View {
     }
 }
 
+extension EnvironmentValues {
+    /// Called with each view model a conversation screen builds. The app
+    /// leaves it empty; end-to-end tests read the screen's state through it.
+    @Entry var onConversationModel: @MainActor (ConversationViewModel) -> Void = { _ in }
+}
+
 // MARK: - Body
 
 /// Scroll metrics written on every geometry tick. A reference box, so the
@@ -176,10 +184,15 @@ struct ConversationBody: View {
         HStack(spacing: 0) {
             VStack(spacing: 0) {
                 header
-                if let page = navigator.page, !model.isDraft {
+                // A draft can only pick its model; the header's All Models…
+                // leads here before the first send too.
+                if let page = navigator.page, !model.isDraft || page == .models {
                     ConversationPageView(page: page, model: model)
                 } else {
                     transcript
+                        .environment(\.openFullText) { title, markdown in
+                            navigator.page = .fullText(title: title, markdown: markdown)
+                        }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -219,6 +232,11 @@ struct ConversationBody: View {
             guard on else { return }
             model.showingContextList = false
             openInspector(.context)
+        }
+        // Unsent text outlives the screen: switching away or quitting
+        // keeps it, and the next view model restores it.
+        .onChange(of: model.draft) { _, text in
+            DraftStore.save(conversationID: model.conversation.id, text: text)
         }
         .task(id: liveConversation.id) {
             guard !model.isDraft else { return }

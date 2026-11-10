@@ -26,7 +26,7 @@ The role set is enforced by a CHECK constraint in the schema. These five are the
 
 The parent pointer is load-bearing. It means history is append-only at the model level: editing or branching adds nodes, it never rewrites them.
 
-**Editing** a user message creates a new message with the same parent as the original, then runs the model from there. The original and its old reply still exist in the tree; the conversation's leaf just moves to the new branch. Nothing is destroyed, so the edit is reversible and the old branch is still reachable.
+**Editing** a user message creates a new message with the same parent as the original, then runs the model from there. The original and its old reply still exist in the tree; the conversation's leaf just moves to the new branch. Nothing is destroyed, so the edit is reversible and the old branch is still reachable. A context's first message has no parent, so editing it starts another root: `SendMessageRequest.fork_at_root` asks for that, because an unset parent already means "continue from the leaf".
 
 **Branching** is the same mechanism made explicit: any message can be the parent of more than one child, and each child roots a distinct conversation path. The active leaf determines which path is "current." Listing messages returns the active leaf chain by default; a full-tree fetch returns every branch.
 

@@ -1,43 +1,29 @@
 package conversations
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
 	"connectrpc.com/connect"
-	"github.com/google/uuid"
 
 	"github.com/jdpedrie/psmith/pluginapi"
 	"github.com/jdpedrie/psmith/server/modelmeta"
-	"github.com/jdpedrie/psmith/server/profiles"
 )
 
-// validateModelCapabilities checks the conversation's resolved model can
-// drive every plugin in the profile's effective pipeline. Returns a
-// FailedPrecondition error naming the missing capabilities when a
-// shortfall exists; nil when the model is sufficient or the profile
-// requires nothing.
+// validateModelCapabilities checks the resolved model can drive every
+// plugin in the turn's pipeline: the profile chain plus the
+// conversation's own plugin rows, as the send will actually run them.
+// Returns a FailedPrecondition error naming the missing capabilities
+// when a shortfall exists; nil when the model is sufficient or the
+// pipeline requires nothing.
 //
-// Capability resolution itself is best-effort: a transient error walking
-// the profile chain logs and proceeds (the model's own constructor still
-// catches genuinely unsupported settings at upstream-call time). The hard
-// error is only emitted on a clear "the user attached a tool-providing
-// plugin to a profile pointing at a non-tool-using model" case.
-func (s *Service) validateModelCapabilities(
-	ctx context.Context,
-	profileID uuid.UUID,
-	modelID string,
-	modelCapsBytes []byte,
-) error {
-	required, err := profiles.ResolveRequiredModelCapabilities(ctx, s.queries, profileID)
-	if err != nil {
-		s.logger.Warn("capability validation: resolve required failed; allowing send",
-			"err", err, "profile_id", profileID)
-		return nil
-	}
+// It reads the built pipeline rather than re-walking the profile chain,
+// so the gate can't disagree with what runs: a tool plugin attached to
+// one conversation is checked, and one a conversation turned off isn't.
+func validateModelCapabilities(pipeline pluginapi.Pipeline, modelID string, modelCapsBytes []byte) error {
+	required := requiredCapabilities(pipeline)
 	if required.Empty() {
 		return nil
 	}
@@ -52,9 +38,23 @@ func (s *Service) validateModelCapabilities(
 	if missing.Empty() {
 		return nil
 	}
-	names := missing.Names()
 	return connect.NewError(connect.CodeFailedPrecondition,
-		errors.New("model "+quote(modelID)+" lacks capabilities required by this profile's plugin pipeline: "+strings.Join(names, ", ")))
+		errors.New("model "+quote(modelID)+" lacks capabilities required by this conversation's plugins: "+strings.Join(missing.Names(), ", ")))
+}
+
+// requiredCapabilities unions what each plugin in the pipeline declares.
+// A name the registry doesn't know contributes nothing; building the
+// pipeline already refused unknown plugins.
+func requiredCapabilities(pipeline pluginapi.Pipeline) pluginapi.ModelCapabilityRequirements {
+	var caps pluginapi.ModelCapabilityRequirements
+	for _, p := range pipeline {
+		d, err := pluginapi.Describe(p.Name())
+		if err != nil {
+			continue
+		}
+		caps = caps.Combine(d.RequiredModelCapabilities)
+	}
+	return caps
 }
 
 // capabilityShortfall returns the requirements not met by `actual`. The

@@ -77,5 +77,23 @@ func TestProbeList(t *testing.T) {
 			}), boardWelcome(false))
 		}},
 		{"PhoneDraft", func() templ.Component { return draftScreen(boardListIdle(), boardDraft(true)) }},
+		{"PhoneRowMenu", func() templ.Component {
+			return welcomeScreen(boardListWith(func(l *listVM) {
+				l.ActiveID, l.MenuID = "", "c-tax"
+				rows := boardListIdle().Rows[:6]
+				l.Rows = append(boardPinnedRows()[:1], rows...)
+			}), boardWelcome(false))
+		}},
+		{"ListEmptyArchive", func() templ.Component {
+			return welcomeScreen(boardEmptyList(func(l *listVM) { l.Chips, l.ArchivedCount = boardChips("all"), 12 }), welcomeVM{Profiles: boardCards()})
+		}},
+		{"ListEmptyFilter", func() templ.Component {
+			return welcomeScreen(boardEmptyList(func(l *listVM) { l.Filter, l.Chips = fxPirate, boardChips(fxPirate) }), welcomeVM{Profiles: boardCards()})
+		}},
+		{"ListLoadError", func() templ.Component {
+			return welcomeScreen(boardEmptyList(func(l *listVM) {
+				l.Chips, l.LoadError = boardChips("all"), "unavailable: the database didn’t answer in time"
+			}), welcomeVM{Profiles: boardCards()})
+		}},
 	}, nil)
 }

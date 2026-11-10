@@ -175,7 +175,7 @@ func (h *Handler) renderProfiles(w http.ResponseWriter, r *http.Request, errMsg 
 		http.NotFound(w, r)
 		return
 	}
-	h.render(w, r, http.StatusOK, profilesScreen(h.loadSnav(r.Context(), r, "profiles"), vm))
+	h.answer(w, r, "/settings/profiles", http.StatusOK, profilesScreen(h.loadSnav(r.Context(), r, "profiles"), vm))
 }
 
 // profileRows orders profiles as a tree: each root, then its children
@@ -322,12 +322,35 @@ func (h *Handler) handleProfileCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := strings.TrimSpace(r.PostFormValue("name"))
+	wantDefault := r.PostFormValue("default") == "true"
+	// A failed create shows the form again with everything typed, so
+	// nothing is lost to a plain error page.
+	fail := func(msg string) {
+		ix, err := h.loadProfileIndex(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		vm := profileGeneralVM{
+			New: true, Head: profileHeadVM{Name: "New profile", Tab: "general"}, Error: msg,
+			Name: name, Description: r.PostFormValue("description"),
+			ParentOpts: parentOpts(ix, "", r.PostFormValue("parent")),
+			IsDefault:  wantDefault, Favorite: r.PostFormValue("favorite") == "true", ParentOnly: r.PostFormValue("parent_only") == "true",
+			System: r.PostFormValue("system_message"), FirstMsg: r.PostFormValue("first_message"), Welcome: r.PostFormValue("welcome_message"),
+		}
+		for _, p := range ix.list {
+			if p.GetIsDefault() {
+				vm.DefaultName = p.GetName()
+			}
+		}
+		h.showAfterPost(w, r, "/settings/profiles/new", profileGeneralScreen(h.loadSnav(r.Context(), r, "profiles"), vm))
+	}
 	if name == "" {
-		http.Error(w, "name is required", http.StatusBadRequest)
+		fail("A profile needs a name.")
 		return
 	}
-	if r.PostFormValue("default") == "true" && r.PostFormValue("parent_only") == "true" {
-		http.Error(w, "A parent-only profile can't be the default.", http.StatusBadRequest)
+	if wantDefault && r.PostFormValue("parent_only") == "true" {
+		fail("A parent-only profile can't be the default.")
 		return
 	}
 	req := &psmithv1.CreateProfileRequest{
@@ -350,17 +373,30 @@ func (h *Handler) handleProfileCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := h.profiles.CreateProfile(r.Context(), connect.NewRequest(req))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		fail(errMessage(err))
 		return
 	}
 	id := resp.Msg.GetProfile().GetId()
-	if r.PostFormValue("default") == "true" {
+	if wantDefault {
 		if _, err := h.profiles.SetDefaultProfile(r.Context(), connect.NewRequest(&psmithv1.SetDefaultProfileRequest{ProfileId: id})); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			h.renderProfileGeneralErr(w, r, id, errMessage(err))
 			return
 		}
 	}
 	http.Redirect(w, r, "/settings/profiles/"+id, http.StatusSeeOther)
+}
+
+// renderProfileGeneralErr shows a saved profile's General tab with msg, for
+// a step that failed after the profile itself was written.
+func (h *Handler) renderProfileGeneralErr(w http.ResponseWriter, r *http.Request, id, msg string) {
+	ix, err := h.loadProfileIndex(r.Context())
+	if err != nil || ix.byID[id] == nil {
+		http.Error(w, msg, http.StatusInternalServerError)
+		return
+	}
+	vm := buildProfileGeneral(ix, ix.byID[id])
+	vm.Error = msg
+	h.showAfterPost(w, r, "/settings/profiles/"+id, profileGeneralScreen(h.loadSnav(r.Context(), r, "profiles"), vm))
 }
 
 func (h *Handler) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
@@ -396,21 +432,35 @@ func (h *Handler) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	req.ClearFields = clear
 
+	want := r.PostFormValue("default") == "true"
 	vm := buildProfileGeneral(ix, p)
+	// A refused save shows what was posted, with the save bar up, so the
+	// page never reads as saved when it isn't.
 	fail := func(msg string) {
-		vm.Error, vm.Name, vm.Description = msg, name, desc
-		vm.System, vm.FirstMsg, vm.Welcome = r.PostFormValue("system_message"), r.PostFormValue("first_message"), r.PostFormValue("welcome_message")
-		h.render(w, r, http.StatusBadRequest, profileGeneralScreen(h.loadSnav(r.Context(), r, "profiles"), vm))
+		posted := profileGeneralVM{
+			Name: name, Description: desc, IsDefault: want, Favorite: fav, ParentOnly: only,
+			System: r.PostFormValue("system_message"), FirstMsg: r.PostFormValue("first_message"), Welcome: r.PostFormValue("welcome_message"),
+		}
+		vm.Dirty = generalChanges(vm, posted, p.GetParentProfileId(), r.PostFormValue("parent"))
+		vm.Error, vm.Name, vm.Description = msg, posted.Name, posted.Description
+		vm.IsDefault, vm.Favorite, vm.ParentOnly = posted.IsDefault, posted.Favorite, posted.ParentOnly
+		vm.System, vm.FirstMsg, vm.Welcome = posted.System, posted.FirstMsg, posted.Welcome
+		vm.ParentOpts = parentOpts(ix, id, r.PostFormValue("parent"))
+		h.showAfterPost(w, r, "/settings/profiles/"+id, profileGeneralScreen(h.loadSnav(r.Context(), r, "profiles"), vm))
 	}
 	if name == "" {
 		fail("A profile needs a name.")
+		return
+	}
+	if want && only {
+		fail("A parent-only profile can't be the default.")
 		return
 	}
 	if _, err := h.profiles.UpdateProfile(r.Context(), connect.NewRequest(req)); err != nil {
 		fail(errMessage(err))
 		return
 	}
-	switch want := r.PostFormValue("default") == "true"; {
+	switch {
 	case want && !p.GetIsDefault():
 		_, err := h.profiles.SetDefaultProfile(r.Context(), connect.NewRequest(&psmithv1.SetDefaultProfileRequest{ProfileId: id}))
 		if err != nil {
@@ -427,6 +477,22 @@ func (h *Handler) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings/profiles/"+id, http.StatusSeeOther)
 }
 
+// generalChanges counts the General tab's fields that differ between what
+// is stored and what was posted, for the save bar after a refused save.
+func generalChanges(stored, posted profileGeneralVM, storedParent, postedParent string) int {
+	n := 0
+	for _, d := range []bool{
+		stored.Name != posted.Name, stored.Description != posted.Description, storedParent != postedParent,
+		stored.IsDefault != posted.IsDefault, stored.Favorite != posted.Favorite, stored.ParentOnly != posted.ParentOnly,
+		stored.System != posted.System, stored.FirstMsg != posted.FirstMsg, stored.Welcome != posted.Welcome,
+	} {
+		if d {
+			n++
+		}
+	}
+	return max(n, 1)
+}
+
 // errMessage is a connect error's message without its code prefix.
 func errMessage(err error) string {
 	var ce *connect.Error
@@ -439,12 +505,34 @@ func errMessage(err error) string {
 func (h *Handler) handleProfileDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if _, err := h.profiles.DeleteProfile(r.Context(), connect.NewRequest(&psmithv1.DeleteProfileRequest{Id: id})); err != nil {
+		msg := h.deleteRefusal(r.Context(), id, err)
 		if r.PostFormValue("from") == "list" {
-			h.renderProfiles(w, r, errMessage(err))
+			h.renderProfiles(w, r, msg)
 			return
 		}
-		h.renderShare(w, r, shareState{Error: errMessage(err)})
+		h.renderShare(w, r, shareState{Error: msg})
 		return
 	}
 	http.Redirect(w, r, "/settings/profiles", http.StatusSeeOther)
+}
+
+// deleteRefusal words a refused delete. The service only says the profile
+// still has dependents; children are named, otherwise it's conversations.
+func (h *Handler) deleteRefusal(ctx context.Context, id string, err error) string {
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		return errMessage(err)
+	}
+	ix, lerr := h.loadProfileIndex(ctx)
+	p := ix.byID[id]
+	if lerr != nil || p == nil {
+		return "This profile is still in use, so it can't be deleted."
+	}
+	if kids := ix.children(id); len(kids) > 0 {
+		names := make([]string, 0, len(kids))
+		for _, k := range kids {
+			names = append(names, k.GetName())
+		}
+		return p.GetName() + " can't be deleted while " + joinAnd(names) + " inherit" + map[bool]string{true: "s", false: ""}[len(kids) == 1] + " from it. Delete " + map[bool]string{true: "that profile", false: "those profiles"}[len(kids) == 1] + " or give " + map[bool]string{true: "it", false: "them"}[len(kids) == 1] + " another parent first."
+	}
+	return p.GetName() + " can't be deleted while conversations use it. Delete those conversations first."
 }

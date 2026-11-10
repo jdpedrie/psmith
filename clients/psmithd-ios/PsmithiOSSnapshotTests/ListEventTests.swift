@@ -30,9 +30,10 @@ final class ListEventTests: XCTestCase {
         window = nil
     }
 
-    private func mount(_ state: ListState, _ conversations: [PsmithConversation] = Shell.swipeList) -> ConversationsModel {
+    private func mount(_ state: ListState, _ conversations: [PsmithConversation] = Shell.swipeList,
+                       archived: [PsmithConversation]? = nil) -> ConversationsModel {
         let (app, convos) = ListFixture.models(conversations)
-        let root = ListHost(state: state)
+        let root = ListHost(state: state, archived: archived)
             .environment(app)
             .environment(convos)
             .environment(Shell.accounts(other: false))
@@ -46,6 +47,30 @@ final class ListEventTests: XCTestCase {
         window = w
         settle()
         return convos
+    }
+
+    // MARK: Empty list with an archive
+
+    /// Board ListEmptyArchive: the filter chips aren't drawn on an empty
+    /// list, so its Archived button is the way into the archive.
+    func testEmptyListOpensTheArchive() throws {
+        let state = ListState()
+        _ = mount(state, [], archived: Shell.archived)
+        XCTAssertNotNil(element(labeled: "Archived, 7 conversations"), "the empty list offers the archive")
+
+        try tap("Archived, 7 conversations")
+        XCTAssertEqual(state.filter, .archived)
+        XCTAssertTrue(wait(timeout: 3) {
+            elements().contains {
+                $0.isAccessibilityElement && ($0.accessibilityLabel ?? "").hasPrefix("Q3 board memo draft")
+            }
+        }, "the archive's rows show")
+    }
+
+    func testEmptyListWithNoArchiveOffersOnlyNew() {
+        _ = mount(ListState(), [], archived: [])
+        XCTAssertNotNil(element(labeled: "New Conversation"))
+        XCTAssertFalse(elements().contains { ($0.accessibilityLabel ?? "").hasPrefix("Archived") })
     }
 
     // MARK: Delete confirm in place

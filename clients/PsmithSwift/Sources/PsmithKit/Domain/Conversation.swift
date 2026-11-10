@@ -561,6 +561,10 @@ public struct PsmithMessage: Sendable, Hashable, Identifiable, Codable {
         default: return false
         }
     }
+    /// True when the user stopped this message before it finished. For a
+    /// compression summary the review says "Summary stopped": the text is
+    /// partial, not a summary the model finished.
+    public var wasStoppedByUser: Bool { finishReason == "user_cancelled" }
     /// Wall-clock the server materialised this row. Used by clients
     /// for the in-bubble timestamp line; required for ordering only at
     /// the server (clients trust list order). May be `Date(0)` for
@@ -699,17 +703,22 @@ public struct PsmithUIFragment: Sendable, Hashable, Codable {
     public let component: String
     public let props: Data
     public let key: String
+    /// The plugin that drew the fragment, where a `plugin:` action in it
+    /// goes. Nil for host-split text and fragments from older servers.
+    public let plugin: String?
 
-    public init(component: String, props: Data, key: String = "") {
+    public init(component: String, props: Data, key: String = "", plugin: String? = nil) {
         self.component = component
         self.props = props
         self.key = key
+        self.plugin = plugin
     }
 
     init(from p: Psmith_V1_UIFragment) {
         component = p.component
         props = p.props
         key = p.key
+        plugin = p.plugin.isEmpty ? nil : p.plugin
     }
 }
 

@@ -117,6 +117,11 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Remember the model choice on the conversation so the picker, and
+	// regenerate, default to it. Before the send: once its run starts, the
+	// conversation refuses settings changes until the run ends.
+	h.persistModel(r.Context(), convID, modelVal)
+
 	req := &psmithv1.SendMessageRequest{ConversationId: convID, Content: text, AttachmentFileIds: attachIDs}
 	if pid, mid, ok := splitModelValue(modelVal); ok {
 		req.ProviderId, req.ModelId = &pid, &mid
@@ -137,10 +142,6 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	// Remember the model choice on the conversation so the picker defaults to
-	// it next time. Best-effort; never blocks the turn.
-	h.persistModel(r.Context(), convID, modelVal)
 
 	runID := sendResp.Msg.GetStreamRun().GetId()
 	userMsg := sendResp.Msg.GetUserMessage()
@@ -249,6 +250,19 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 	if f := r.URL.Query().Get("from"); f != "" {
 		_, _ = fmt.Sscan(f, &from)
 	}
+	// The conversation must be the caller's, and the run must be one of its
+	// own: the supervisor serves any run id it's given.
+	if _, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID})); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if h.queries != nil {
+		run, err := h.queries.GetStreamRunByID(r.Context(), runID)
+		if err != nil || run.ConversationID.String() != convID {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+	}
 
 	events, err := h.supervisor.Subscribe(r.Context(), runID, from)
 	if err != nil {
@@ -261,7 +275,7 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
-	st := &liveState{}
+	st := &liveState{runID: runID.String()}
 	for ev := range events {
 		if ev.Chunk != nil {
 			switch ev.Chunk.Type {
@@ -282,6 +296,14 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 					st.thinkStart = &now
 					sse.event("chips", renderComp(r.Context(), liveChips(st.chips())))
 				}
+				var p struct {
+					Text string `json:"text"`
+				}
+				_ = json.Unmarshal(ev.Chunk.Payload, &p)
+				// The panel stays hidden until the chip opens it, but it
+				// keeps up, so opening it mid-thought shows the thought.
+				st.think.WriteString(p.Text)
+				sse.event("thinking", renderMarkdown(st.think.String()))
 			case providers.ChunkContentReset:
 				st.text.Reset()
 			case providers.ChunkToolUseStart:
@@ -347,7 +369,9 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 
 // liveState is what a streaming reply has shown so far.
 type liveState struct {
+	runID      string // names the live thinking panel the chip discloses
 	text       strings.Builder
+	think      strings.Builder
 	thinkStart *time.Time
 	thinkDur   time.Duration
 	tools      []liveTool
@@ -362,6 +386,8 @@ type liveTool struct {
 	elapsed       time.Duration
 }
 
+func livePanelID(runID string) string { return "think-live-" + runID }
+
 // liveChipVM is one chip above a streaming reply.
 type liveChipVM struct {
 	Name     string // tool name, mono; empty for thinking
@@ -370,15 +396,17 @@ type liveChipVM struct {
 	Thinking bool
 	Secs     string // "3.2s" so far; the page keeps it ticking
 	Since    string // unix ms the chip's clock started, for the ticker
+	Panel    string // thinking: the id of the panel the chip discloses
 }
 
 func (s *liveState) chips() []liveChipVM {
 	var out []liveChipVM
 	if s.thinkStart != nil {
+		panel := livePanelID(s.runID)
 		if s.thinkDur > 0 {
-			out = append(out, liveChipVM{Label: fmt.Sprintf("Thought for %.1fs", s.thinkDur.Seconds())})
+			out = append(out, liveChipVM{Label: fmt.Sprintf("Thought for %.1fs", s.thinkDur.Seconds()), Thinking: true, Panel: panel})
 		} else {
-			out = append(out, liveChipVM{Label: "Thinking", Live: true, Thinking: true,
+			out = append(out, liveChipVM{Label: "Thinking", Live: true, Thinking: true, Panel: panel,
 				Secs: fmt.Sprintf("%.1fs", time.Since(*s.thinkStart).Seconds()), Since: fmt.Sprint(s.thinkStart.UnixMilli())})
 		}
 	}

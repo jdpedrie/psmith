@@ -389,7 +389,7 @@ func TestContexts_RenameActivateDelete(t *testing.T) {
 	if rec := f.post(t, f.h.handleContextRename, "/", url.Values{"title": {"Paging by date"}}, pv); rec.Code != 303 {
 		t.Fatalf("rename: %d %s", rec.Code, rec.Body.String())
 	}
-	page := f.get(t, f.h.handleConversation, "/c/"+f.conv+"?tab=contexts&rename="+oldID, nil).Body.String()
+	page := f.get(t, f.h.handleConversation, "/c/"+f.conv+"?tab=contexts&ctx_rename="+oldID, nil).Body.String()
 	if !strings.Contains(page, `value="Paging by date"`) {
 		t.Error("rename form lacks the saved title")
 	}

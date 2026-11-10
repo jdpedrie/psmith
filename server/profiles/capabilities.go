@@ -31,10 +31,9 @@ import (
 // shouldn't fail the read path. The pipeline-build at SendMessage time
 // surfaces unknowns as a hard error there.
 //
-// Not covered: `conversation_plugins`. A plugin attached only at the
-// conversation level still escapes this gate, because the caller resolves
-// from a profile id. Send-time validation happens before the pipeline is
-// built, so closing that gap means threading the conversation through.
+// This is the profile's view, for pickers and the profile editor. The
+// send-time gate reads the built pipeline instead, which also carries the
+// conversation's own plugin rows.
 //
 // Cycles in the parent chain abort with an error so a misconfigured graph
 // surfaces immediately rather than spinning.

@@ -34,6 +34,8 @@ struct MessageRow: View {
     @Environment(\.chatPaneWidth) private var paneWidth
 
     @State private var confirmingDelete = false
+    /// The delete asked for takes everything under the message too.
+    @State private var deleteCascades = false
     @State private var showUsageDetail = false
     @State private var editDraft = ""
     /// The inline editor's role. Only user and assistant can flip, and
@@ -103,12 +105,14 @@ struct MessageRow: View {
                     .padding(.top, 4)
             }
             if confirmingDelete {
-                MKStrip(systemImage: "exclamationmark.triangle", lead: "Delete this \(isUser ? "message" : "reply")?",
-                        detail: "Replies after it attach to the message before.") {
+                MKStrip(systemImage: "exclamationmark.triangle",
+                        lead: deleteCascades ? "Delete from here?" : "Delete this \(isUser ? "message" : "reply")?",
+                        detail: deleteDetail) {
                     Button("Cancel") { confirmingDelete = false }.skButton(small: true).keyboardShortcut(.cancelAction)
                     Button("Delete") {
                         confirmingDelete = false
-                        Task { await model.deleteMessage(id: message.id) }
+                        let cascade = deleteCascades
+                        Task { await model.deleteMessage(id: message.id, cascade: cascade) }
                     }
                     .skButton(.destructiveFilled, small: true)
                 }
@@ -146,6 +150,7 @@ struct MessageRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .personaRail(index: message.personaSlot)
                 .contextMenu { contextMenuItems }
+                .accessibilityActions { contextMenuItems }
         } else {
             framedBubble
         }
@@ -157,6 +162,7 @@ struct MessageRow: View {
         HuggingWidth(maxWidth: bubbleCap) {
             inner
                 .contextMenu { contextMenuItems }
+                .accessibilityActions { contextMenuItems }
                 .modifier(UserBubbleChrome())
         }
     }
@@ -166,6 +172,7 @@ struct MessageRow: View {
     private var framedBubble: some View {
         inner
             .contextMenu { contextMenuItems }
+                .accessibilityActions { contextMenuItems }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
             .background {
@@ -210,6 +217,7 @@ struct MessageRow: View {
         }
         .buttonStyle(.plain)
         .contextMenu { contextMenuItems }
+                .accessibilityActions { contextMenuItems }
         .help("Show the \(roleLabel.lowercased()) message")
     }
 
@@ -255,7 +263,11 @@ struct MessageRow: View {
             } else if isErrored {
                 erroredBody
             } else if !message.uiFragments.isEmpty {
-                FragmentView(fragments: message.uiFragments, onAction: handleFragmentAction)
+                FragmentView(fragments: message.uiFragments, onAction: handleFragmentAction, onPluginAction: { plugin, action, params in
+                    // The transcript reloads to show the effect; a failure
+                    // leaves it as it was, which is what the user sees.
+                    Task { try? await model.invokeFragmentAction(plugin: plugin, action: action, params: params) }
+                })
             } else {
                 markdownBody
             }
@@ -512,8 +524,24 @@ struct MessageRow: View {
         }
         if isEditableRole {
             Divider()
-            Button("Delete…", role: .destructive) { confirmingDelete = true }
+            Button("Delete…", role: .destructive) { askDelete(cascade: false) }
+            if model.hasDescendants(message.id) {
+                Button("Delete From Here…", role: .destructive) { askDelete(cascade: true) }
+            }
         }
+    }
+
+    private func askDelete(cascade: Bool) {
+        deleteCascades = cascade
+        confirmingDelete = true
+    }
+
+    private var deleteDetail: String {
+        if deleteCascades {
+            let n = model.descendantCount(of: message.id)
+            return "This message and the \(n) repl\(n == 1 ? "y" : "ies") under it go."
+        }
+        return "Replies after it attach to the message before."
     }
 
     /// "‹ 2/3 ›" when this message has siblings.
@@ -529,6 +557,7 @@ struct MessageRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Previous branch")
+                .accessibilityLabel("Previous branch")
                 Text("\(info.index + 1)/\(info.siblingIDs.count)").sk(11, SK.secondary).monospacedDigit()
                 Button {
                     let i = (info.index + 1) % info.siblingIDs.count
@@ -538,6 +567,7 @@ struct MessageRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Next branch")
+                .accessibilityLabel("Next branch")
             }
             .foregroundStyle(SK.secondary)
             .padding(.horizontal, 7)
@@ -561,8 +591,12 @@ struct MessageRow: View {
             }
             .disabled(!isReloadable || isUser)
             Divider()
-            Button("Delete…", role: .destructive) { confirmingDelete = true }
+            Button("Delete…", role: .destructive) { askDelete(cascade: false) }
                 .disabled(!isEditableRole)
+            if model.hasDescendants(message.id) {
+                Button("Delete From Here…", role: .destructive) { askDelete(cascade: true) }
+                    .disabled(!isEditableRole)
+            }
         }
     }
 
@@ -624,7 +658,6 @@ struct MessageRow: View {
         // unchanged, so those send content only.
         let role: PsmithMessageRole? = showsRolePicker ? editRoleDraft : nil
         let id = message.id
-        let parent = message.parentID
         model.editingMessage = nil
         if thenResend, role == .assistant {
             Task {
@@ -632,7 +665,8 @@ struct MessageRow: View {
                 await model.regenerateAssistant(parentMessageID: id)
             }
         } else if thenResend, role == .user {
-            Task { await model.sendForking(content: trimmed, parentMessageID: parent) }
+            let msg = message
+            Task { await model.resendBeside(msg, content: trimmed) }
         } else {
             Task { await model.editMessage(id: id, content: trimmed, role: role) }
         }

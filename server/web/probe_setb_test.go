@@ -22,5 +22,8 @@ func TestProbeSettingsB(t *testing.T) {
 		{"SettingsLangfuse", func() templ.Component { return langfuseScreen(nav("langfuse"), boardLangfuse()) }},
 		{"SettingsEmbedder", func() templ.Component { return embedderScreen(nav("embedder"), boardEmbedder()) }},
 		{"SettingsSpeech", func() templ.Component { return speechScreen(nav("speech"), boardSpeech()) }},
+		{"SettingsLangfuseSetup", func() templ.Component { return langfuseScreen(nav("langfuse"), boardLangfuseSetup()) }},
+		{"SettingsServerFailing", func() templ.Component { return mcpDetailScreen(nav("servers"), boardServerFailing()) }},
+		{"SettingsEditServer", func() templ.Component { return mcpFormScreen(nav("servers"), boardEditServer()) }},
 	}, nil)
 }

@@ -236,6 +236,7 @@ public struct BoundedMarkdownText: View {
     private let documentTitle: String
     private let limit: Int
     @State private var showingFull = false
+    @Environment(\.openFullText) private var openFullText
 
     public init(
         _ content: String,
@@ -254,7 +255,11 @@ public struct BoundedMarkdownText: View {
             VStack(alignment: .leading, spacing: 8) {
                 ChunkedMarkdownText(preview, cacheKey: cacheKey.map { $0 + ":head" })
                 Button {
-                    showingFull = true
+                    if let openFullText {
+                        openFullText(documentTitle, content)
+                    } else {
+                        showingFull = true
+                    }
                 } label: {
                     Label(
                         "Show full text (\(sizeLabel))",
@@ -283,6 +288,13 @@ public struct BoundedMarkdownText: View {
             countStyle: .file
         )
     }
+}
+
+extension EnvironmentValues {
+    /// Where "Show full text" opens a long document (title, markdown), for
+    /// a host that shows it in place of the transcript instead of a sheet.
+    /// Nil keeps the sheet.
+    @Entry public var openFullText: (@MainActor (String, String) -> Void)? = nil
 }
 
 /// Full-document markdown viewer: the content split at paragraph

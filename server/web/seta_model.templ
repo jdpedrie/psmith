@@ -13,8 +13,12 @@ type modelPageVM struct {
 	MetaLine                   string
 	Ctx, Out                   string
 	In, OutP, CR, CW           string
+	Cutoff                     string // YYYY-MM-DD
+	Manual                     bool   // added by hand, so it can be deleted
+	Deleting                   bool   // Delete is waiting for its confirm
 	Caps, Mods                 []saTog
 	Temp, TempHint             string
+	TempLock                   string // the only temperature the model takes, when it has one
 	MaxTok, MaxInherit         string
 	MaxHint                    string
 	Effort, EffortInherit      string
@@ -46,14 +50,14 @@ func (m modelPageVM) effortOpts() []saOpt {
 
 templ modelActions(m modelPageVM) {
 	<div class="ptacts">
-		<button class={ "fav", templ.KV("on", m.Favorite) } type="submit" formaction={ m.op("favorite") } aria-pressed={ strconv.FormatBool(m.Favorite) } aria-label="Favorite">
+		<button id="fav" class={ "fav", templ.KV("on", m.Favorite) } type="submit" formaction={ m.op("favorite") } hx-post={ string(m.op("favorite")) } hx-select="#fav" hx-target="this" hx-swap="outerHTML" aria-pressed={ strconv.FormatBool(m.Favorite) } aria-label="Favorite">
 			if m.Favorite {
 				@saIcon("star")
 			} else {
 				@saIcon("staroff")
 			}
 		</button>
-		<button class="btn raised" type="submit" formaction={ m.op("test") }>Test model</button>
+		<button class="btn raised" type="submit" formaction={ m.op("test") } hx-post={ string(m.op("test")) } hx-select="#head-result" hx-target="#head-result" hx-swap="outerHTML" hx-disabled-elt="this">Test model</button>
 		<button class="btn danger" type="submit" formaction={ m.op("disable") }>Disable model</button>
 	</div>
 }
@@ -61,7 +65,7 @@ templ modelActions(m modelPageVM) {
 var saCapOpts = []saOpt{{"streaming", "Streaming"}, {"thinking", "Thinking"}, {"tool_use", "Tool use"}, {"vision", "Vision"}, {"prompt_caching", "Prompt caching"}, {"generates_images", "Makes images"}}
 var saModOpts = []saOpt{{"text", "Text"}, {"image", "Image"}, {"pdf", "PDF"}, {"audio", "Audio"}, {"video", "Video"}}
 
-templ saLimitsRows(cwin, out, in, outp, cr, cw string, ph bool) {
+templ saLimitsRows(cwin, out, in, outp, cr, cw, cutoff string, ph bool) {
 	<div class="grow">
 		<label for="mctx" class="lbl">Context window</label>
 		<input id="mctx" name="context_window" class="field num" inputmode="numeric" value={ cwin } placeholder={ saPhIf(ph, "Not set") }/>
@@ -74,17 +78,35 @@ templ saLimitsRows(cwin, out, in, outp, cr, cw string, ph bool) {
 	</div>
 	<div class="grow">
 		<span class="lbl">Input / output</span>
-		<input id="pin" name="price_in" aria-label="Input saPrice" class="field price" inputmode="decimal" value={ in } placeholder={ saPhIf(ph, "0.00") }/>
+		<input id="pin" name="price_in" aria-label="Input price" class="field price" inputmode="decimal" value={ in } placeholder={ saPhIf(ph, "0.00") }/>
 		<span class="slash">/</span>
-		<input id="pout" name="price_out" aria-label="Output saPrice" class="field price" inputmode="decimal" value={ outp } placeholder={ saPhIf(ph, "0.00") }/>
+		<input id="pout" name="price_out" aria-label="Output price" class="field price" inputmode="decimal" value={ outp } placeholder={ saPhIf(ph, "0.00") }/>
 		<span class="hint">USD per 1M tokens</span>
 	</div>
 	<div class="grow">
 		<span class="lbl">Cache read / write</span>
-		<input id="pcr" name="price_cache_read" aria-label="Cache read saPrice" class="field price" inputmode="decimal" value={ cr } placeholder={ saPhIf(ph, "0.00") }/>
+		<input id="pcr" name="price_cache_read" aria-label="Cache read price" class="field price" inputmode="decimal" value={ cr } placeholder={ saPhIf(ph, "0.00") }/>
 		<span class="slash">/</span>
-		<input id="pcw" name="price_cache_write" aria-label="Cache write saPrice" class="field price" inputmode="decimal" value={ cw } placeholder={ saPhIf(ph, "0.00") }/>
+		<input id="pcw" name="price_cache_write" aria-label="Cache write price" class="field price" inputmode="decimal" value={ cw } placeholder={ saPhIf(ph, "0.00") }/>
 		<span class="hint">USD per 1M tokens</span>
+	</div>
+	<div class="grow">
+		<label for="mcut" class="lbl">Knowledge cutoff</label>
+		<input id="mcut" name="knowledge_cutoff" type="date" class="field date" value={ cutoff }/>
+		<span class="hint">What it knows stops here</span>
+	</div>
+}
+
+// saLockedRow is a call setting the model fixes: the value it takes, read
+// only, with the reason beside it. The conversation inspector draws the same.
+templ saLockedRow(id, label, value, why string) {
+	<div class="grow">
+		<label for={ id } class="lbl">{ label }</label>
+		<span class="field num locked">
+			@saIcon("lock")
+			<input id={ id } value={ value } readonly aria-describedby={ id + "-why" }/>
+		</span>
+		<span id={ id + "-why" } class="hint">{ why }</span>
 	</div>
 }
 
@@ -101,7 +123,9 @@ templ modelScreen(n snavVM, m modelPageVM) {
 			<div class="spage-scroll">
 				<div class="spage-inner">
 					@saPageHead(saHead{Crumbs: []saCrumb{{"Providers", "/settings/providers"}, {m.ProvName, "/settings/providers/" + m.ProvID}}, Title: m.Name, Actions: modelActions(m)}) {
-						@saResult(m.Result)
+						<div id="head-result" class="sa-live">
+							@saResult(m.Result)
+						</div>
 						if m.Error != "" {
 							<p role="alert" class="result bad"><span class="dot"></span>{ m.Error }</p>
 						}
@@ -129,7 +153,7 @@ templ modelScreen(n snavVM, m modelPageVM) {
 					<section aria-labelledby="limits">
 						<h3 id="limits" class="sec-title">Limits and prices</h3>
 						<div class="group">
-							@saLimitsRows(m.Ctx, m.Out, m.In, m.OutP, m.CR, m.CW, false)
+							@saLimitsRows(m.Ctx, m.Out, m.In, m.OutP, m.CR, m.CW, m.Cutoff, false)
 						</div>
 					</section>
 					<section aria-labelledby="caps">
@@ -165,11 +189,15 @@ templ modelScreen(n snavVM, m modelPageVM) {
 					<section aria-labelledby="calls">
 						<h3 id="calls" class="sec-title">Call settings for this model</h3>
 						<div class="group">
-							<div class="grow">
-								<label for="ctemp" class="lbl">Temperature</label>
-								<input id="ctemp" name="temperature" class="field num" inputmode="decimal" placeholder="Not set" value={ m.Temp }/>
-								<span class="hint">{ m.TempHint }</span>
-							</div>
+							if m.TempLock != "" {
+								@saLockedRow("ctemp", "Temperature", m.TempLock, "This model locks temperature at "+m.TempLock+".")
+							} else {
+								<div class="grow">
+									<label for="ctemp" class="lbl">Temperature</label>
+									<input id="ctemp" name="temperature" class="field num" inputmode="decimal" placeholder="Not set" value={ m.Temp }/>
+									<span class="hint">{ m.TempHint }</span>
+								</div>
+							}
 							<div class="grow">
 								<label for="cmax" class="lbl">Max output tokens</label>
 								<input id="cmax" name="max_output_tokens" class="field num" inputmode="numeric" placeholder={ orDefault(m.MaxInherit, "Not set") } value={ m.MaxTok }/>
@@ -192,11 +220,32 @@ templ modelScreen(n snavVM, m modelPageVM) {
 						</div>
 						<p class="foot-note">{ "These sit above " + m.ProvName + "’s defaults and below profiles and conversations. Leave a field empty to inherit." }</p>
 					</section>
+					if m.Manual {
+						@modelDeleteSection(m)
+					}
 				</div>
 			</div>
 			@saveBar(m.Dirty)
 		</form>
 	}
+}
+
+templ modelDeleteSection(m modelPageVM) {
+	<section id="mdelete" aria-labelledby="mdelete-t">
+		<h3 id="mdelete-t" class="sec-title">Delete</h3>
+		<div class="group">
+			<div class="grow">
+				if m.Deleting {
+					<span class="lbl fill">{ "Delete " + m.Name + "?" }<span class="sub">You added it by hand, so Discover models won’t bring it back. Conversations using it can’t send until they switch.</span></span>
+					<a class="btn h36" href={ m.url("/models/" + saModelPath(m.ID)) } hx-get={ string(m.url("/models/" + saModelPath(m.ID))) } hx-select="#mdelete" hx-target="#mdelete" hx-swap="outerHTML">Cancel</a>
+					<button class="btn h36 destructive" type="submit" formaction={ m.url("/delete-model/" + saModelPath(m.ID)) }>Delete model</button>
+				} else {
+					<span class="lbl fill">Delete model<span class="sub">You added it by hand. Disable keeps it for later; Delete removes it for good.</span></span>
+					<a class="btn h36 danger" href={ m.url("/models/" + saModelPath(m.ID) + "?delete=1#mdelete") } hx-get={ string(m.url("/models/" + saModelPath(m.ID) + "?delete=1")) } hx-select="#mdelete" hx-target="#mdelete" hx-swap="outerHTML">Delete</a>
+				}
+			</div>
+		</div>
+	</section>
 }
 
 // addModelVM is the manual-model form.
@@ -205,6 +254,7 @@ type addModelVM struct {
 	ModelID, Name          string
 	Ctx, Out               string
 	In, OutP, CR, CW       string
+	Cutoff                 string
 	Caps, Mods             []saTog
 	Calls                  defaultsPageVM
 	CallsOpen              bool
@@ -239,7 +289,7 @@ templ addModelScreen(n snavVM, a addModelVM) {
 					<section aria-labelledby="limits">
 						<h3 id="limits" class="sec-title">Limits and prices</h3>
 						<div class="group">
-							@saLimitsRows(a.Ctx, a.Out, a.In, a.OutP, a.CR, a.CW, true)
+							@saLimitsRows(a.Ctx, a.Out, a.In, a.OutP, a.CR, a.CW, a.Cutoff, true)
 						</div>
 						<p class="foot-note">All optional. Leave prices empty for a model that doesn’t bill per token.</p>
 					</section>

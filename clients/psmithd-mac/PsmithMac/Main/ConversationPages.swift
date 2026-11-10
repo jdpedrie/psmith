@@ -13,13 +13,27 @@ struct ConversationPageView: View {
     @Environment(ConversationsModel.self) private var convos
 
     private var title: String {
+        if model.isDraft { return "New Conversation" }
         let t = convos.conversations.first(where: { $0.id == model.conversation.id })?.title ?? model.conversation.title ?? ""
         return t.isEmpty ? "Untitled" : t
     }
 
     private func back() { navigator.page = nil }
 
+    /// The clear row: the profile's model, named once the chip knows it.
+    private var profileModelLabel: String {
+        guard model.selectionIsInferredDefault, let p = model.selectedProviderID, let m = model.selectedModelID,
+              let um = model.availableModels.first(where: { $0.providerID == p && $0.modelID == m })
+        else { return "Use the profile’s model" }
+        return "Use the profile’s model (\(um.displayName))"
+    }
+
     var body: some View {
+        pageBody.background(escapeGoesBack)
+    }
+
+    @ViewBuilder
+    private var pageBody: some View {
         switch page {
         case .models:
             pageScroll {
@@ -29,12 +43,15 @@ struct ConversationPageView: View {
                     models: model.selectableModels,
                     providerLabels: model.providerLabels,
                     providerLogos: model.providerTypes,
-                    selectedProviderID: model.selectedProviderID,
-                    selectedModelID: model.selectedModelID,
-                    inheritLabel: nil
+                    selectedProviderID: model.pinsModel ? model.selectedProviderID : nil,
+                    selectedModelID: model.pinsModel ? model.selectedModelID : nil,
+                    inheritLabel: model.canChangeProvider ? profileModelLabel : nil
                 ) { p, m in
-                    guard let p, let m else { return }
-                    Task { await model.selectModel(providerID: p, modelID: m) }
+                    if let p, let m {
+                        Task { await model.selectModel(providerID: p, modelID: m) }
+                    } else {
+                        Task { await model.useProfileModel() }
+                    }
                     back()
                 }
             }
@@ -60,8 +77,18 @@ struct ConversationPageView: View {
             }
         case .image(_, let fileID, let filename):
             ImagePage(fileID: fileID, filename: filename, back: back, backTitle: title)
-                .onExitCommand(perform: back)
         }
+    }
+
+    /// Escape goes back from any page. A key equivalent rather than
+    /// onExitCommand, which only hears Escape while focus is inside the
+    /// page, and a click on the inspector's row leaves it elsewhere.
+    private var escapeGoesBack: some View {
+        Button("Back", action: back)
+            .keyboardShortcut(.cancelAction)
+            .opacity(0)
+            .frame(width: 0, height: 0)
+            .accessibilityHidden(true)
     }
 
     private func pageScroll<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {

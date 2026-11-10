@@ -109,6 +109,15 @@ func TestTestUserModelProvider_Success(t *testing.T) {
 	if resp.Msg.ErrorMessage != "" {
 		t.Errorf("error_message should be empty on success, got %q", resp.Msg.ErrorMessage)
 	}
+
+	// The outcome is recorded on the provider, where the list reads it.
+	got, err := svc.GetUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.GetUserModelProviderRequest{Id: prov.ID.String()}))
+	if err != nil {
+		t.Fatalf("GetUserModelProvider: %v", err)
+	}
+	if lt := got.Msg.GetProvider().GetLastTest(); lt == nil || !lt.Ok || lt.TestedAt == nil {
+		t.Errorf("last_test = %+v", lt)
+	}
 }
 
 func TestTestUserModelProvider_DriverError_PackedIntoResponse(t *testing.T) {

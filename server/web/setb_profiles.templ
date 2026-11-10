@@ -294,6 +294,8 @@ templ sbSegOpt(name, value, label string, on bool) {
 templ profilePluginsScreen(n snavVM, vm profilePluginsVM) {
 	@settingsScreen(vm.Head.Name, n) {
 		<form class="spage-form" method="post" action={ templ.SafeURL("/settings/profiles/" + vm.Head.ID + "/plugins") }>
+			<!-- Enter in a field presses the form's first submit button; without this one that's an Add menu item, a move arrow or a Remove. -->
+			<button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">Save</button>
 			<div class="spage-scroll">
 				<div class="spage-inner">
 					@profileHead(vm.Head)
@@ -376,14 +378,21 @@ templ sbTags(tags []sbTagVM) {
 	if len(tags) > 0 {
 		<span class="tags sb-mt6">
 			for _, t := range tags {
-				<span class={ templ.KV("warn", t.Warn) }>{ t.Label }</span>
+				if t.Href != "" {
+					<a class={ "sb-taglink", templ.KV("warn", t.Warn) } href={ templ.SafeURL(t.Href) }>
+						{ t.Label }
+						@sbIcon("chevron10")
+					</a>
+				} else {
+					<span class={ templ.KV("warn", t.Warn) }>{ t.Label }</span>
+				}
 			}
 		</span>
 	}
 }
 
 templ attachedPluginRow(profileID string, p attPluginVM) {
-	<div class="sb-plgroup" data-setb-row>
+	<div class="sb-plgroup" data-setb-row data-index={ strconv.Itoa(p.Index) }>
 		<div class="sb-plrow">
 			<span class="sb-num tnum">{ strconv.Itoa(p.Index + 1) }</span>
 			<span class="sb-plbody">
@@ -394,11 +403,20 @@ templ attachedPluginRow(profileID string, p attPluginVM) {
 				@sbTags(p.Tags)
 			</span>
 			<a class="btn h32 sb-n" href={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins?open=" + p.Name) } data-setb-disclose aria-controls={ "pcfg-" + strconv.Itoa(p.Index) } aria-expanded={ strconv.FormatBool(p.Open) } aria-label={ "Configure " + p.Display }>Configure</a>
+			<span class="sb-order" role="group" aria-label={ "Order of " + p.Display }>
+				<button class="icon-btn sb-ic" type="submit" name="move" value={ "up:" + p.Name } formaction={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins/move") } formnovalidate data-setb-move="up" aria-label={ "Move " + p.Display + " up" } disabled?={ p.Index == 0 }>
+					@sbIcon("up14")
+				</button>
+				<button class="icon-btn sb-ic" type="submit" name="move" value={ "down:" + p.Name } formaction={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins/move") } formnovalidate data-setb-move="down" aria-label={ "Move " + p.Display + " down" } disabled?={ p.Last }>
+					@sbIcon("down14")
+				</button>
+			</span>
 			<button class="icon-btn sb-ic" type="submit" name="remove" value={ p.Name } formaction={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins/remove") } formnovalidate data-setb-remove={ "premoved_" + strconv.Itoa(p.Index) } aria-label={ "Remove " + p.Display }>
 				@icon("trash")
 			</button>
 			<input type="hidden" name={ "pname_" + strconv.Itoa(p.Index) } value={ p.Name }/>
 			<input type="hidden" name={ "premoved_" + strconv.Itoa(p.Index) } value=""/>
+			<input type="hidden" name={ "ppos_" + strconv.Itoa(p.Index) } value={ strconv.Itoa(p.Index) }/>
 		</div>
 		<div class="sb-plcfg" id={ "pcfg-" + strconv.Itoa(p.Index) } hidden?={ !p.Open }>
 			if p.Form.HasForm {

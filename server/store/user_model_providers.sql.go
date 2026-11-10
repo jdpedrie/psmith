@@ -14,7 +14,7 @@ import (
 const createUserModelProvider = `-- name: CreateUserModelProvider :one
 INSERT INTO user_model_providers (id, user_id, type, label, config_encrypted, default_settings)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, type, label, config, created_at, updated_at, default_settings, config_encrypted
+RETURNING id, user_id, type, label, config, created_at, updated_at, default_settings, config_encrypted, last_test_at, last_test_ok, last_test_latency_ms, last_test_message, last_discovered_model_ids
 `
 
 type CreateUserModelProviderParams struct {
@@ -51,6 +51,11 @@ func (q *Queries) CreateUserModelProvider(ctx context.Context, arg CreateUserMod
 		&i.UpdatedAt,
 		&i.DefaultSettings,
 		&i.ConfigEncrypted,
+		&i.LastTestAt,
+		&i.LastTestOk,
+		&i.LastTestLatencyMs,
+		&i.LastTestMessage,
+		&i.LastDiscoveredModelIds,
 	)
 	return i, err
 }
@@ -65,7 +70,7 @@ func (q *Queries) DeleteUserModelProvider(ctx context.Context, id uuid.UUID) err
 }
 
 const getUserModelProvider = `-- name: GetUserModelProvider :one
-SELECT id, user_id, type, label, config, created_at, updated_at, default_settings, config_encrypted FROM user_model_providers WHERE id = $1
+SELECT id, user_id, type, label, config, created_at, updated_at, default_settings, config_encrypted, last_test_at, last_test_ok, last_test_latency_ms, last_test_message, last_discovered_model_ids FROM user_model_providers WHERE id = $1
 `
 
 func (q *Queries) GetUserModelProvider(ctx context.Context, id uuid.UUID) (UserModelProvider, error) {
@@ -81,12 +86,17 @@ func (q *Queries) GetUserModelProvider(ctx context.Context, id uuid.UUID) (UserM
 		&i.UpdatedAt,
 		&i.DefaultSettings,
 		&i.ConfigEncrypted,
+		&i.LastTestAt,
+		&i.LastTestOk,
+		&i.LastTestLatencyMs,
+		&i.LastTestMessage,
+		&i.LastDiscoveredModelIds,
 	)
 	return i, err
 }
 
 const listUserModelProvidersByUser = `-- name: ListUserModelProvidersByUser :many
-SELECT id, user_id, type, label, config, created_at, updated_at, default_settings, config_encrypted FROM user_model_providers
+SELECT id, user_id, type, label, config, created_at, updated_at, default_settings, config_encrypted, last_test_at, last_test_ok, last_test_latency_ms, last_test_message, last_discovered_model_ids FROM user_model_providers
 WHERE user_id = $1
 ORDER BY created_at
 `
@@ -110,6 +120,11 @@ func (q *Queries) ListUserModelProvidersByUser(ctx context.Context, userID uuid.
 			&i.UpdatedAt,
 			&i.DefaultSettings,
 			&i.ConfigEncrypted,
+			&i.LastTestAt,
+			&i.LastTestOk,
+			&i.LastTestLatencyMs,
+			&i.LastTestMessage,
+			&i.LastDiscoveredModelIds,
 		); err != nil {
 			return nil, err
 		}
@@ -119,6 +134,43 @@ func (q *Queries) ListUserModelProvidersByUser(ctx context.Context, userID uuid.
 		return nil, err
 	}
 	return items, nil
+}
+
+const recordUserModelProviderDiscovery = `-- name: RecordUserModelProviderDiscovery :exec
+UPDATE user_model_providers SET last_discovered_model_ids = $1::text[] WHERE id = $2
+`
+
+type RecordUserModelProviderDiscoveryParams struct {
+	ModelIds []string
+	ID       uuid.UUID
+}
+
+func (q *Queries) RecordUserModelProviderDiscovery(ctx context.Context, arg RecordUserModelProviderDiscoveryParams) error {
+	_, err := q.db.Exec(ctx, recordUserModelProviderDiscovery, arg.ModelIds, arg.ID)
+	return err
+}
+
+const recordUserModelProviderTest = `-- name: RecordUserModelProviderTest :exec
+UPDATE user_model_providers
+SET last_test_at = now(), last_test_ok = $2, last_test_latency_ms = $3, last_test_message = $4
+WHERE id = $1
+`
+
+type RecordUserModelProviderTestParams struct {
+	ID                uuid.UUID
+	LastTestOk        bool
+	LastTestLatencyMs int64
+	LastTestMessage   string
+}
+
+func (q *Queries) RecordUserModelProviderTest(ctx context.Context, arg RecordUserModelProviderTestParams) error {
+	_, err := q.db.Exec(ctx, recordUserModelProviderTest,
+		arg.ID,
+		arg.LastTestOk,
+		arg.LastTestLatencyMs,
+		arg.LastTestMessage,
+	)
+	return err
 }
 
 const updateUserModelProviderDefaultSettings = `-- name: UpdateUserModelProviderDefaultSettings :exec

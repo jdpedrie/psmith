@@ -41,6 +41,8 @@ func (h *Handler) mountSettingsAWith(mux *http.ServeMux, u func(http.HandlerFunc
 	mux.HandleFunc("GET /settings/providers/{id}/models/{model...}", u(h.handleModel))
 	mux.HandleFunc("POST /settings/providers/{id}/models/{model...}", u(h.handleModelSave))
 	mux.HandleFunc("POST /settings/providers/{id}/model-op/{op}/{model...}", u(h.handleModelOp))
+	mux.HandleFunc("POST /settings/providers/{id}/row-test/{model...}", u(h.handleProviderRowTest))
+	mux.HandleFunc("POST /settings/providers/{id}/delete-model/{model...}", u(h.handleModelDelete))
 	mux.HandleFunc("GET /settings/providers/{id}/model-defaults/{model...}", u(h.handleModelDefaults))
 	mux.HandleFunc("POST /settings/providers/{id}/model-defaults/{model...}", u(h.handleModelDefaultsSave))
 

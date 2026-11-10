@@ -62,3 +62,21 @@ type (
 	WireMessage = providers.WireMessage
 	Chunk       = providers.Chunk
 )
+
+// Labeler is implemented by plugins whose instances the user names, such as
+// an MCP server registered as "GitHub". The label is what a prompt or status
+// line should call the instance; DisplayName names the plugin type.
+type Labeler interface {
+	Label() string
+}
+
+// SourceLabel is what to call p when it speaks to the user: its instance
+// label when it has one, else its display name.
+func SourceLabel(p Plugin) string {
+	if l, ok := p.(Labeler); ok {
+		if s := l.Label(); s != "" {
+			return s
+		}
+	}
+	return p.DisplayName()
+}

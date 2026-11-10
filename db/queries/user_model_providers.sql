@@ -43,3 +43,11 @@ WHERE id = $1;
 
 -- name: DeleteUserModelProvider :exec
 DELETE FROM user_model_providers WHERE id = $1;
+
+-- name: RecordUserModelProviderTest :exec
+UPDATE user_model_providers
+SET last_test_at = now(), last_test_ok = $2, last_test_latency_ms = $3, last_test_message = $4
+WHERE id = $1;
+
+-- name: RecordUserModelProviderDiscovery :exec
+UPDATE user_model_providers SET last_discovered_model_ids = sqlc.arg(model_ids)::text[] WHERE id = sqlc.arg(id);

@@ -38,10 +38,11 @@ struct MessageAttachmentImageMac: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
         .contentShape(Rectangle())
-        .onTapGesture {
-            guard url != nil, !failed else { return }
-            navigator.page = .image(messageID: messageID, fileID: attachment.fileID, filename: attachment.originalFilename ?? "Image")
-        }
+        .onTapGesture(perform: open)
+        .accessibilityElement()
+        .accessibilityLabel(attachment.originalFilename ?? "Image")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { open() }
         .task(id: attachment.fileID) {
             if url != nil { return }
             do {
@@ -50,6 +51,11 @@ struct MessageAttachmentImageMac: View {
                 failed = true
             }
         }
+    }
+
+    private func open() {
+        guard url != nil, !failed else { return }
+        navigator.page = .image(messageID: messageID, fileID: attachment.fileID, filename: attachment.originalFilename ?? "Image")
     }
 
     private func placeholder(systemImage: String) -> some View {

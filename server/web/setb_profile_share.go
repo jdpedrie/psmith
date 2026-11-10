@@ -77,11 +77,7 @@ func (h *Handler) renderShare(w http.ResponseWriter, r *http.Request, st shareSt
 	if err == nil {
 		vm.Notices, vm.Filename = exp.Msg.GetNotices(), exp.Msg.GetSuggestedFilename()
 	}
-	status := http.StatusOK
-	if st.Error != "" {
-		status = http.StatusBadRequest
-	}
-	h.render(w, r, status, profileShareScreen(h.loadSnav(r.Context(), r, "profiles"), vm))
+	h.answer(w, r, "/settings/profiles/"+p.GetId()+"/share", http.StatusOK, profileShareScreen(h.loadSnav(r.Context(), r, "profiles"), vm))
 }
 
 func (h *Handler) handleProfileExport(w http.ResponseWriter, r *http.Request) {
@@ -123,7 +119,7 @@ func (h *Handler) handleProfileImport(w http.ResponseWriter, r *http.Request) {
 			h.renderShare(w, r, shareState{Import: rv})
 			return
 		}
-		h.render(w, r, http.StatusOK, profileImportScreen(h.loadSnav(r.Context(), r, "profiles"), rv))
+		h.showAfterPost(w, r, "/settings/profiles/import", profileImportScreen(h.loadSnav(r.Context(), r, "profiles"), rv))
 	}
 
 	if enc := r.PostFormValue("payload"); enc != "" {

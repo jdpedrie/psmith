@@ -104,6 +104,15 @@ public final class StreamHub {
         /// (object with one or more string / boolean / integer
         /// properties; string with `format: password` renders secure).
         public let schemaJSON: Data
+        /// Who is asking: the plugin or MCP server as the user knows it
+        /// ("GitHub"), and the tool the model called. Nil from a server
+        /// that predates them.
+        public var source: String? = nil
+        public var tool: String? = nil
+
+        /// The prompt's heading: "GitHub needs input", or Psmith's when
+        /// the stream doesn't say.
+        public var title: String { "\(source ?? "Psmith") needs input" }
     }
 
     /// Public for view-model reads. Mutations stay inside the hub.
@@ -505,7 +514,9 @@ public final class StreamHub {
                 s.pendingElicitations.append(PendingElicit(
                     id: info.id,
                     message: info.message,
-                    schemaJSON: info.schemaJSON
+                    schemaJSON: info.schemaJSON,
+                    source: info.source,
+                    tool: info.tool
                 ))
             }
         case .deviceToolUse:

@@ -593,16 +593,81 @@ screen over time instead.
 
 - **iOS: `make ios-e2e`.** `scripts/ios-e2e.sh` starts psmithd on a fresh
   database plus the demo seeder's fake model (streaming a word every 80ms),
-  then runs the `*E2ETests` in the iOS test target against them. The tests
-  mount the real conversation screen inside a stack built like `ChatsRoot`'s
-  and drive it through the same calls its controls make. `E2ETimeline`
-  samples every quarter second: the rendered window (saved as a frame), its
-  text read back with on-device OCR, the navigation depth and the view
+  then runs every `*E2ETests` class in the iOS test target against them.
+  Pass xcodebuild `-only-testing` filters to narrow it
+  (`scripts/ios-e2e.sh PsmithiOSSnapshotTests/ChatsE2ETests`). The tests
+  mount real screens in a real window and drive them through the
+  accessibility tree where a control's state is private to its view, and
+  through the call a control makes where UIKit won't run it headless (a
+  Menu's picker, a swipe action, a system file picker). `E2ETimeline`
+  samples the screen over time: the rendered window (saved as a frame),
+  its text read back with on-device OCR, the navigation depth and the view
   models' state, and saves `TranscriptTrace` beside them. Frames land in
   `$PSMITH_E2E_OUT` (default `$TMPDIR/psmith-ios-e2e`). Waits must suspend
   (`Task.sleep`), never spin the run loop: a test holding the main actor
   starves the app's own continuations and records the stall instead of the
   app.
+
+  The suites share `E2ESupport.swift`: the server and a per-test seed
+  (two models on the fake provider, two profiles, names tagged so tests
+  sharing one database don't collide), the signed-in models, mounting, and
+  the waits.
+
+  | Suite | Covers |
+  |---|---|
+  | `NewConversationE2ETests` | The draft: profile and model picks survive the model page, the first send creates the conversation |
+  | `ConversationE2ETests` | Sending after a pushed page pops, slow first chunk, send during the first load, two quick sends, foregrounding mid-stream, a failed reply, Stop, Copy, Regenerate and the branch switcher, edit and resend (fork, including at the first message), edit and save, delete and delete from here, a pasted image, compress then confirm or delete the summary |
+  | `ChatsE2ETests` | The list and search, a conversation made elsewhere arriving by push, pin, rename, archive and unarchive, delete, bulk select, opening a row and sending, sending while the list refreshes, new conversation from the list |
+  | `ConversationPagesE2ETests` | Info and its tabs, pin and archive and delete from Info, new context, Call settings, the model picker, the full-text reader, rename from the title |
+  | `SettingsE2ETests` | Every Settings page: change a value, read it back from the server (or the phone's store for the device-only pages), rebuild the page and see it |
+  | `AccountsE2ETests` | Signing in through the login screens, a refused password, a new user's onboarding through to the chats list, switching, signing out of and removing accounts |
+
+  The fake model answers by keyword. "echo W" replies "Heard W loud and
+  clear." and more, word by word, so a test tells its turns apart.
+  "slowstart" holds the first chunk back (`-slow-start`, 4s here), and
+  "failnow" fails the request with a 500. It also serves `/v1/models` so
+  onboarding has something to discover.
+
+  What the suites can't reach: elicitation and plugin fragments need a
+  model that calls tools, and the fake model doesn't. Turning notifications
+  or location on asks iOS for permission, a system prompt a headless test
+  can't answer, so those switches are tested off only. The Files folder
+  and profile import come from system pickers; the tests hand over what the
+  picker would.
+- **Mac: `make mac-e2e`.** `scripts/mac-e2e.sh` starts psmithd on a fresh
+  database and the demo seeder's fake model, then runs the `*E2ETests`
+  suites under `clients/psmithd-mac/Tests/PsmithMacSnapshotTests/E2E/`
+  (`scripts/mac-e2e.sh SettingsE2ETests` for one). Each test mounts the
+  real `HomeView` or Settings root in an offscreen window bridged to its
+  title bar like a WindowGroup, so nothing appears on screen and the pointer
+  never moves. Two runs can go at once with their own `PSMITH_E2E_PORT`,
+  `PSMITH_E2E_LLM_PORT` and `PSMITH_E2E_SCRATCH`.
+
+  `MacE2E` drives the window the way VoiceOver does. SwiftUI builds its
+  accessibility tree only for an assistive client, so the harness sets
+  `AXEnhancedUserInterface`; SwiftUI's nodes answer the Objective-C
+  selectors, not a Swift protocol cast. Buttons are pressed through
+  `accessibilityPerformPress`. A row's context menu runs through its
+  accessibility actions: the rows offer their menu items there because a
+  context menu isn't reachable through accessibility. The composer gets
+  real key events through its own `keyDown`, scroll views get scroll-wheel
+  events, and `sendAndWatch` records the window every quarter second with
+  OCR so a message that vanishes between frames fails the test.
+
+  | Suite | What it drives |
+  |---|---|
+  | `MainWindowE2ETests` | The title bar never drawing the conversation's title, search, opening a row, pin, rename, archive and unarchive, delete, hiding the list, a new conversation keeping its profile and model through the Models page, the start screen scrolling with many profiles |
+  | `ConversationE2ETests` | Sending (watched), two turns, delete one message, delete from here, edit and save, edit and resend, regenerate and the branch switcher, Stop |
+  | `PagesE2ETests` | The inspector and its tabs, switching and deleting contexts, Call settings save and discard, a plugin off for one conversation, the Models page, full text, the image page; each ends with a watched send |
+  | `SettingsE2ETests` | Every Settings pane against the server: models and providers, profiles, plugins, servers, usage, Langfuse, embedder, speech, device tools, appearance, general |
+  | `AccountsE2ETests` | Sign-in, a refused password, the Accounts pane, first-run onboarding for a new user |
+
+  What the suites can't reach: native menus (`Menu`, `SKPopup`) and the
+  menu bar run menu tracking on the real screen, so they're reached
+  through what their items set; file panels; permission prompts. The
+  in-process accessibility walk keeps a row's first set of actions, so a
+  test that changes a row's state remounts the window before reading its
+  actions again.
 - **Web: the browser tests in `server/web`.** Headless Chrome against the
   real handler, a fresh database and `fakellm`, sampling the page every
   150ms. See [clients/web.md](clients/web.md#tests).

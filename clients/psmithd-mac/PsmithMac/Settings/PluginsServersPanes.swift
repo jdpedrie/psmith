@@ -426,7 +426,9 @@ private struct ServerPage: View {
         return out
     }
 
-    private func seed() {
+    private func seed() { seed(from: server) }
+
+    private func seed(from server: PsmithMCPServer?) {
         guard let s = server else { return }
         name = s.name; transport = s.transport; url = s.url; command = s.command; args = s.args; prefix = s.toolPrefix
         headers = ""; env = ""; clearHeaders = false; clearEnv = false
@@ -442,7 +444,8 @@ private struct ServerPage: View {
                                           command: command, args: args, env: e, url: url, headers: h, toolPrefix: prefix) {
             model.isAddingNew = false
             model.select(saved.id)
-            seed()
+            // `server` is still the value from before the save here.
+            seed(from: saved)
         }
     }
 }

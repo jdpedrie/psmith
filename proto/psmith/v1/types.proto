@@ -47,6 +47,24 @@ message UserModelProvider {
   // field inherits nothing (this is the floor), but unset fields here let
   // higher layers contribute their own values normally.
   optional CallSettings default_settings = 8;
+  // The last connection test, absent until the provider is first tested.
+  optional ConnectionTest last_test = 9;
+  // The model ids the last discovery found, so a client can count the ones
+  // not yet enabled ("3 new") without asking the provider again.
+  repeated string last_discovered_model_ids = 10;
+}
+
+// The outcome of the last connection test of a provider or MCP server, as
+// Settings shows it: a status dot, "Connected in 212 ms", or the failure.
+message ConnectionTest {
+  google.protobuf.Timestamp tested_at = 1;
+  bool ok = 2;
+  // Providers only: how long discovery took.
+  int64 latency_ms = 3;
+  // Why it failed; empty when ok.
+  string message = 4;
+  // MCP servers only: how many tools the server advertised.
+  int32 tool_count = 5;
 }
 
 // A template surfaced from the catalog to accelerate "add provider" UX.
@@ -717,6 +735,10 @@ message UIFragment {
   // view state (selection, scroll, expansion) across re-renders.
   // Empty when the renderer doesn't need stable identity.
   string key = 3;
+  // The plugin that drew this fragment, so a `plugin:` action inside it
+  // goes back to that plugin (InvokePluginAction's plugin_name). Empty for
+  // text the host split out and for fragments from before it was recorded.
+  string plugin = 4;
 }
 
 // MessageAttachment is the client-side projection of a
@@ -869,7 +891,10 @@ enum ChunkType {
   CHUNK_TYPE_THINKING_SIGNATURE = 10;
   // Synthetic — emitted by the conversations-side tool loop when an
   // in-process MCP tool calls ctx.Elicit (MCP elicitation). Payload is
-  // JSON `{"elicitation_id":"<uuid>","message":"...","requested_schema":{...}}`.
+  // JSON `{"elicitation_id":"<uuid>","message":"...","requested_schema":{...},
+  // "source":"GitHub","tool":"create_issue"}`. source and tool name who is
+  // asking (the plugin or MCP server, and the tool the model called); both
+  // may be absent.
   // Clients render a form bound to the JSON Schema; submitting POSTs
   // the user's response to `/conversations/{id}/elicitations/{eid}/respond`,
   // which unblocks the waiting tool. Not persisted as message content

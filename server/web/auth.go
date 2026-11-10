@@ -2,6 +2,8 @@ package web
 
 import (
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -17,7 +19,8 @@ type signInVM struct {
 	Username  string
 	Password  string // fixtures only: the board draws a filled field
 	Error     string
-	ShowFocus bool // draw the password field focused (fixtures)
+	ShowFocus bool   // draw the password field focused (fixtures)
+	Next      string // the page to open after signing in
 }
 
 // sessionCookie carries the same opaque session token the RPC clients send as
@@ -45,11 +48,50 @@ func (h *Handler) requireUser(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u, ok := h.currentUser(r)
 		if !ok {
-			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			h.toSignIn(w, r)
 			return
 		}
 		next(w, r.WithContext(auth.ContextWithUser(r.Context(), u)))
 	}
+}
+
+// toSignIn sends a signed-out request to sign in, remembering the page it
+// was for. Only a page load counts (it asks for HTML); the event stream
+// and fetches don't, or signing in would land on /events. An htmx request
+// names its page in HX-Current-URL and gets an HX-Redirect, so the sign-in
+// page loads whole instead of into a fragment.
+func (h *Handler) toSignIn(w http.ResponseWriter, r *http.Request) {
+	next := ""
+	if r.Header.Get("HX-Request") != "" {
+		if u, err := url.Parse(r.Header.Get("HX-Current-URL")); err == nil {
+			next = u.RequestURI()
+		}
+	} else if r.Method == http.MethodGet && strings.Contains(r.Header.Get("Accept"), "text/html") {
+		next = r.URL.RequestURI()
+	}
+	dest := "/login"
+	if next = safeNext(next); next != "" {
+		dest += "?next=" + url.QueryEscape(next)
+	}
+	if r.Header.Get("HX-Request") != "" {
+		w.Header().Set("HX-Redirect", dest)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	http.Redirect(w, r, dest, http.StatusSeeOther)
+}
+
+// safeNext keeps next only when it is a path on this site; anything else
+// (another host, a scheme, a protocol-relative or backslashed path) is "".
+func safeNext(next string) string {
+	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.Contains(next, "\\") {
+		return ""
+	}
+	u, err := url.Parse(next)
+	if err != nil || u.Scheme != "" || u.Host != "" || next == "/" {
+		return ""
+	}
+	return next
 }
 
 func (h *Handler) handleHome(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +107,7 @@ func (h *Handler) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/chats", http.StatusSeeOther)
 		return
 	}
-	h.render(w, r, http.StatusOK, signInScreen(signInVM{Server: r.Host}))
+	h.render(w, r, http.StatusOK, signInScreen(signInVM{Server: r.Host, Next: safeNext(r.URL.Query().Get("next"))}))
 }
 
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +120,7 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Password: r.PostFormValue("password"),
 	}))
 	if err != nil {
-		h.render(w, r, http.StatusUnauthorized, signInScreen(signInVM{Server: r.Host, Username: r.PostFormValue("username"), Error: "Invalid username or password."}))
+		h.render(w, r, http.StatusUnauthorized, signInScreen(signInVM{Server: r.Host, Username: r.PostFormValue("username"), Error: "Invalid username or password.", Next: safeNext(r.PostFormValue("next"))}))
 		return
 	}
 	exp := time.Now().Add(24 * time.Hour)
@@ -94,10 +136,23 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Secure:   r.TLS != nil,
 		Expires:  exp,
 	})
-	http.Redirect(w, r, "/chats", http.StatusSeeOther)
+	dest := "/chats"
+	if next := safeNext(r.PostFormValue("next")); next != "" {
+		dest = next
+	}
+	http.Redirect(w, r, dest, http.StatusSeeOther)
 }
 
+// handleLogout revokes the session on the server, as the apps' Logout does,
+// so a copied cookie stops working too, then clears it here.
 func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" && h.auth != nil {
+		req := connect.NewRequest(&psmithv1.LogoutRequest{})
+		req.Header().Set("Authorization", "Bearer "+c.Value)
+		if _, err := h.auth.Logout(r.Context(), req); err != nil {
+			h.logger.Warn("web: revoke session failed", "err", err)
+		}
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
 		Value:    "",

@@ -2637,8 +2637,14 @@ type SendMessageRequest struct {
 	// send if the leaf has already moved, so two clients tapping continue at the
 	// same moment cannot produce two speakers on one turn.
 	ContinueDiscussion bool `protobuf:"varint,10,opt,name=continue_discussion,json=continueDiscussion,proto3" json:"continue_discussion,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// fork_at_root starts the new user message as another root of the active
+	// context, a sibling of its first message. An unset parent_message_id
+	// means "continue from the leaf", so a fork of a context's first message
+	// can't be said with the parent alone. parent_message_id must be unset,
+	// and regenerate and continue_discussion can't be combined with it.
+	ForkAtRoot    bool `protobuf:"varint,11,opt,name=fork_at_root,json=forkAtRoot,proto3" json:"fork_at_root,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SendMessageRequest) Reset() {
@@ -2737,6 +2743,13 @@ func (x *SendMessageRequest) GetDeviceFacts() []*DeviceFact {
 func (x *SendMessageRequest) GetContinueDiscussion() bool {
 	if x != nil {
 		return x.ContinueDiscussion
+	}
+	return false
+}
+
+func (x *SendMessageRequest) GetForkAtRoot() bool {
+	if x != nil {
+		return x.ForkAtRoot
 	}
 	return false
 }
@@ -3395,7 +3408,7 @@ const file_psmith_v1_conversations_proto_rawDesc = "" +
 	"\x1bCreateContextManualResponse\x12,\n" +
 	"\acontext\x18\x01 \x01(\v2\x12.psmith.v1.ContextR\acontext\x12:\n" +
 	"\fuser_message\x18\x02 \x01(\v2\x12.psmith.v1.MessageH\x00R\vuserMessage\x88\x01\x01B\x0f\n" +
-	"\r_user_message\"\x91\x04\n" +
+	"\r_user_message\"\xb3\x04\n" +
 	"\x12SendMessageRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12/\n" +
 	"\x11parent_message_id\x18\x02 \x01(\tH\x00R\x0fparentMessageId\x88\x01\x01\x12\x18\n" +
@@ -3410,7 +3423,9 @@ const file_psmith_v1_conversations_proto_rawDesc = "" +
 	"\x13attachment_file_ids\x18\b \x03(\tR\x11attachmentFileIds\x128\n" +
 	"\fdevice_facts\x18\t \x03(\v2\x15.psmith.v1.DeviceFactR\vdeviceFacts\x12/\n" +
 	"\x13continue_discussion\x18\n" +
-	" \x01(\bR\x12continueDiscussionB\x14\n" +
+	" \x01(\bR\x12continueDiscussion\x12 \n" +
+	"\ffork_at_root\x18\v \x01(\bR\n" +
+	"forkAtRootB\x14\n" +
 	"\x12_parent_message_idB\x0e\n" +
 	"\f_provider_idB\v\n" +
 	"\t_model_idB\x10\n" +

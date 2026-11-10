@@ -145,6 +145,10 @@ message GetUserModelProviderRequest {
 message GetUserModelProviderResponse {
   UserModelProvider provider = 1;
   repeated UserModel enabled_models = 2;
+  // Hand-added models that are turned off. They keep their metadata so they
+  // can be turned back on with EnableModels; nothing else lists them, and
+  // they can't be sent to.
+  repeated UserModel disabled_models = 3;
 }
 
 message UpdateUserModelProviderRequest {
@@ -196,9 +200,14 @@ message EnableModelsResponse {
   repeated UserModel enabled = 1;
 }
 
+// Turning a model off deletes its row, except for a model added by hand
+// (AddManualModel): that row is kept, turned off, so EnableModels can bring
+// it back with the metadata the user typed. delete_manual deletes those rows
+// too, for a client's explicit "Delete Model".
 message DisableModelsRequest {
   string user_model_provider_id = 1;
   repeated string model_ids = 2;
+  bool delete_manual = 3;
 }
 message DisableModelsResponse {}
 

@@ -12,6 +12,7 @@ type defaultsPageVM struct {
 	ProvType string
 	F        csForm
 	Inh      csForm            // what an unset field inherits (model level)
+	TempLock string            // the only temperature the model takes (model level)
 	Prev     map[string]string // field name -> value it had, for fields arriving dirty
 	Dirty    int
 	Error    string
@@ -219,7 +220,11 @@ templ callSettingsFields(d defaultsPageVM) {
 	<section aria-labelledby="common">
 		<h3 id="common" class="sec-title">Common</h3>
 		<div class="group">
-			@saNumRow(d, "temp", "temperature", "Temperature", d.F.Temp, d.hint(d.Inh.Temp, d.tempHint()), "Sampling temperature. "+d.ProvName+" clamps it to "+d.tempHint()+".")
+			if d.TempLock != "" {
+				@saLockedRow("temp", "Temperature", d.TempLock, "This model locks temperature at "+d.TempLock+".")
+			} else {
+				@saNumRow(d, "temp", "temperature", "Temperature", d.F.Temp, d.hint(d.Inh.Temp, d.tempHint()), "Sampling temperature. "+d.ProvName+" clamps it to "+d.tempHint()+".")
+			}
 			@saNumRow(d, "topp", "top_p", "Top P", d.F.TopP, d.hint(d.Inh.TopP, "0 to 1"), "Nucleus sampling cutoff. Lower values keep the reply on the likeliest tokens.")
 			@saNumRow(d, "maxtok", "max_output_tokens", "Max output tokens", d.F.MaxTok, d.hint(d.Inh.MaxTok, ""), "Hard cap on tokens the model can write in one turn.")
 			@saNumRow(d, "topk", "top_k", "Top K", d.F.TopK, d.hint(d.Inh.TopK, "1 to 500"), "Sample from the top K tokens only. Anthropic and Google honour it; other providers ignore it.")

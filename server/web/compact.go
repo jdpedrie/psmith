@@ -63,6 +63,12 @@ func nextLabel(rows []ctxRowVM) string {
 // renderConversation draws the conversation screen around an already-loaded
 // view model.
 func (h *Handler) renderConversation(w http.ResponseWriter, r *http.Request, vm convVM) {
+	h.renderConversationStatus(w, r, vm, http.StatusOK)
+}
+
+// renderConversationStatus is renderConversation with a status, for a form
+// the server refused that answers with the page it came from.
+func (h *Handler) renderConversationStatus(w http.ResponseWriter, r *http.Request, vm convVM, status int) {
 	if vm.RunID == "" {
 		vm.RunID = h.activeRunID(r, vm.ID)
 		if vm.RunID != "" && vm.Inspector.Card != nil && vm.Inspector.Card.RunID == vm.RunID {
@@ -70,7 +76,7 @@ func (h *Handler) renderConversation(w http.ResponseWriter, r *http.Request, vm 
 		}
 	}
 	l := h.loadList(r.Context(), r, vm.ID, "")
-	h.render(w, r, http.StatusOK, conversationScreen(l, vm))
+	h.render(w, r, status, conversationScreen(l, vm))
 }
 
 // handleCompactRun starts a compression with the posted instructions and
@@ -130,11 +136,12 @@ func (h *Handler) handleCompactRun(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if _, err := h.convos.Compact(r.Context(), connect.NewRequest(req)); err != nil {
+	resp, err := h.convos.Compact(r.Context(), connect.NewRequest(req))
+	if err != nil {
 		h.renderCompressFailed(w, r, convID, model, guide, sentence(connectMessage(err)), "{ctx} is unchanged. Choose another model, then retry.")
 		return
 	}
-	http.Redirect(w, r, "/c/"+convID, http.StatusSeeOther)
+	http.Redirect(w, r, "/c/"+convID+"?compact="+resp.Msg.GetStreamRun().GetId(), http.StatusSeeOther)
 }
 
 // connectMessage is an RPC error's message without the code prefix.
@@ -183,6 +190,12 @@ func (h *Handler) handleCompactStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID})); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	// The conversation check covers ownership; this pins the run to it, so
+	// a run id can't stream another conversation's (or account's) output.
+	if _, ok := h.compactionRun(r.Context(), convID, runID.String()); !ok {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}

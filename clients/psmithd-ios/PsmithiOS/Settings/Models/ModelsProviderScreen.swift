@@ -38,9 +38,17 @@ struct ModelsProviderScreen: View {
         app.providers.selectedID == provider.id ? app.providers.enabledModels : []
     }
 
+    /// Hand-added models that are off. The server keeps them, so they
+    /// list here on every visit, not only the one that turned them off.
+    private var keptOff: [PsmithUserModel] {
+        guard app.providers.selectedID == provider.id else { return [] }
+        let session = Set(turnedOff.map(\.modelID))
+        return app.providers.disabledModels.filter { !session.contains($0.modelID) }
+    }
+
     private var offRows: [PsmithDiscoveredModel] {
         let on = Set(enabled.map(\.modelID))
-        let off = Set(turnedOff.map(\.modelID))
+        let off = Set(turnedOff.map(\.modelID)).union(keptOff.map(\.modelID))
         return discovered.filter { !on.contains($0.modelID) && !off.contains($0.modelID) }
     }
 
@@ -55,11 +63,12 @@ struct ModelsProviderScreen: View {
 
                 headLink("Models", "Find New") { ModelsDiscoverScreen(provider: provider) }
                 IKGroup {
-                    if enabled.isEmpty && turnedOff.isEmpty && offRows.isEmpty {
+                    if enabled.isEmpty && turnedOff.isEmpty && keptOff.isEmpty && offRows.isEmpty {
                         IKRow("No models on", detail: "Find New lists what this provider offers.")
                     }
                     ForEach(enabled) { m in modelRow(m, on: true) }
                     ForEach(turnedOff) { m in modelRow(m, on: false) }
+                    ForEach(keptOff) { m in modelRow(m, on: false) }
                     if showAllOff {
                         ForEach(offRows) { d in discoveredRow(d) }
                     } else if !offRows.isEmpty {
@@ -137,7 +146,8 @@ struct ModelsProviderScreen: View {
 
     private var header: some View {
         let status = ModelsProviderStatus(provider, app.providers.providerTestStatus[provider.id])
-        let total = discovered.isEmpty ? nil : Set(discovered.map(\.modelID)).union(enabled.map(\.modelID)).count
+        let total = discovered.isEmpty && keptOff.isEmpty ? nil
+            : Set(discovered.map(\.modelID)).union(enabled.map(\.modelID)).union(keptOff.map(\.modelID)).count
         return HStack(spacing: 12) {
             IKLetterTile(letter: String(provider.label.prefix(1)).uppercased(), size: 44)
             VStack(alignment: .leading, spacing: 2) {
@@ -190,7 +200,7 @@ struct ModelsProviderScreen: View {
             }
             Button("Test", systemImage: "checkmark.seal") { Task { await test(m) } }
             if m.metadataSource == "manual" {
-                Button("Delete", systemImage: "trash", role: .destructive) { setOn(m.modelID, false, model: m) }
+                Button("Delete", systemImage: "trash", role: .destructive) { delete(m) }
             }
         }
     }
@@ -251,10 +261,21 @@ struct ModelsProviderScreen: View {
                 }
             } else {
                 await app.providers.disableModel(id)
-                if let model, !app.providers.enabledModels.contains(where: { $0.modelID == id }) {
+                // A hand-added model lands in disabledModels (keptOff) instead.
+                if let model, model.metadataSource != "manual",
+                   !app.providers.enabledModels.contains(where: { $0.modelID == id }) {
                     turnedOff.append(model)
                 }
             }
+        }
+    }
+
+    private func delete(_ m: PsmithUserModel) {
+        busy.insert(m.modelID)
+        Task {
+            defer { busy.remove(m.modelID) }
+            await app.providers.deleteModel(m.modelID)
+            turnedOff.removeAll { $0.modelID == m.modelID }
         }
     }
 

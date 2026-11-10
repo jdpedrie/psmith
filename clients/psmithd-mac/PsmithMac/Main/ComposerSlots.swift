@@ -69,10 +69,12 @@ struct ReviewCard: View {
             } else {
                 HStack(spacing: 10) {
                     let cut = message.isTruncatedOutput
+                    let stopped = message.wasStoppedByUser
                     SlotHead(systemImage: "wand.and.stars",
-                             title: cut ? "Truncated summary awaiting review" : "Compression awaiting review",
-                             detail: cut ? "The summary is incomplete. Delete it and compress again; confirming keeps the cut text."
-                                         : "Confirm to continue in a fresh context, or delete the summary to carry on here.",
+                             title: stopped ? "Summary stopped" : cut ? "Truncated summary awaiting review" : "Compression awaiting review",
+                             detail: stopped ? "You stopped the summary before it finished. Edit it to finish it by hand, or delete it and compress again."
+                                 : cut ? "The summary is incomplete. Delete it and compress again; confirming keeps the cut text."
+                                 : "Confirm to continue in a fresh context, or delete the summary to carry on here.",
                              tint: SK.orange, detailColor: cut ? SK.red : SK.secondary)
                     Button("Delete Summary") { confirmingDelete = true }
                         .skButton(.destructive)
@@ -125,7 +127,7 @@ struct ElicitCard: View {
         let schema = ElicitSchema(pending.schemaJSON)
         MKSlotCard(ring: theme.accent.opacity(0.45)) {
             VStack(alignment: .leading, spacing: 0) {
-                SlotHead(systemImage: "key", title: "Psmith needs input", detail: pending.message, tint: theme.accentInk)
+                SlotHead(systemImage: "key", title: pending.title, detail: pending.message, tint: theme.accentInk)
                 if !schema.fields.isEmpty {
                     Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
                         ForEach(schema.fields, id: \.name) { f in

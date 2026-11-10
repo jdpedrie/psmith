@@ -285,12 +285,18 @@ func (s *Service) GetUserModelProvider(ctx context.Context, req *connect.Request
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	enabled := make([]*psmithv1.UserModel, 0, len(models))
+	var disabled []*psmithv1.UserModel
 	for _, m := range models {
-		enabled = append(enabled, storeUserModelToProto(m, row.Type))
+		if m.Enabled {
+			enabled = append(enabled, storeUserModelToProto(m, row.Type))
+		} else {
+			disabled = append(disabled, storeUserModelToProto(m, row.Type))
+		}
 	}
 	return connect.NewResponse(&psmithv1.GetUserModelProviderResponse{
-		Provider:      s.storeProviderToProto(row),
-		EnabledModels: enabled,
+		Provider:       s.storeProviderToProto(row),
+		EnabledModels:  enabled,
+		DisabledModels: disabled,
 	}), nil
 }
 
@@ -374,6 +380,25 @@ func (s *Service) DeleteUserModelProvider(ctx context.Context, req *connect.Requ
 // --- Discovery & enablement ---
 
 func (s *Service) DiscoverModels(ctx context.Context, req *connect.Request[psmithv1.DiscoverModelsRequest]) (*connect.Response[psmithv1.DiscoverModelsResponse], error) {
+	resp, err := s.discoverModels(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	// Remember what was found so the providers list can count the models
+	// not yet enabled without asking the provider again.
+	ids := make([]string, 0, len(resp.Msg.GetModels()))
+	for _, m := range resp.Msg.GetModels() {
+		ids = append(ids, m.GetModelId())
+	}
+	if id, perr := uuid.Parse(req.Msg.UserModelProviderId); perr == nil {
+		if rerr := s.queries.RecordUserModelProviderDiscovery(ctx, store.RecordUserModelProviderDiscoveryParams{ID: id, ModelIds: ids}); rerr != nil {
+			s.logger.Warn("record discovery", "provider_id", id, "error", rerr)
+		}
+	}
+	return resp, nil
+}
+
+func (s *Service) discoverModels(ctx context.Context, req *connect.Request[psmithv1.DiscoverModelsRequest]) (*connect.Response[psmithv1.DiscoverModelsResponse], error) {
 	row, err := s.loadOwnedProvider(ctx, req.Msg.UserModelProviderId)
 	if err != nil {
 		return nil, err
@@ -385,7 +410,7 @@ func (s *Service) DiscoverModels(ctx context.Context, req *connect.Request[psmit
 	}
 	enabledSet := make(map[string]bool, len(enabled))
 	for _, m := range enabled {
-		enabledSet[m.ModelID] = true
+		enabledSet[m.ModelID] = m.Enabled
 	}
 
 	cfg, err := s.resolveProviderConfig(row)
@@ -529,6 +554,30 @@ func (s *Service) EnableModels(ctx context.Context, req *connect.Request[psmithv
 			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("model_id cannot be empty"))
 		}
 
+		// A hand-added row is turned back on as it is: its metadata came
+		// from the user, and the listing usually doesn't offer the model.
+		existing, err := s.queries.GetUserModel(ctx, store.GetUserModelParams{
+			UserModelProviderID: row.ID,
+			ModelID:             modelID,
+		})
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		if err == nil && existing.MetadataSource == string(modelmeta.SourceManual) {
+			if !existing.Enabled {
+				existing, err = s.queries.SetUserModelEnabled(ctx, store.SetUserModelEnabledParams{
+					UserModelProviderID: row.ID,
+					ModelID:             modelID,
+					Enabled:             true,
+				})
+				if err != nil {
+					return nil, connect.NewError(connect.CodeInternal, err)
+				}
+			}
+			enabled = append(enabled, storeUserModelToProto(existing, row.Type))
+			continue
+		}
+
 		var (
 			snap  store.UpsertUserModelParams
 			found bool
@@ -586,6 +635,29 @@ func (s *Service) DisableModels(ctx context.Context, req *connect.Request[psmith
 		if modelID == "" {
 			continue
 		}
+		// A discovered row is deleted: the listing can recreate it. A
+		// hand-added row is only turned off, because its metadata exists
+		// nowhere else.
+		existing, err := s.queries.GetUserModel(ctx, store.GetUserModelParams{
+			UserModelProviderID: row.ID,
+			ModelID:             modelID,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		if existing.MetadataSource == string(modelmeta.SourceManual) && !req.Msg.DeleteManual {
+			if _, err := s.queries.SetUserModelEnabled(ctx, store.SetUserModelEnabledParams{
+				UserModelProviderID: row.ID,
+				ModelID:             modelID,
+				Enabled:             false,
+			}); err != nil {
+				return nil, connect.NewError(connect.CodeInternal, err)
+			}
+			continue
+		}
 		if err := s.queries.DeleteUserModel(ctx, store.DeleteUserModelParams{
 			UserModelProviderID: row.ID,
 			ModelID:             modelID,
@@ -608,6 +680,9 @@ func (s *Service) ListUserModels(ctx context.Context, req *connect.Request[psmit
 	}
 	out := make([]*psmithv1.UserModel, 0, len(models))
 	for _, m := range models {
+		if !m.Enabled {
+			continue
+		}
 		out = append(out, storeUserModelToProto(m, row.Type))
 	}
 	return connect.NewResponse(&psmithv1.ListUserModelsResponse{Models: out}), nil
@@ -905,7 +980,7 @@ func (s *Service) AddManualModel(ctx context.Context, req *connect.Request[psmit
 		UserModelProviderID: row.ID,
 		ModelID:             req.Msg.ModelId,
 	}); err == nil {
-		return nil, connect.NewError(connect.CodeAlreadyExists, errors.New("model already enabled on this provider"))
+		return nil, connect.NewError(connect.CodeAlreadyExists, errors.New("model already exists on this provider"))
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

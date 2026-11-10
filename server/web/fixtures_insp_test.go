@@ -134,7 +134,7 @@ func boardInspSettings() convVM {
 func boardInspPlugins() convVM {
 	c := boardConv()
 	c.Inspector.Tab = "plugins"
-	c.Inspector.Plugins = &pluginsTabVM{ConvID: c.ID, Profile: "Demo", Dirty: 1, Rows: []plugRowVM{
+	c.Inspector.Plugins = &pluginsTabVM{ConvID: c.ID, Profile: "Demo", Dirty: 1, Overrides: 2, Rows: []plugRowVM{
 		{N: 1, Name: "basic_grounding", Display: "Basic grounding", Kind: "inherited"},
 		{N: 2, Name: "memory", Display: "Memory", Kind: "inherited"},
 		{N: 3, Name: "mcp", Display: "MCP tools", Kind: "inherited"},

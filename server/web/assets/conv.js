@@ -189,6 +189,17 @@
 			if (inflight > 0) { e.preventDefault(); e.stopImmediatePropagation(); sendQueued = true; }
 		}, true);
 
+		// A sent message took its stored files with it. Their chips (and the
+		// hidden ids inside them) stayed, so the next message carried the same
+		// files again. An upload still running belongs to the next message.
+		form.addEventListener("htmx:afterRequest", function (e) {
+			if (!e.detail || !e.detail.successful || e.detail.elt !== form) return;
+			Array.prototype.forEach.call(box.querySelectorAll(".pend"), function (chip) {
+				if (!chip._xhr) chip.remove();
+			});
+			box.hidden = !box.querySelector(".pend");
+		});
+
 		var ta = $("textarea", form);
 		if (ta) ta.addEventListener("paste", function (e) {
 			var files = e.clipboardData ? Array.prototype.slice.call(e.clipboardData.files || []) : [];
@@ -217,4 +228,115 @@
 			});
 		}
 	}
+
+	// --- offline (board Offline) -----------------------------------------------
+	// app.js marks <html data-offline> while a stream is down. The transcript
+	// says when it dropped; a send is held, not lost, and goes out when the
+	// stream reopens.
+	var lostAt = null;
+	document.body.addEventListener("htmx:sseError", function () {
+		if (lostAt) return;
+		lostAt = new Date();
+		var t = $("[data-lost-text]");
+		if (t) {
+			var hm = String(lostAt.getHours()).padStart(2, "0") + ":" + String(lostAt.getMinutes()).padStart(2, "0");
+			t.textContent = "Lost the connection at " + hm + ". New replies show up here when it's back.";
+		}
+	});
+	document.body.addEventListener("htmx:sseOpen", function () {
+		lostAt = null;
+		var held = $("form.composer[data-held]");
+		if (held) {
+			held.removeAttribute("data-held");
+			requestAnimationFrame(function () { held.requestSubmit(); });
+		}
+	});
+	document.addEventListener("submit", function (e) {
+		var f = e.target.closest && e.target.closest("form.composer");
+		if (!f || !document.documentElement.hasAttribute("data-offline")) return;
+		e.preventDefault();
+		e.stopImmediatePropagation();
+		f.setAttribute("data-held", "");
+	}, true);
+
+	// --- live thinking ------------------------------------------------------------
+	// Each chips event redraws the chip row closed; keep a chip's state in
+	// step with its panel, which the redraw doesn't touch.
+	document.body.addEventListener("htmx:afterSettle", function (e) {
+		var row = e.target;
+		if (!row.classList || !row.classList.contains("reply-chips")) return;
+		row.querySelectorAll("[data-disclose][aria-controls]").forEach(function (b) {
+			var p = document.getElementById(b.getAttribute("aria-controls"));
+			if (p) b.setAttribute("aria-expanded", String(!p.hidden));
+		});
+	});
 })();
+
+// A transcript refresh would close a row's editor, delete strip or menu and
+// drop what was typed in it, or replace the row a row request is about to
+// swap into. While either is the case the refresh waits (the #messages-sync
+// trigger asks psmithHoldTranscript), and runs once it's over.
+(function () {
+	"use strict";
+	var held = false, rowRequests = 0, refresh = null;
+	function open() {
+		return !!document.querySelector("#messages form.edit-form, #messages form.del-confirm, #messages .msg-menu");
+	}
+	function holding() { return rowRequests > 0 || open(); }
+	function fromRow(e) {
+		var el = e.detail && e.detail.elt;
+		return !!(el && el.closest && el.closest("#messages") && el.id !== "messages");
+	}
+	// A refresh already out when a row acts would still land on that row:
+	// the reader's action wins, and the refresh runs again after it.
+	function yieldRefresh() {
+		var sync = document.getElementById("messages-sync");
+		if (!refresh || !sync) return;
+		refresh = null;
+		held = true;
+		htmx.trigger(sync, "htmx:abort");
+	}
+	// Counted off the XHR: a row request that replaces #messages detaches
+	// its own element, and htmx's events on a detached element never reach
+	// the body.
+	document.body.addEventListener("htmx:beforeRequest", function (e) {
+		var d = e.detail || {};
+		if (!d.xhr) return;
+		if (d.elt && d.elt.id === "messages-sync") {
+			var xhr = d.xhr;
+			refresh = xhr;
+			xhr.addEventListener("loadend", function () { if (refresh === xhr) refresh = null; });
+			return;
+		}
+		if (!fromRow(e)) return;
+		yieldRefresh();
+		rowRequests++;
+		d.xhr.addEventListener("loadend", function () {
+			rowRequests = Math.max(0, rowRequests - 1);
+			setTimeout(flush, 0);
+		});
+	});
+	window.psmithHoldTranscript = function () {
+		if (holding()) { held = true; return true; }
+		return false;
+	};
+	function flush() {
+		if (!held || holding()) return;
+		held = false;
+		var sync = document.getElementById("messages-sync");
+		if (sync) htmx.ajax("GET", sync.getAttribute("hx-get"), { source: sync, target: "#messages", select: "#messages", swap: "outerHTML" });
+	}
+	document.body.addEventListener("htmx:afterSettle", flush);
+})();
+
+// The header (title, model, context gauge) follows the transcript: a reply,
+// a generated title or a compression changes it, and nothing else redraws
+// it. Not while it's being renamed.
+document.body.addEventListener("htmx:afterSwap", function (e) {
+	var d = e.detail || {};
+	var path = d.requestConfig && d.requestConfig.path;
+	if (!path || !/\/partials\/messages$/.test(path)) return;
+	var head = document.getElementById("conv-head");
+	if (!head || head.querySelector("form.rename")) return;
+	htmx.ajax("GET", path.replace(/\/partials\/messages$/, "/head"), { target: "#conv-head", swap: "outerHTML" });
+});

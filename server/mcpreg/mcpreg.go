@@ -117,7 +117,7 @@ func Resolve(ctx context.Context, q store.Querier, cipher crypto.Cipher, owner u
 		}
 		return BaseName, json.RawMessage(`{}`), nil
 	}
-	_, spec, err := Load(ctx, q, cipher, owner, id)
+	row, spec, err := Load(ctx, q, cipher, owner, id)
 	if errors.Is(err, ErrNotFound) {
 		if strict {
 			return "", nil, fmt.Errorf("%w: %s", ErrNotFound, id)
@@ -149,6 +149,7 @@ func Resolve(ctx context.Context, q store.Querier, cipher crypto.Cipher, owner u
 		// A malformed attach blob is ignored rather than failing the
 		// build — the registry spec alone is a complete config.
 	}
+	base["label"] = row.Name
 	merged, err := json.Marshal(base)
 	if err != nil {
 		return "", nil, err

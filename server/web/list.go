@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,15 +35,22 @@ type listVM struct {
 	// Empty is an account with no conversations at all: the column shows
 	// the empty state instead of chips, sort and rows.
 	Empty bool
+	// ArchivedCount is set when every conversation is archived (board
+	// ListEmptyArchive): the empty list says so and opens the archive.
+	// ArchivedMore says the count is a first page, not the total.
+	ArchivedCount int
+	ArchivedMore  bool
+	// LoadError is why ListConversations failed (board ListLoadError).
+	LoadError string
 	// Select is select-many mode; Selected holds the ids already ticked
 	// (a bulk delete confirm re-renders with them).
 	Select   bool
 	Selected map[string]bool
-	// Confirm asks before deleting the selection.
+	// ConfirmBulk asks before deleting the selection (?bulk=delete).
 	ConfirmBulk bool
 
 	// RenameID and ConfirmID put one row into its rename or delete-confirm
-	// state. Both are links (?rename=, ?confirm=) so they work without JS.
+	// state. Both are links (?renaming=, ?deleting=) so they work without JS.
 	RenameID  string
 	ConfirmID string
 	// MenuID opens a row's menu and HoverID draws a row hovered. Only the
@@ -76,6 +84,9 @@ type rowVM struct {
 	Pinned   bool
 	Archived bool
 	Draft    string // unsent text the browser holds for this conversation; filled in by app.js
+	// Activity is the newest message's time (unix ms), whatever the sort.
+	// list.js marks a row unread when it moves while the row isn't open.
+	Activity int64
 	at       time.Time
 }
 
@@ -109,6 +120,13 @@ func highlight(s, q string) []hlPart {
 		s, ls = s[i+len(q):], ls[i+len(q):]
 	}
 }
+
+// The row-state keys stay clear of the conversation page's own ?rename
+// (its title) and ?confirm (the inspector's), which share the URL.
+const (
+	renameKey  = "renaming"
+	confirmKey = "deleting"
+)
 
 // listState reads the list's filter, sort and query from the request.
 func listState(r *http.Request) (filter, sort, query string) {
@@ -154,17 +172,23 @@ func (l listVM) query(extra url.Values) string {
 // listHref is /chats with the list's state.
 func (l listVM) listHref() string { return "/chats" + l.listQuery() }
 
+// basePath is the page the list sits on without its state: the open
+// conversation, or /chats. Filtering, sorting and searching stay on it, so
+// they change the list and leave the conversation open.
+func (l listVM) basePath() string {
+	if l.ActiveID != "" {
+		return "/c/" + l.ActiveID
+	}
+	return "/chats"
+}
+
 // convHref links a row, keeping the list's state.
 func (l listVM) convHref(id string) string { return "/c/" + id + l.listQuery() }
 
 // stateHref is the page the list sits on with one row in a state (rename,
 // confirm): the open conversation, or /chats.
 func (l listVM) stateHref(key, id string) string {
-	base := "/chats"
-	if l.ActiveID != "" {
-		base = "/c/" + l.ActiveID
-	}
-	return base + l.query(url.Values{key: {id}})
+	return l.basePath() + l.query(url.Values{key: {id}})
 }
 
 // pageHref is the page the list sits on, with its state.
@@ -196,29 +220,30 @@ func (h *Handler) loadList(ctx context.Context, r *http.Request, activeID, pageT
 	q := r.URL.Query()
 	vm := listVM{Filter: filter, Sort: sort, Query: query, ActiveID: activeID, Server: r.Host,
 		Archived: query != "" && q.Get("arch") == "1",
-		Select:   q.Get("select") != "", RenameID: q.Get("rename"), ConfirmID: q.Get("confirm")}
+		Select:   q.Get("select") != "", RenameID: q.Get(renameKey), ConfirmID: q.Get(confirmKey)}
 	vm.userInfo(ctx)
 	if vm.Select {
 		vm.Selected = map[string]bool{}
 		for _, id := range q["id"] {
 			vm.Selected[id] = true
 		}
+		vm.ConfirmBulk = q.Get("bulk") == "delete" && len(vm.Selected) > 0
 	}
 
 	profiles := h.profileIndex(ctx)
 	base := listVM{Sort: sort}
 	vm.Chips = append(vm.Chips,
-		chipVM{Label: "All", Href: "/chats" + withFilter(base, "all"), On: filter == "all"},
-		chipVM{Label: "Archived", Href: "/chats" + withFilter(base, "archived"), On: filter == "archived"},
+		chipVM{Label: "All", Href: vm.basePath() + withFilter(base, "all"), On: filter == "all"},
+		chipVM{Label: "Archived", Href: vm.basePath() + withFilter(base, "archived"), On: filter == "archived"},
 	)
 	for _, p := range profiles.order {
-		vm.Chips = append(vm.Chips, chipVM{Label: p.GetName(), Href: "/chats" + withFilter(base, p.GetId()), Color: profileColor(p.GetId()), On: filter == p.GetId()})
+		vm.Chips = append(vm.Chips, chipVM{Label: p.GetName(), Href: vm.basePath() + withFilter(base, p.GetId()), Color: profileColor(p.GetId()), On: filter == p.GetId()})
 	}
 	if h.convos == nil {
 		return vm
 	}
 
-	list := func(archived bool, token string) ([]*psmithv1.Conversation, string, bool) {
+	list := func(archived bool, token string) ([]*psmithv1.Conversation, string, error) {
 		req := &psmithv1.ListConversationsRequest{PageSize: 100, PageToken: token, Archived: archived}
 		if sort == "created" {
 			o := psmithv1.ConversationOrder_CONVERSATION_ORDER_RECENTLY_CREATED
@@ -233,9 +258,9 @@ func (h *Handler) loadList(ctx context.Context, r *http.Request, activeID, pageT
 		resp, err := h.convos.ListConversations(ctx, connect.NewRequest(req))
 		if err != nil {
 			h.logger.Warn("web: list conversations failed", "err", err)
-			return nil, "", false
+			return nil, "", err
 		}
-		return resp.Msg.GetConversations(), resp.Msg.GetNextPageToken(), true
+		return resp.Msg.GetConversations(), resp.Msg.GetNextPageToken(), nil
 	}
 
 	live := h.liveConversations(ctx)
@@ -243,27 +268,61 @@ func (h *Handler) loadList(ctx context.Context, r *http.Request, activeID, pageT
 	if query != "" {
 		// Search is one ranked list: the title matches, newest first, with
 		// archived ones mixed in when asked.
-		convs, _, _ := list(filter == "archived", "")
-		if vm.Archived && filter != "archived" {
-			more, _, _ := list(true, "")
+		convs, _, err := list(filter == "archived", "")
+		if err == nil && vm.Archived && filter != "archived" {
+			var more []*psmithv1.Conversation
+			more, _, err = list(true, "")
 			convs = append(convs, more...)
+		}
+		if err != nil {
+			vm.LoadError = friendlyError(err)
+			return vm
 		}
 		vm.Rows = searchRows(now, convs, profiles.names, live, activeID, sort, query)
 		return vm
 	}
 
-	convs, next, ok := list(filter == "archived", pageToken)
-	if !ok {
+	convs, next, err := list(filter == "archived", pageToken)
+	if err != nil {
+		vm.LoadError = friendlyError(err)
 		return vm
 	}
+	// A later page continues the section the page before it ended in (g).
+	prev := ""
+	if pageToken != "" {
+		prev = q.Get("g")
+	}
 	if filter == "archived" {
-		vm.Rows = monthRows(now, convs, profiles.names, activeID, sort)
+		vm.Rows = monthRows(now, convs, profiles.names, activeID, sort, prev)
 	} else {
-		vm.Rows = buildRows(now, convs, profiles.names, live, activeID, sort)
+		vm.Rows = buildRows(now, convs, profiles.names, live, activeID, sort, prev)
 	}
 	vm.NextToken = next
-	vm.Empty = filter == "all" && pageToken == "" && len(vm.Rows) == 0
+	if filter == "all" && pageToken == "" && len(vm.Rows) == 0 {
+		// Nothing active. With an archive that's not "no conversations yet".
+		arch, more, err := list(true, "")
+		if err != nil {
+			vm.LoadError = friendlyError(err)
+			return vm
+		}
+		vm.ArchivedCount, vm.ArchivedMore = len(arch), more != ""
+		vm.Empty = len(arch) == 0
+	}
 	return vm
+}
+
+// bare is the column with nothing active to show: only the All and
+// Archived chips, no sort, and an empty state in place of rows.
+func (l listVM) bare() bool { return l.Empty || l.ArchivedCount > 0 }
+
+// archivedLabel is the empty state's archive count: "12", or "100+" when
+// the first page wasn't the whole archive.
+func (l listVM) archivedLabel() string {
+	n := strconv.Itoa(l.ArchivedCount)
+	if l.ArchivedMore {
+		n += "+"
+	}
+	return n
 }
 
 func withFilter(l listVM, f string) string {
@@ -277,6 +336,9 @@ func newRow(now time.Time, c *psmithv1.Conversation, names map[string]string, li
 		Active: c.GetId() == activeID, Live: live[c.GetId()], Pinned: c.GetPinnedAt() != nil, Archived: c.GetArchivedAt() != nil,
 	}
 	row.at = c.GetLastActivityAt().AsTime()
+	if c.GetLastActivityAt() != nil {
+		row.Activity = row.at.UnixMilli()
+	}
 	if c.GetLastActivityAt() == nil || sort == "created" {
 		row.at = c.GetCreatedAt().AsTime()
 	}
@@ -286,17 +348,18 @@ func newRow(now time.Time, c *psmithv1.Conversation, names map[string]string, li
 
 // buildRows turns conversations into rows with section heads. Pinned rows
 // come first under "Pinned"; the rest bucket by date.
-func buildRows(now time.Time, convs []*psmithv1.Conversation, names map[string]string, live map[string]bool, activeID, sort string) []rowVM {
+func buildRows(now time.Time, convs []*psmithv1.Conversation, names map[string]string, live map[string]bool, activeID, sort, prev string) []rowVM {
 	out := make([]rowVM, 0, len(convs))
 	var pinned, rest []rowVM
+	last := prev
 	for _, c := range convs {
 		row := newRow(now, c, names, live, activeID, sort)
 		if row.Pinned && !row.Archived {
 			pinned = append(pinned, row)
 			continue
 		}
-		if g := dateGroup(now, row.at); len(rest) == 0 || g != groupOf(rest) {
-			row.Group = g
+		if g := dateGroup(now, row.at); g != last {
+			row.Group, last = g, g
 		}
 		rest = append(rest, row)
 	}
@@ -309,9 +372,9 @@ func buildRows(now time.Time, convs []*psmithv1.Conversation, names map[string]s
 
 // monthRows groups the archive by month: it is a record, not a queue, and
 // "Previous 30 days" says little about something archived in spring.
-func monthRows(now time.Time, convs []*psmithv1.Conversation, names map[string]string, activeID, sort string) []rowVM {
+func monthRows(now time.Time, convs []*psmithv1.Conversation, names map[string]string, activeID, sort, prev string) []rowVM {
 	out := make([]rowVM, 0, len(convs))
-	last := ""
+	last := prev
 	for _, c := range convs {
 		row := newRow(now, c, names, nil, activeID, sort)
 		g := row.at.In(now.Location()).Format("January")
@@ -348,8 +411,8 @@ func sortByTime(rows []rowVM) {
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].at.After(rows[j].at) })
 }
 
-// groupOf finds the section the last row belongs to.
-func groupOf(rows []rowVM) string {
+// lastGroup is the section the last row belongs to.
+func lastGroup(rows []rowVM) string {
 	for i := len(rows) - 1; i >= 0; i-- {
 		if rows[i].Group != "" {
 			return rows[i].Group
@@ -424,10 +487,10 @@ func (h *Handler) liveConversations(ctx context.Context) map[string]bool {
 
 // handleChats is the app with nothing open: the list, and a start page that
 // offers the profiles and the most recent conversations. An account with no
-// provider goes to first-run setup instead.
+// model to chat with goes to first-run setup instead.
 func (h *Handler) handleChats(w http.ResponseWriter, r *http.Request) {
-	if h.needsSetup(r.Context()) {
-		http.Redirect(w, r, "/setup", http.StatusSeeOther)
+	if step := h.setupStep(r.Context()); step != "" {
+		http.Redirect(w, r, step, http.StatusSeeOther)
 		return
 	}
 	l := h.loadList(r.Context(), r, "", "")

@@ -195,7 +195,7 @@ final class ProfileDraft {
         defer { saving = false }
         let f = fields
         let trim = { (s: String) in s.trimmingCharacters(in: .whitespacesAndNewlines) }
-        let existing = profiles.profiles.first { $0.id == (profileID ?? createdID) }
+        let existing = profiles.profile(id: (profileID ?? createdID))
         // The server replaces the whole defaults blob; call settings and
         // include-thinking are edited elsewhere, so carry them through.
         let defaults = PsmithProfileDefaults(

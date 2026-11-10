@@ -266,6 +266,26 @@ func TestMCPServers_TestProbe(t *testing.T) {
 		t.Errorf("dead probe = %+v want ok=false with message", deadResp.Msg)
 	}
 
+	// Both outcomes are recorded and come back on the list, so Settings can
+	// show them after a restart without probing again.
+	listed, err := svc.ListMCPServers(ctx, connect.NewRequest(&psmithv1.ListMCPServersRequest{}))
+	if err != nil {
+		t.Fatalf("ListMCPServers: %v", err)
+	}
+	for _, srv := range listed.Msg.Servers {
+		lt := srv.GetLastTest()
+		switch srv.Id {
+		case created.Msg.Server.Id:
+			if lt == nil || !lt.Ok || lt.ToolCount != 1 || lt.TestedAt == nil {
+				t.Errorf("inproc last test = %+v", lt)
+			}
+		case dead.Msg.Server.Id:
+			if lt == nil || lt.Ok || lt.Message == "" {
+				t.Errorf("dead last test = %+v", lt)
+			}
+		}
+	}
+
 	// Foreign/dangling id → NotFound.
 	_, err = svc.TestMCPServer(ctx, connect.NewRequest(&psmithv1.TestMCPServerRequest{Id: uuid.NewString()}))
 	assertConnectCode(t, err, connect.CodeNotFound)

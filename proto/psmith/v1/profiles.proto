@@ -473,6 +473,8 @@ message MCPServer {
   // Default tool-name prefix wherever this server is attached; a
   // per-attachment config can still override it.
   string tool_prefix = 9;
+  // The last connection test, absent until the server is first tested.
+  optional ConnectionTest last_test = 10;
 }
 
 message ListMCPServersRequest {}

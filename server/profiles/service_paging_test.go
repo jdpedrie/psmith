@@ -2,6 +2,7 @@ package profiles
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -153,6 +154,58 @@ func TestService_SetDefaultProfile(t *testing.T) {
 	}
 	if got := defaultOf(); got != "" {
 		t.Errorf("default should be cleared, got %s", got)
+	}
+}
+
+// Two clients setting different defaults at once both succeed, and one
+// default is left. Unlocked, the second transaction's clear missed the
+// row the first had just marked and its mark tripped the unique index.
+func TestService_SetDefaultProfile_Concurrent(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	user := mustCreateUser(t, q, "carol")
+
+	const n = 8
+	ids := make([]string, n)
+	for i := range ids {
+		p, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&psmithv1.CreateProfileRequest{Name: fmt.Sprintf("P%d", i)}))
+		if err != nil {
+			t.Fatalf("create: %v", err)
+		}
+		ids[i] = p.Msg.Profile.Id
+	}
+
+	for round := 0; round < 5; round++ {
+		var wg sync.WaitGroup
+		errs := make(chan error, n)
+		for _, id := range ids {
+			wg.Add(1)
+			go func(id string) {
+				defer wg.Done()
+				_, err := svc.SetDefaultProfile(ctxAs(user), connect.NewRequest(&psmithv1.SetDefaultProfileRequest{ProfileId: id}))
+				errs <- err
+			}(id)
+		}
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			if err != nil {
+				t.Fatalf("round %d: concurrent set default: %v", round, err)
+			}
+		}
+		resp, err := svc.ListProfiles(ctxAs(user), connect.NewRequest(&psmithv1.ListProfilesRequest{}))
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		defaults := 0
+		for _, p := range resp.Msg.Profiles {
+			if p.IsDefault {
+				defaults++
+			}
+		}
+		if defaults != 1 {
+			t.Fatalf("round %d: %d defaults, want 1", round, defaults)
+		}
 	}
 }
 

@@ -61,6 +61,15 @@ func (s *Service) storeProviderToProto(p store.UserModelProvider) *psmithv1.User
 	if len(p.DefaultSettings) > 0 {
 		out.DefaultSettings = callSettingsFromJSON(p.DefaultSettings)
 	}
+	if p.LastTestAt != nil {
+		out.LastTest = &psmithv1.ConnectionTest{
+			TestedAt:  timestamppb.New(*p.LastTestAt),
+			Ok:        p.LastTestOk,
+			LatencyMs: p.LastTestLatencyMs,
+			Message:   p.LastTestMessage,
+		}
+	}
+	out.LastDiscoveredModelIds = p.LastDiscoveredModelIds
 	return out
 }
 

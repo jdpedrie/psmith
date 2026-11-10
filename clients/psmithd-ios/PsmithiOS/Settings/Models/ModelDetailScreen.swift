@@ -108,7 +108,7 @@ struct ModelDetailScreen: View {
                             IKConfirmCard(question: "Delete \(m.displayName)?",
                                           detail: "You added it by hand, so Find New Models won’t bring it back. Conversations using it can’t send until they switch.",
                                           onCancel: { withAnimation(.snappy) { confirmingDelete = false } },
-                                          onConfirm: { disable(m) })
+                                          onConfirm: { delete(m) })
                         } else {
                             IKGroup {
                                 Button { withAnimation(.snappy) { confirmingDelete = true } } label: {
@@ -276,6 +276,12 @@ struct ModelDetailScreen: View {
     private func disable(_ m: PsmithUserModel) {
         app.providers.selectedID = provider.id
         Task { await app.providers.disableModel(m.modelID) }
+        dismiss()
+    }
+
+    private func delete(_ m: PsmithUserModel) {
+        app.providers.selectedID = provider.id
+        Task { await app.providers.deleteModel(m.modelID) }
         dismiss()
     }
 

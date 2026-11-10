@@ -72,6 +72,7 @@ pgvector is the only required extension, used by `messages.embedding`. It is not
 | 00052 | message_harness_handle | `messages.harness_handle` plus a partial index on `(context_id, id)`. Drops `harness_sessions`. |
 | 00053 | thinking_effort | Data-only: stored `call_settings.thinking` blobs rewritten from `{enabled, budget_tokens}` to an effort level at all four resolution layers. |
 | 00054 | user_preferences | `user_preferences` (per-user singleton): `context_warning_tokens`. |
+| 00056 | user_model_enabled | `user_models.enabled` (NOT NULL default true). Turning a hand-added model off keeps its row with `enabled = false`. |
 
 Tables that no longer exist: `catalog_model_providers` and `catalog_models` (dropped in 00017), `gemini_caches` (dropped in 00020), `harness_sessions` (dropped in 00052).
 
@@ -89,7 +90,7 @@ Tables that no longer exist: `catalog_model_providers` and `catalog_models` (dro
 
 **user_model_providers** — `id` PK; `user_id` FK ON DELETE CASCADE; `type` (driver name); `label`; `config` JSONB nullable; `default_settings` JSONB nullable; `config_encrypted` BYTEA nullable; timestamps. Unique on `(user_id, type, label)`. Index on `user_id`. The plaintext `config` was relaxed to nullable when `config_encrypted` arrived; encrypted deployments store the blob in `config_encrypted`.
 
-**user_models** — composite PK `(user_model_provider_id, model_id)`; FK to the provider ON DELETE CASCADE; `display_name`; `context_window`, `max_output_tokens` nullable; four pricing columns (`input_price_per_million`, `output_price_per_million`, `cache_read_per_million`, `cache_write_per_million`); `knowledge_cutoff` DATE; `modalities` TEXT[]; `capabilities` JSONB; `default_settings` JSONB; `metadata_source` CHECK in (`catalog`, `driver`, `manual`); `metadata_snapshot_at`; `enabled_at`; `favorite`. This row is the user-owned metadata snapshot. It is deliberately not foreign-keyed to any catalog table.
+**user_models** — composite PK `(user_model_provider_id, model_id)`; FK to the provider ON DELETE CASCADE; `display_name`; `context_window`, `max_output_tokens` nullable; four pricing columns (`input_price_per_million`, `output_price_per_million`, `cache_read_per_million`, `cache_write_per_million`); `knowledge_cutoff` DATE; `modalities` TEXT[]; `capabilities` JSONB; `default_settings` JSONB; `metadata_source` CHECK in (`catalog`, `driver`, `manual`); `metadata_snapshot_at`; `enabled_at`; `favorite`; `enabled` (NOT NULL default true; only manual rows are ever false, see [providers](../design/providers.md#enabled-models)). This row is the user-owned metadata snapshot. It is deliberately not foreign-keyed to any catalog table.
 
 ### Profiles
 

@@ -263,7 +263,7 @@ func TestRowPartial_States(t *testing.T) {
 	mustContain(t, body, `class="ritem"`, "Rename", "Generate title", "Archive", "Delete")
 
 	// The no-JS form of the same states: a query on the page.
-	page := e.get(e.h.handleChats, "/chats?confirm="+id, nil).Body.String()
+	page := e.get(e.h.handleChats, "/chats?deleting="+id, nil).Body.String()
 	mustContain(t, page, "Delete “Council: pricing debate”?")
 }
 
@@ -295,13 +295,16 @@ func TestSelectAndBulk(t *testing.T) {
 	body := e.get(e.h.handleChats, "/chats?select=1", nil).Body.String()
 	mustContain(t, body, "0 selected", `name="id" value="`+a+`"`, `action="/chats/bulk"`, "Select all")
 
-	// Select all ticks every row.
+	// Select all ticks every row, as a select-mode URL.
 	rec := e.post(e.h.handleBulk, "/chats/bulk", url.Values{"action": {"all"}, "back": {"/chats"}}, nil, false)
-	mustContain(t, rec.Body.String(), "3 selected")
+	mustContain(t, e.get(e.h.handleChats, rec.Header().Get("Location"), nil).Body.String(), "3 selected")
 
-	// Delete asks first, in the toolbar.
+	// Delete asks first, in the toolbar, at a URL that keeps the ticks.
 	rec = e.post(e.h.handleBulk, "/chats/bulk", url.Values{"action": {"confirm"}, "id": {a, b}, "back": {"/chats"}}, nil, false)
-	mustContain(t, rec.Body.String(), "Delete 2?", `value="delete"`)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("confirm: code=%d", rec.Code)
+	}
+	mustContain(t, e.get(e.h.handleChats, rec.Header().Get("Location"), nil).Body.String(), "Delete 2?", `value="delete"`)
 
 	rec = e.post(e.h.handleBulk, "/chats/bulk", url.Values{"action": {"archive"}, "id": {a}, "back": {"/chats"}}, nil, false)
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/chats" {
@@ -371,7 +374,7 @@ func TestMonthRows(t *testing.T) {
 		ts := time.Date(y, m, d, 9, 0, 0, 0, time.UTC)
 		return &psmithv1.Conversation{Id: ts.String(), LastActivityAt: timestamppb.New(ts), CreatedAt: timestamppb.New(ts)}
 	}
-	rows := monthRows(now, []*psmithv1.Conversation{at(11, 2, 2026), at(10, 24, 2026), at(10, 21, 2026), at(8, 4, 2025)}, nil, "", "used")
+	rows := monthRows(now, []*psmithv1.Conversation{at(11, 2, 2026), at(10, 24, 2026), at(10, 21, 2026), at(8, 4, 2025)}, nil, "", "used", "")
 	groups := []string{rows[0].Group, rows[1].Group, rows[2].Group, rows[3].Group}
 	want := []string{"November", "October", "", "August 2025"}
 	for i := range want {
@@ -552,4 +555,22 @@ func TestBackURL(t *testing.T) {
 	if activeOf("/c/abc/model") != "abc" || activeOf("/chats") != "" {
 		t.Error("activeOf")
 	}
+}
+
+// A first send that fails leaves the conversation created and opens it with
+// the message back in the composer and a line saying it didn't go.
+func TestDraft_FailedFirstSendKeepsTheText(t *testing.T) {
+	t.Parallel()
+	e := newListEnv(t)
+	pid := e.profileID(t)
+	bogus := modelValue(uuid.NewString(), "no-such-model")
+
+	rec := e.post(e.h.handleNewCreate, "/new", url.Values{"profile_id": {pid}, "model": {bogus}, "message": {"Keep me & my text"}}, nil, false)
+	loc := rec.Header().Get("Location")
+	if rec.Code != http.StatusSeeOther || !strings.Contains(loc, "failed=1") || !strings.Contains(loc, "draft=Keep+me+%26+my+text") {
+		t.Fatalf("code=%d loc=%q", rec.Code, loc)
+	}
+	id := strings.TrimPrefix(loc[:strings.Index(loc, "?")], "/c/")
+	body := e.get(e.h.handleConversation, loc, map[string]string{"id": id}).Body.String()
+	mustContain(t, body, ">Keep me &amp; my text</textarea>", `class="reply-error" role="alert"`, "back in the composer")
 }

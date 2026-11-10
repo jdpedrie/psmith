@@ -3,15 +3,14 @@ package web
 import (
 	"strconv"
 	"strings"
-	"sync"
 	"time"
+
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 )
 
-// The server keeps no record of a provider's last connection test or of what
-// its last discovery found, but the provider pages show both: the list's
-// status dot and the "3 new" badge. This process remembers them until it
-// restarts. A provider nobody has tested since then reads "Not tested".
-
+// provStatus is a provider's connection test as the pages show it. The
+// server records each test (UserModelProvider.last_test), so the list's dot
+// and the page's line survive a restart.
 type provStatus struct {
 	At        time.Time
 	OK        bool
@@ -30,34 +29,24 @@ func (s provStatus) vm(now time.Time) *testVM {
 	return &testVM{Message: msg}
 }
 
-var (
-	saTests      sync.Map // provider id -> provStatus
-	saDiscovered sync.Map // provider id -> []string model ids
-)
-
-func rememberTest(id string, s provStatus) { saTests.Store(id, s) }
-
-func lastTest(id string) (provStatus, bool) {
-	v, ok := saTests.Load(id)
-	if !ok {
+// lastTest is the provider's recorded test, if it has been tested.
+func lastTest(p *psmithv1.UserModelProvider) (provStatus, bool) {
+	t := p.GetLastTest()
+	if t == nil {
 		return provStatus{}, false
 	}
-	return v.(provStatus), true
+	return provStatus{At: t.GetTestedAt().AsTime(), OK: t.GetOk(), LatencyMS: t.GetLatencyMs(), Msg: t.GetMessage()}, true
 }
 
-func rememberDiscovered(id string, ids []string) { saDiscovered.Store(id, ids) }
-
-func lastDiscovered(id string) ([]string, bool) {
-	v, ok := saDiscovered.Load(id)
-	if !ok {
-		return nil, false
+// newModels counts what the provider's last discovery found that isn't on.
+func newModels(p *psmithv1.UserModelProvider, enabled func(string) bool) int {
+	n := 0
+	for _, id := range p.GetLastDiscoveredModelIds() {
+		if !enabled(id) {
+			n++
+		}
 	}
-	return v.([]string), true
-}
-
-func forgetProvider(id string) {
-	saTests.Delete(id)
-	saDiscovered.Delete(id)
+	return n
 }
 
 // A masked key shows twelve dots on a desktop and eight on a phone; these

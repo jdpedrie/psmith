@@ -14,7 +14,7 @@ enum ProfileInheritance {
     }
 
     static func inherited(parentID: String?, profiles: ProfilesViewModel) -> [Inherited] {
-        let chain = ProfileLookup.ancestors(of: parentID, in: profiles.profiles)
+        let chain = ProfileLookup.ancestors(of: parentID, in: profiles.known)
         var effective: [(String, PsmithProfile)] = []
         for ancestor in chain.reversed() {
             for row in profiles.profilePlugins[ancestor.id] ?? [] {
@@ -26,7 +26,7 @@ enum ProfileInheritance {
     }
 
     static func loadChain(parentID: String?, profiles: ProfilesViewModel) async {
-        for ancestor in ProfileLookup.ancestors(of: parentID, in: profiles.profiles)
+        for ancestor in ProfileLookup.ancestors(of: parentID, in: profiles.known)
         where profiles.profilePlugins[ancestor.id] == nil {
             await profiles.loadPlugins(forProfileID: ancestor.id)
         }
@@ -67,7 +67,7 @@ struct SettingsProfilePluginsScreen: View {
 
     var body: some View {
         IKSettingsPage(title: "Plugins") {
-            if !inherited.isEmpty, let parent = profiles.profiles.first(where: { $0.id == draft.fields.parentProfileID }) {
+            if !inherited.isEmpty, let parent = profiles.profile(id: draft.fields.parentProfileID) {
                 HStack(spacing: 6) {
                     Text("From")
                     IKDot(color: ProfileLookup.color(parent, theme: theme), size: 8)

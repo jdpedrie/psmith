@@ -731,6 +731,15 @@ func TestDiscoverModels_FlagsAlreadyEnabled(t *testing.T) {
 	if flags["m2"] {
 		t.Error("m2 should not be already_enabled")
 	}
+
+	// What discovery found is remembered for the list's "of N models" count.
+	got, err := svc.GetUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.GetUserModelProviderRequest{Id: prov.ID.String()}))
+	if err != nil {
+		t.Fatalf("GetUserModelProvider: %v", err)
+	}
+	if ids := got.Msg.GetProvider().GetLastDiscoveredModelIds(); len(ids) != 2 {
+		t.Errorf("last_discovered_model_ids = %v", ids)
+	}
 }
 
 func TestDiscoverModels_DriverError(t *testing.T) {
@@ -903,7 +912,7 @@ func TestDisableModels_RemovesRow(t *testing.T) {
 		UserModelProviderID: prov.ID,
 		ModelID:             "m1",
 		DisplayName:         "M1",
-		MetadataSource:      string(modelmeta.SourceManual),
+		MetadataSource:      string(modelmeta.SourceDriver),
 		MetadataSnapshotAt:  time.Now().UTC(),
 	}); err != nil {
 		t.Fatalf("seed: %v", err)

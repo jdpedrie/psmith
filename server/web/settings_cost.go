@@ -51,6 +51,9 @@ func usageWindow(now time.Time, rng, from, to string) (since, until *time.Time, 
 		var label string
 		f, ferr := time.ParseInLocation("2006-01-02", from, now.Location())
 		t, terr := time.ParseInLocation("2006-01-02", to, now.Location())
+		if ferr == nil && terr == nil && t.Before(f) {
+			f, t = t, f
+		}
 		if ferr == nil {
 			since = &f
 		}
@@ -78,6 +81,10 @@ func usageWindow(now time.Time, rng, from, to string) (since, until *time.Time, 
 func (h *Handler) handleCost(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	u := spendVM{Range: q.Get("range"), From: q.Get("from"), To: q.Get("to")}
+	// ISO dates order as strings, so the fields show a backwards pick in order.
+	if u.From != "" && u.To != "" && u.To < u.From {
+		u.From, u.To = u.To, u.From
+	}
 	if u.Range != "30d" && u.Range != "custom" {
 		u.Range = "month"
 	}

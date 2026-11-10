@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -47,10 +48,10 @@ func speechReset(open bool) sbConfirmVM {
 }
 
 func (h *Handler) handleSpeech(w http.ResponseWriter, r *http.Request) {
-	h.renderSpeech(w, r, nil)
+	h.renderSpeech(w, r, nil, nil)
 }
 
-func (h *Handler) renderSpeech(w http.ResponseWriter, r *http.Request, result *testVM) {
+func (h *Handler) renderSpeech(w http.ResponseWriter, r *http.Request, result *testVM, posted url.Values) {
 	reset := speechReset(r.URL.Query().Get("reset") == "1")
 	if fragmentFor(r, reset.ID) {
 		h.render(w, r, http.StatusOK, sbConfirm(reset))
@@ -90,7 +91,25 @@ func (h *Handler) renderSpeech(w http.ResponseWriter, r *http.Request, result *t
 			}
 		}
 	}
-	h.render(w, r, http.StatusOK, speechScreen(h.loadSnav(r.Context(), r, "speech"), vm))
+	if posted != nil {
+		kind, ref := posted.Get("kind"), posted.Get("provider_ref")
+		vm.Dirty = countChanged(
+			[2]string{selectedValue(vm.KindOpts), kind}, [2]string{vm.Voice, posted.Get("voice")}, [2]string{vm.Model, posted.Get("model")},
+			[2]string{vm.Speed, posted.Get("speed")}, [2]string{vm.BaseURL, posted.Get("base_url")},
+			[2]string{selectedValue(vm.ProviderOpts), ref}, [2]string{"", posted.Get("api_key")})
+		for i := range vm.KindOpts {
+			vm.KindOpts[i].Selected = vm.KindOpts[i].Value == kind
+		}
+		for i := range vm.ProviderOpts {
+			vm.ProviderOpts[i].Selected = vm.ProviderOpts[i].Value == ref
+		}
+		vm.Voice, vm.Model, vm.BaseURL = posted.Get("voice"), posted.Get("model"), posted.Get("base_url")
+		if sp := posted.Get("speed"); sp != "" {
+			vm.Speed = sp
+		}
+		vm.Note = speechKindNotes[kind]
+	}
+	h.answer(w, r, "/settings/speech", http.StatusOK, speechScreen(h.loadSnav(r.Context(), r, "speech"), vm))
 }
 
 func (h *Handler) handleSpeechSave(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +132,7 @@ func (h *Handler) handleSpeechSave(w http.ResponseWriter, r *http.Request) {
 	enabled := true
 	req.Enabled = &enabled
 	if _, err := h.speech.UpdateSpeechConfig(r.Context(), connect.NewRequest(req)); err != nil {
-		h.renderSpeech(w, r, &testVM{Message: errMessage(err)})
+		h.renderSpeech(w, r, &testVM{Message: errMessage(err)}, r.PostForm)
 		return
 	}
 	http.Redirect(w, r, "/settings/speech", http.StatusSeeOther)
@@ -124,7 +143,7 @@ func (h *Handler) handleSpeechSave(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleSpeechKeyDelete(w http.ResponseWriter, r *http.Request) {
 	empty := ""
 	if _, err := h.speech.UpdateSpeechConfig(r.Context(), connect.NewRequest(&psmithv1.UpdateSpeechConfigRequest{ApiKey: &empty})); err != nil {
-		h.renderSpeech(w, r, &testVM{Message: errMessage(err)})
+		h.renderSpeech(w, r, &testVM{Message: errMessage(err)}, nil)
 		return
 	}
 	http.Redirect(w, r, "/settings/speech", http.StatusSeeOther)
@@ -135,7 +154,7 @@ func (h *Handler) handleSpeechTest(w http.ResponseWriter, r *http.Request) {
 	result := &testVM{}
 	switch {
 	case err != nil:
-		result.Message = errMessage(err)
+		result = testFailed(0, errMessage(err), "The speech provider")
 	case resp.Msg.GetOk() && resp.Msg.GetAudioBytes() == 0:
 		result.OK = true
 		result.Message = "On-device speech needs nothing from this server."
@@ -143,14 +162,14 @@ func (h *Handler) handleSpeechTest(w http.ResponseWriter, r *http.Request) {
 		result.OK = true
 		result.Message = "Synthesized " + thousands(resp.Msg.GetAudioBytes()) + " bytes of audio in " + strconv.FormatInt(resp.Msg.GetLatencyMs(), 10) + " ms, just now"
 	default:
-		result.Message = resp.Msg.GetErrorMessage()
+		result = testFailed(resp.Msg.GetLatencyMs(), resp.Msg.GetErrorMessage(), "The speech provider")
 	}
-	h.renderSpeech(w, r, result)
+	h.renderSpeech(w, r, result, nil)
 }
 
 func (h *Handler) handleSpeechDelete(w http.ResponseWriter, r *http.Request) {
 	if _, err := h.speech.DeleteSpeechConfig(r.Context(), connect.NewRequest(&psmithv1.DeleteSpeechConfigRequest{})); err != nil {
-		h.renderSpeech(w, r, &testVM{Message: errMessage(err)})
+		h.renderSpeech(w, r, &testVM{Message: errMessage(err)}, nil)
 		return
 	}
 	http.Redirect(w, r, "/settings/speech", http.StatusSeeOther)

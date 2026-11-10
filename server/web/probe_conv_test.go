@@ -1,6 +1,8 @@
 package web
 
 import (
+	"context"
+	"io"
 	"testing"
 
 	"github.com/a-h/templ"
@@ -14,6 +16,7 @@ func TestProbeConv(t *testing.T) {
 		{"Main", scr(boardConv)},
 		{"Streaming", scr(boardStreaming)},
 		{"Thinking", scr(boardThinking)},
+		{"TurnDetails", withTurnDetails(scr(boardTurnDetails))},
 		{"MessageMenu", scr(boardMessageMenu)},
 		{"MessageStates", scr(boardMessageStates)},
 		{"MessageUsage", scr(boardMessageUsage)},
@@ -35,4 +38,15 @@ func TestProbeConv(t *testing.T) {
 		{"Fragments", scr(boardFragments)},
 		{"Phone", scr(boardPhone)},
 	}, map[string]bool{"Main": true})
+}
+
+// withTurnDetails renders a case with "Show turn details" on.
+func withTurnDetails(c func() templ.Component) func() templ.Component {
+	return func() templ.Component {
+		return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+			p := prefsOf(ctx)
+			p.TurnDetails = true
+			return c().Render(withPrefs(ctx, p), w)
+		})
+	}
 }

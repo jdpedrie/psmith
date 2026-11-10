@@ -62,7 +62,7 @@ struct EmbedderViewModelTests {
 
         vm.baseURLDraft = "https://api.openai.com/v1"
         vm.modelDraft = "text-embedding-3-small"
-        vm.dimensionsDraft = 1536
+        vm.dimensionsDraft = 768
         vm.apiKeyDraft = "sk-test"
         vm.enabledDraft = true
         #expect(vm.isDirty == true)
@@ -74,7 +74,7 @@ struct EmbedderViewModelTests {
         #expect(vm.saved != nil)
         #expect(vm.saved?.apiKeySet == true)
         #expect(vm.saved?.enabled == true)
-        #expect(vm.saved?.dimensions == 1536)
+        #expect(vm.saved?.dimensions == 768)
     }
 
     @Test("discardChanges resets drafts to saved snapshot")
@@ -83,7 +83,7 @@ struct EmbedderViewModelTests {
         let vm = EmbedderViewModel(client: client)
         await vm.load()
         vm.modelDraft = "text-embedding-3-small"
-        vm.dimensionsDraft = 1536
+        vm.dimensionsDraft = 768
         vm.apiKeyDraft = "sk-test"
         _ = await vm.save()
 
@@ -94,7 +94,7 @@ struct EmbedderViewModelTests {
         vm.discardChanges()
 
         #expect(vm.modelDraft == "text-embedding-3-small")
-        #expect(vm.dimensionsDraft == 1536)
+        #expect(vm.dimensionsDraft == 768)
         #expect(vm.apiKeyDraft.isEmpty)
         #expect(vm.isDirty == false)
     }
@@ -143,7 +143,7 @@ struct EmbedderViewModelTests {
 
         // Second save: change something else but leave apiKeyDraft empty.
         vm.modelDraft = "text-embedding-3-large"
-        vm.dimensionsDraft = 3072
+        vm.dimensionsDraft = 768 // the server keeps one width; text-embedding-3 models take a dimensions setting
         #expect(vm.apiKeyDraft.isEmpty) // sanity
         _ = await vm.save()
         // Key should still be set on server (we sent nil).

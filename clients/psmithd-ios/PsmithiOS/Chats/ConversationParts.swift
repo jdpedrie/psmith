@@ -63,7 +63,8 @@ final class ConversationUIState {
     }
 
     func startCompress(model: ConversationViewModel) {
-        let guide = model.compactPromptDraft
+        guard model.compactFormReady else { return }
+        let guide = model.compactPromptDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         let provider = model.compactProviderID
         let mid = model.compactModelID
         model.showingCompactView = false

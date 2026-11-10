@@ -28,9 +28,7 @@ extension ConversationViewModel {
 
     /// True when the conversation pins its own model rather than following
     /// the profile's.
-    var ikPinsModel: Bool {
-        conversation.settings?.defaultModelID.map { !$0.isEmpty } ?? false
-    }
+    var ikPinsModel: Bool { pinsModel }
 }
 
 /// The ground and bar treatment every conversation-scoped page shares.

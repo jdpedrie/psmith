@@ -21,9 +21,11 @@ struct LiveProbe {
         let accounts = AccountManager(store: AccountStore(defaults: UserDefaults(suiteName: "psmith.liveprobe")!))
         let prefs = sharedAppPreferences
 
-        init(app: AppModel, size: CGSize = CGSize(width: 1280, height: 820)) {
+        /// `keyed: false` for scrolling: a window that forces isKeyWindow
+        /// drops scroll-wheel events in SwiftUI scroll views.
+        init(app: AppModel, size: CGSize = CGSize(width: 1280, height: 820), keyed: Bool = true) {
             self.app = app
-            window = KeyedWindow(
+            window = (keyed ? KeyedWindow.self : NSWindow.self).init(
                 contentRect: NSRect(origin: .zero, size: size),
                 styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
                 backing: .buffered,
@@ -119,18 +121,28 @@ struct LiveProbe {
         }
 
         func snap(_ name: String) {
-            guard let view = window.contentView?.superview ?? window.contentView else { return }
+            guard let image = render() else { return }
+            let rep = NSBitmapImageRep(cgImage: image)
+            let png = rep.representation(using: .png, properties: [:])
+            try? png?.write(to: URL(fileURLWithPath: "\(LiveProbe.shots)/mac-\(name).png"))
+        }
+
+        func render() -> CGImage? { Self.render(window) }
+
+        /// The window as drawn offscreen, title bar included.
+        static func render(_ window: NSWindow) -> CGImage? {
+            guard let view = window.contentView?.superview ?? window.contentView else { return nil }
             view.layoutSubtreeIfNeeded()
             view.displayIfNeeded()
             CATransaction.flush()
-            guard let layer = view.layer else { return }
+            guard let layer = view.layer else { return nil }
             let scale = window.backingScaleFactor
             let w = Int(view.bounds.width * scale), h = Int(view.bounds.height * scale)
             guard let ctx = CGContext(
                 data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
                 space: CGColorSpace(name: CGColorSpace.sRGB)!,
                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            ) else { return }
+            ) else { return nil }
             // Window chrome color underneath: material layers render
             // transparent here, so this is what they sit on.
             ctx.setFillColor(NSColor(sharedThemeStore.current.chrome).usingColorSpace(.sRGB)?.cgColor ?? .black)
@@ -201,10 +213,7 @@ struct LiveProbe {
                 bar.cacheDisplay(in: bar.bounds, to: rep)
                 if let cg = rep.cgImage { ctx.draw(cg, in: bar.convert(bar.bounds, to: nil)) }
             }
-            guard let image = ctx.makeImage() else { return }
-            let rep = NSBitmapImageRep(cgImage: image)
-            let png = rep.representation(using: .png, properties: [:])
-            try? png?.write(to: URL(fileURLWithPath: "\(LiveProbe.shots)/mac-\(name).png"))
+            return ctx.makeImage()
         }
     }
 

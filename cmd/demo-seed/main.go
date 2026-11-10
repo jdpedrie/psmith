@@ -49,6 +49,9 @@ That's the tour. Ask me anything else.`
 // pickResponse routes a prompt to a repro payload. The scroll-debug
 // prompts each stress a distinct client behavior:
 //
+//	"echo W …" → "Heard W loud and clear." and a few dozen more words,
+//	             one per chunk. End-to-end tests send several turns and
+//	             tell the replies apart by W.
 //	"count …"  → numbered words, one per chunk — viewport position is
 //	             readable off any screenshot frame (identical filler
 //	             text made mid-stream frames indistinguishable and
@@ -66,6 +69,14 @@ That's the tour. Ask me anything else.`
 func pickResponse(prompt string) (text string, chunkSize int, delayOverride time.Duration) {
 	p := strings.ToLower(prompt)
 	switch {
+	case strings.HasPrefix(p, "echo "):
+		word := strings.Fields(p)[1]
+		var b strings.Builder
+		fmt.Fprintf(&b, "Heard %s loud and clear.", word)
+		for i := 0; i < 6; i++ {
+			b.WriteString(" More words follow so the reply streams for a while.")
+		}
+		return b.String(), 0, -1
 	case strings.Contains(p, "count"):
 		var b strings.Builder
 		b.WriteString("Counting run for scroll tracing.\n\n")
@@ -164,6 +175,35 @@ func pickResponse(prompt string) (text string, chunkSize int, delayOverride time
 	}
 }
 
+// promptBehavior is what a prompt asks of the stream itself, apart
+// from its text: "slowstart" holds the first chunk back for `slow` (a
+// model that takes seconds to start answering), and "failnow" makes the
+// request fail outright with a 500, as a provider outage does.
+func promptBehavior(prompt string, slow time.Duration) (firstDelay time.Duration, fail bool) {
+	p := strings.ToLower(prompt)
+	if strings.Contains(p, "failnow") {
+		return 0, true
+	}
+	if strings.Contains(p, "slowstart") {
+		return slow, false
+	}
+	return 0, false
+}
+
+// fakeModelIDs are what the fake model's /v1/models lists, so a
+// provider pointed at it can discover models the way onboarding does.
+var fakeModelIDs = []string{"fake-alpha", "fake-beta"}
+
+// serveModels answers an OpenAI-compatible model listing.
+func serveModels(w http.ResponseWriter, _ *http.Request) {
+	data := make([]map[string]any, 0, len(fakeModelIDs))
+	for _, id := range fakeModelIDs {
+		data = append(data, map[string]any{"id": id, "object": "model", "owned_by": "demo-seed"})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": data})
+}
+
 // lastUserContent digs the newest user message's text out of an
 // OpenAI-compatible chat-completions request body. String content
 // only — the demo seed never sends multi-part payloads.
@@ -198,13 +238,21 @@ func main() {
 	chunkDelay := flag.Duration("chunk-delay", 20*time.Millisecond, "delay between streamed chunks (scroll-debug prompts honor this; filler streams fast regardless)")
 	xl := flag.Int("xl", 0, "also seed a long conversation with this many turns (scroll testing)")
 	heavy := flag.Int("heavy", 0, "also seed a conversation with this many ~800-word replies (real-scale scroll testing)")
+	slowStart := flag.Duration("slow-start", 4*time.Second, "how long a prompt containing \"slowstart\" waits before its first chunk")
 	llmOnly := flag.Bool("llm-only", false, "serve the fake LLM only; skip seeding (for re-serving an already-seeded environment)")
 	flag.Parse()
 
 	// --- Embedded fake OpenAI-compatible streaming endpoint ---
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/models", serveModels)
 	mux.HandleFunc("POST /v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		prompt := lastUserContent(body)
+		firstDelay, fail := promptBehavior(prompt, *slowStart)
+		if fail {
+			http.Error(w, `{"error":{"message":"the fake model was asked to fail"}}`, http.StatusInternalServerError)
+			return
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		fl, _ := w.(http.Flusher)
 		emit := func(delta string) {
@@ -219,10 +267,11 @@ func main() {
 			}
 		}
 		// Stream in small pieces so clients exercise their live path.
-		text, chunkSize, delay := pickResponse(lastUserContent(body))
+		text, chunkSize, delay := pickResponse(prompt)
 		if delay < 0 {
 			delay = *chunkDelay
 		}
+		time.Sleep(firstDelay)
 		for len(text) > 0 {
 			n := chunkSize
 			if n == 0 {

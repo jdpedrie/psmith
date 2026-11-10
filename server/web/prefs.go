@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"github.com/jdpedrie/psmith/server/auth"
 	"hash/fnv"
 	"net/http"
 	"slices"
@@ -107,4 +108,14 @@ func zoomStyle(p uiPrefs) string {
 		return ""
 	}
 	return "zoom:" + strconv.FormatFloat(float64(p.TextSize)/100, 'f', 2, 64)
+}
+
+// accountOf names the signed-in account for the page, so tabs share one
+// account event stream (events-shared.js) only with tabs of the same account.
+// Empty when signed out.
+func accountOf(ctx context.Context) string {
+	if u, ok := auth.FromContext(ctx); ok {
+		return u.ID.String()
+	}
+	return ""
 }

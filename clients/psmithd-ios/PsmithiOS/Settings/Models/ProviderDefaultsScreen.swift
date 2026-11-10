@@ -74,7 +74,7 @@ struct ProfileCallSettingsScreen: View {
         _draft = State(initialValue: draft)
     }
 
-    private var profile: PsmithProfile? { app.profiles.profiles.first { $0.id == profileID } }
+    private var profile: PsmithProfile? { app.profiles.profile(id: profileID) }
     private var saved: PsmithCallSettings { profile?.defaultSettings?.callSettings ?? PsmithCallSettings() }
 
     private var model: PsmithUserModel? {

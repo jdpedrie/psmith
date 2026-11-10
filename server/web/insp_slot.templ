@@ -72,7 +72,9 @@ templ slotCard(s slotVM) {
 						@icon("gauge")
 					</span>
 					<h2 id="card-title">
-						if s.Truncated {
+						if s.Stopped {
+							Summary stopped
+						} else if s.Truncated {
 							Summary cut short
 						} else {
 							Summary ready for review
@@ -80,7 +82,9 @@ templ slotCard(s slotVM) {
 					</h2>
 					<span class="card-meta">{ s.ModelName }</span>
 				</div>
-				if s.Truncated {
+				if s.Stopped {
+					<p class="card-lede">You stopped the summary before it finished. Edit it to finish it by hand, or discard it and compress again.</p>
+				} else if s.Truncated {
 					<p class="card-lede">The summary hit the model's output limit. Edit it, or discard it and compress again with a larger limit.</p>
 				} else {
 					<p class="card-lede">{ "Read it over. " + s.NextLabel + " starts from this summary, and " + s.CtxLabel + " stays readable." }</p>

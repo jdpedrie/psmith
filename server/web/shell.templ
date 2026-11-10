@@ -21,12 +21,15 @@ func filterLabel(l listVM) string {
 }
 
 // listTrigger keeps the list from refreshing under a row being renamed or
-// confirmed, an open menu, or a selection in progress.
-const listTrigger = "sse:conversation-changed[!document.querySelector('#list [data-hold], #list details[open]')]"
+// confirmed, an open menu, a selection in progress, or typed search
+// results. list.js runs a skipped refresh once the hold lets go.
+const listTrigger = "sse:conversation-changed[!document.querySelector('#list [data-hold], #list details[open], #command-results')]"
 
 // listColumn is the left column: brand and New, search, chips, sort, the rows
 // and the account footer. It refreshes itself when the account's
-// conversations change.
+// conversations change. Its hx- attributes are for that refresh alone: a
+// row's menu items and Show more swap one row or page, and an inherited
+// hx-select="#list" would filter their responses down to nothing.
 templ listColumn(l listVM) {
 	<aside
 		class="list"
@@ -36,6 +39,7 @@ templ listColumn(l listVM) {
 		hx-trigger={ listTrigger }
 		hx-select="#list"
 		hx-swap="outerHTML"
+		hx-disinherit="*"
 		data-offline?={ l.Offline }
 		data-search?={ l.Query != "" }
 		data-select?={ l.Select }
@@ -49,7 +53,7 @@ templ listColumn(l listVM) {
 				New<kbd>C</kbd>
 			</a>
 		</div>
-		<form class="search-wrap" action="/chats" method="get" role="search">
+		<form class="search-wrap" action={ templ.SafeURL(l.basePath()) } method="get" role="search">
 			if l.Filter != "all" {
 				<input type="hidden" name="f" value={ l.Filter }/>
 			}
@@ -78,16 +82,19 @@ templ listColumn(l listVM) {
 		<div id="list-body" class="list-body" hidden?={ l.Command != nil }>
 			if l.Query != "" {
 				@searchBody(l)
-			} else if l.Empty {
+			} else if l.LoadError == "" && l.bare() {
 				@chips(l)
 				<nav class="rows" id="rows" aria-label="Conversations">
-					<div class="empty">
-						<span class="empty-icon">
-							@listIcon("bubble")
-						</span>
-						<div class="empty-title">No conversations yet</div>
-						<div class="empty-sub">Everything you start shows up here.</div>
-					</div>
+					if l.Empty {
+						@emptyState("bubble", "No conversations yet", "Everything you start shows up here.")
+					} else {
+						@emptyState("bubble", "No active conversations", "Archived ones stay out of the list. Start something new, or open the archive.") {
+							<a class="empty-btn" href={ templ.SafeURL(l.basePath() + withFilter(listVM{Sort: l.Sort}, "archived")) }>
+								@listIcon("archive13")
+								Archived<span class="n">{ l.archivedLabel() }</span>
+							</a>
+						}
+					}
 				</nav>
 			} else if l.Select {
 				@chips(l)
@@ -100,7 +107,7 @@ templ listColumn(l listVM) {
 				</nav>
 			} else {
 				@chips(l)
-				<form class="list-meta" action="/chats" method="get">
+				<form class="list-meta" action={ templ.SafeURL(l.basePath()) } method="get">
 					<span>{ filterLabel(l) }</span>
 					if l.Filter != "all" {
 						<input type="hidden" name="f" value={ l.Filter }/>
@@ -112,7 +119,20 @@ templ listColumn(l listVM) {
 					<a hidden href={ templ.SafeURL(l.selectHref()) } data-key="x">Select conversations</a>
 				</form>
 				<nav class="rows" id="rows" aria-label={ rowsLabel(l) }>
-					@listRows(l)
+					if l.LoadError != "" {
+						@loadError(l)
+					} else if len(l.Rows) == 0 && l.Filter == "archived" {
+						@emptyState("archive28", "Nothing archived", "Archived conversations show up here.")
+					} else if len(l.Rows) == 0 {
+						@emptyState("bubble", "Nothing in "+filterLabel(l), "Conversations you start with this profile show up here.") {
+							<a class="empty-btn" href={ templ.SafeURL("/new?profile=" + url.QueryEscape(l.Filter)) }>
+								@listIcon("plus13")
+								New conversation
+							</a>
+						}
+					} else {
+						@listRows(l)
+					}
 				</nav>
 			}
 		</div>
@@ -142,6 +162,17 @@ func (l listVM) selectHref() string {
 	return "/chats" + l.query(url.Values{"select": {"1"}})
 }
 
+// selectedHref is select mode with the current ticks kept.
+func (l listVM) selectedHref() string {
+	ids := make([]string, 0, len(l.Selected))
+	for _, r := range l.Rows {
+		if l.Selected[r.ID] {
+			ids = append(ids, r.ID)
+		}
+	}
+	return "/chats" + l.query(url.Values{"select": {"1"}, "id": ids})
+}
+
 func rowsLabel(l listVM) string {
 	if l.Filter == "archived" {
 		return "Archived conversations"
@@ -163,7 +194,7 @@ func resultsLabel(n int) string {
 templ chips(l listVM) {
 	<div class="chips">
 		for _, c := range l.Chips {
-			if !l.Empty || c.Color == 0 {
+			if !l.bare() || c.Color == 0 {
 				<a class={ "chip", templ.KV("prof", c.Color > 0) } href={ templ.SafeURL(c.Href) } aria-pressed={ strconv.FormatBool(c.On) }>
 					if c.Color > 0 {
 						<span class={ "dot", pc(c.Color) }></span>
@@ -183,6 +214,35 @@ templ offlineBanner(l listVM) {
 	</div>
 }
 
+// emptyState stands in for rows: an icon, what's missing, and children for
+// the way out.
+templ emptyState(icon, title, sub string) {
+	<div class="empty">
+		<span class="empty-icon">
+			@listIcon(icon)
+		</span>
+		<div class="empty-title">{ title }</div>
+		<div class="empty-sub">{ sub }</div>
+		{ children... }
+	</div>
+}
+
+// loadError is a failed ListConversations in place of rows (board
+// ListLoadError). Try again reloads the page the list sits on.
+templ loadError(l listVM) {
+	<div class="empty load-error" role="alert">
+		<span class="empty-icon">
+			@listIcon("alert28")
+		</span>
+		<div class="empty-title">Couldn’t load conversations</div>
+		<div class="empty-sub">{ l.LoadError }</div>
+		<a class="empty-btn" href={ templ.SafeURL(l.pageHref()) }>
+			@listIcon("retry13")
+			Try again
+		</a>
+	</div>
+}
+
 templ searchBody(l listVM) {
 	<div class="list-meta search-meta">
 		<span role="status">{ resultsLabel(len(l.Rows)) }</span>
@@ -195,7 +255,9 @@ templ searchBody(l listVM) {
 		for _, r := range l.Rows {
 			@rowItem(l, r)
 		}
-		if len(l.Rows) == 0 {
+		if l.LoadError != "" {
+			@loadError(l)
+		} else if len(l.Rows) == 0 {
 			<p class="no-match">{ "No titles match “" + l.Query + "”." }</p>
 		}
 		<div class="keyhints">
@@ -225,7 +287,7 @@ templ listRows(l listVM) {
 	if l.NextToken != "" {
 		<button
 			class="btn h28 ghost more-rows"
-			hx-get={ "/partials/list/rows" + l.query(url.Values{"token": {l.NextToken}, "active": {l.ActiveID}}) }
+			hx-get={ "/partials/list/rows" + l.query(url.Values{"token": {l.NextToken}, "active": {l.ActiveID}, "g": {lastGroup(l.Rows)}}) }
 			hx-swap="outerHTML"
 		>Show more</button>
 	}
@@ -239,7 +301,7 @@ templ rowItem(l listVM, r rowVM) {
 		@confirmRow(l, r)
 	} else {
 		<div class={ "ritem", templ.KV("hover", l.HoverID == r.ID || l.MenuID == r.ID) } data-row={ r.ID }>
-			<a class="row" href={ templ.SafeURL(l.convHref(r.ID)) } data-id={ r.ID } if r.Active { aria-current="true" }>
+			<a class="row" href={ templ.SafeURL(l.convHref(r.ID)) } data-id={ r.ID } data-live?={ r.Live } data-at={ strconv.FormatInt(r.Activity, 10) } if r.Active { aria-current="true" }>
 				<span class={ "dot", pc(r.Color) }></span>
 				<span class="row-body">
 					<span class="row-top">
@@ -270,6 +332,16 @@ templ rowItem(l listVM, r rowVM) {
 				<form class="inline" method="post" action={ templ.SafeURL("/c/" + r.ID + "/unarchive") }>
 					<button class="unarch" type="submit">Unarchive</button>
 				</form>
+				<a
+					class="rdel"
+					href={ templ.SafeURL(l.stateHref(confirmKey, r.ID)) }
+					hx-get={ rowPartial(l, r.ID, "confirm") }
+					hx-target="closest .ritem"
+					hx-swap="outerHTML"
+					aria-label={ "Delete " + r.Title }
+				>
+					@listIcon("trash14")
+				</a>
 			} else {
 				@rowMenu(l, r)
 			}
@@ -302,7 +374,7 @@ templ rowMenu(l listVM, r rowVM) {
 			<a
 				role="menuitem"
 				class={ templ.KV("hi", l.MenuID == r.ID) }
-				href={ templ.SafeURL(l.stateHref("rename", r.ID)) }
+				href={ templ.SafeURL(l.stateHref(renameKey, r.ID)) }
 				hx-get={ rowPartial(l, r.ID, "rename") }
 				hx-target="closest .ritem"
 				hx-swap="outerHTML"
@@ -335,7 +407,7 @@ templ rowMenu(l listVM, r rowVM) {
 			<a
 				role="menuitem"
 				class="danger"
-				href={ templ.SafeURL(l.stateHref("confirm", r.ID)) }
+				href={ templ.SafeURL(l.stateHref(confirmKey, r.ID)) }
 				hx-get={ rowPartial(l, r.ID, "confirm") }
 				hx-target="closest .ritem"
 				hx-swap="outerHTML"
@@ -402,7 +474,11 @@ templ confirmRow(l listVM, r rowVM) {
 	<div class="ritem confirm" role="group" aria-label="Confirm delete" data-hold>
 		<div class="confirm-text">
 			<div class="confirm-title">{ "Delete “" + r.Title + "”?" }</div>
-			<div class="confirm-sub">Every message and context goes with it. Archive keeps it out of the list instead.</div>
+			if r.Archived {
+				<div class="confirm-sub">Every message and context goes with it. This can’t be undone.</div>
+			} else {
+				<div class="confirm-sub">Every message and context goes with it. Archive keeps it out of the list instead.</div>
+			}
 		</div>
 		<div class="confirm-btns">
 			<a class="btn h28 cancel" href={ templ.SafeURL(l.pageHref()) } hx-get={ rowPartial(l, r.ID, "") } hx-target="closest .ritem" hx-swap="outerHTML">Cancel</a>
@@ -446,7 +522,7 @@ templ selectBar(l listVM) {
 		<input type="hidden" name="back" value={ l.listHref() }/>
 		if l.ConfirmBulk {
 			<span class="selbar-q">{ "Delete " + strconv.Itoa(len(l.Selected)) + "?" }</span>
-			<a class="btn h34 ghost" href={ templ.SafeURL(l.selectHref()) }>Cancel</a>
+			<a class="btn h34 ghost" href={ templ.SafeURL(l.selectedHref()) }>Cancel</a>
 			<button class="btn h34 destructive" type="submit" name="action" value="delete">Delete</button>
 		} else {
 			<button class="btn h34" type="submit" name="action" value="archive">Archive</button>

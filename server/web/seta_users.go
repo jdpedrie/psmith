@@ -25,7 +25,11 @@ func saRequireAdmin(next http.HandlerFunc) http.HandlerFunc {
 
 func (h *Handler) handleUsers(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	h.renderUsers(w, r, http.StatusOK, usersState{New: q.Get("new") != "", Reset: q.Get("reset"), Confirm: q.Get("delete")}, nil)
+	var res *testVM
+	if q.Get("pwset") != "" {
+		res = &testVM{OK: true, Message: "Password set. Tell them the new one yourself; nothing is emailed."}
+	}
+	h.renderUsers(w, r, http.StatusOK, usersState{New: q.Get("new") != "", Reset: q.Get("reset"), Confirm: q.Get("delete")}, res)
 }
 
 type usersState struct {
@@ -104,7 +108,7 @@ func (h *Handler) handleUserPassword(w http.ResponseWriter, r *http.Request) {
 		h.renderUsers(w, r, http.StatusUnprocessableEntity, usersState{Reset: uid}, &testVM{Message: saErrMsg(err)})
 		return
 	}
-	h.renderUsers(w, r, http.StatusOK, usersState{}, &testVM{OK: true, Message: "Password set. Tell them the new one yourself; nothing is emailed."})
+	http.Redirect(w, r, "/settings/users?pwset=1", http.StatusSeeOther)
 }
 
 func (h *Handler) handleUserDelete(w http.ResponseWriter, r *http.Request) {

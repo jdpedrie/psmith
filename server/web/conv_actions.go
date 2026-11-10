@@ -19,16 +19,19 @@ import (
 
 // Row states a message can be drawn in. Each is reachable as a page URL
 // (?m=<id>&s=<state>) without script and as a row fragment with it.
-var rowStates = map[string]bool{"edit": true, "delete": true, "menu": true, "regen": true}
+var rowStates = map[string]bool{"edit": true, "delete": true, "deletefrom": true, "menu": true, "regen": true}
 
 // applyPageState sets what the page URL asks for: a row in a state, the
 // context-start strip open, the header renaming, a composer draft.
 func (h *Handler) applyPageState(ctx context.Context, r *http.Request, c *convVM) {
 	q := r.URL.Query()
-	c.Rename = q.Get("rename") != ""
+	// "1" is the header's own; the inspector's contexts tab names a context id here.
+	c.Rename = q.Get("rename") == "1"
 	if d := q.Get("draft"); d != "" {
 		c.Draft = d
+		c.SendFailed = q.Get("failed") != ""
 	}
+	c.ActionError = q.Get("error")
 	mid, state := q.Get("m"), q.Get("s")
 	for i := range c.Items {
 		it := &c.Items[i]
@@ -53,9 +56,25 @@ func (h *Handler) setRowState(ctx context.Context, c convVM, it *msgItem, state 
 		return
 	}
 	it.State = state
+	it.HasAfter = hasLaterMessage(c.Items, it.ID)
 	if state == "regen" {
 		it.Regen = h.modelPicker(ctx, c.ID, it.ModelValue, capsVM{}, c.Harness).Groups
 	}
+}
+
+// hasLaterMessage reports whether a user or assistant message follows id
+// in the transcript.
+func hasLaterMessage(items []msgItem, id string) bool {
+	seen := false
+	for _, it := range items {
+		if seen && (it.Role == "user" || it.Role == "assistant") {
+			return true
+		}
+		if it.ID == id {
+			seen = true
+		}
+	}
+	return false
 }
 
 func (h *Handler) messageText(ctx context.Context, id string) string {
@@ -76,6 +95,14 @@ func backToConv(w http.ResponseWriter, r *http.Request, convID, query string) {
 		u += "?" + query
 	}
 	http.Redirect(w, r, u, http.StatusSeeOther)
+}
+
+// failBack answers a transcript action that the server refused: back to the
+// conversation, with the reason in the transcript's alert line. htmx drops
+// an error response without a swap, so an http.Error here left the page
+// looking as if nothing had been clicked.
+func failBack(w http.ResponseWriter, r *http.Request, convID string, err error) {
+	backToConv(w, r, convID, "error="+url.QueryEscape(friendlyError(err)))
 }
 
 // handleMessageRow draws one transcript row in the state ?s= names. It is
@@ -118,7 +145,7 @@ func (h *Handler) handleHead(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "conversation not found", http.StatusNotFound)
 		return
 	}
-	c.Rename = r.URL.Query().Get("rename") != ""
+	c.Rename = r.URL.Query().Get("rename") == "1"
 	h.render(w, r, http.StatusOK, convHead(c))
 }
 
@@ -128,7 +155,7 @@ func (h *Handler) handleRename(w http.ResponseWriter, r *http.Request) {
 	title := strings.TrimSpace(r.PostFormValue("title"))
 	if title != "" {
 		if _, err := h.convos.UpdateConversation(r.Context(), connect.NewRequest(&psmithv1.UpdateConversationRequest{Id: convID, Title: &title})); err != nil {
-			http.Error(w, friendlyError(err), http.StatusBadRequest)
+			h.renameFailed(w, r, convID, title, err)
 			return
 		}
 	}
@@ -140,12 +167,33 @@ func (h *Handler) handleRename(w http.ResponseWriter, r *http.Request) {
 	h.handleHead(w, r)
 }
 
+// renameFailed keeps the rename form open with what was typed and the
+// reason in the hint's place. An error status is dropped by htmx, so the
+// form used to sit there as if Save hadn't been pressed.
+func (h *Handler) renameFailed(w http.ResponseWriter, r *http.Request, convID, typed string, err error) {
+	if !enhanced(r) {
+		backToConv(w, r, convID, "rename=1&error="+url.QueryEscape(friendlyError(err)))
+		return
+	}
+	c, lerr := h.loadConversation(r.Context(), r, convID)
+	if lerr != nil {
+		http.Error(w, "conversation not found", http.StatusNotFound)
+		return
+	}
+	c.Rename = true
+	if typed != "" {
+		c.Title = typed
+	}
+	c.RenameError = friendlyError(err)
+	h.render(w, r, http.StatusOK, convHead(c))
+}
+
 // handleGenerateTitle asks the profile's title model for a title, which the
 // server stores, and reopens the rename form with it so it can be adjusted.
 func (h *Handler) handleGenerateTitle(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
 	if _, err := h.convos.GenerateConversationTitle(r.Context(), connect.NewRequest(&psmithv1.GenerateConversationTitleRequest{Id: convID})); err != nil {
-		http.Error(w, friendlyError(err), http.StatusBadGateway)
+		h.renameFailed(w, r, convID, strings.TrimSpace(r.PostFormValue("title")), err)
 		return
 	}
 	if !enhanced(r) {
@@ -221,7 +269,7 @@ func (h *Handler) handleBranch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.convos.SetCurrentLeaf(r.Context(), connect.NewRequest(&psmithv1.SetCurrentLeafRequest{ContextId: ctxID, MessageId: newestLeaf(tree, mid)})); err != nil {
-		http.Error(w, friendlyError(err), http.StatusBadRequest)
+		failBack(w, r, convID, err)
 		return
 	}
 	backToConv(w, r, convID, "")
@@ -251,15 +299,16 @@ func (h *Handler) handleContinue(w http.ResponseWriter, r *http.Request) {
 		ConversationId: convID, ParentMessageId: &parent, ContinueDiscussion: true,
 	}))
 	if err != nil {
-		http.Error(w, friendlyError(err), http.StatusConflict)
+		failBack(w, r, convID, err)
 		return
 	}
 	backToConv(w, r, convID, "run="+resp.Msg.GetStreamRun().GetId())
 }
 
-// handleChoice acts on a choice_list button. send: sends the choice as the
-// next turn; compose: opens the page with it in the composer (the script
-// fills the composer in place instead).
+// handleChoice acts on a choice or card button in a reply. send: sends the
+// choice as the next turn; compose: opens the page with it in the composer
+// (the script fills the composer in place instead); plugin: sends the action
+// to the plugin that drew the fragment.
 func (h *Handler) handleChoice(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
 	_ = r.ParseForm()
@@ -273,12 +322,29 @@ func (h *Handler) handleChoice(w http.ResponseWriter, r *http.Request) {
 	case "send":
 		resp, err := h.convos.SendMessage(r.Context(), connect.NewRequest(&psmithv1.SendMessageRequest{ConversationId: convID, Content: payload}))
 		if err != nil {
-			http.Error(w, friendlyError(err), http.StatusBadRequest)
+			failBack(w, r, convID, err)
 			return
 		}
 		backToConv(w, r, convID, "run="+resp.Msg.GetStreamRun().GetId())
 	case "compose":
 		backToConv(w, r, convID, "draft="+url.QueryEscape(payload))
+	case "plugin":
+		// A plugin's own control inside a reply: the fragment names the
+		// plugin, and the transcript reloads to show what it changed.
+		action, query, _ := strings.Cut(payload, "?")
+		params := map[string]string{}
+		if vs, err := url.ParseQuery(query); err == nil {
+			for k := range vs {
+				params[k] = vs.Get(k)
+			}
+		}
+		if _, err := h.convos.InvokePluginAction(r.Context(), connect.NewRequest(&psmithv1.InvokePluginActionRequest{
+			ConversationId: convID, PluginName: r.PostFormValue("plugin"), Action: action, Params: params,
+		})); err != nil {
+			failBack(w, r, convID, err)
+			return
+		}
+		backToConv(w, r, convID, "")
 	default:
 		http.Error(w, "unsupported choice action", http.StatusBadRequest)
 	}

@@ -65,6 +65,14 @@ public final class ModelProvidersRepository: Sendable {
     /// `timeout` bounds the call for launch-path probes; nil leaves the
     /// transport's own unary timeout in charge.
     public func get(id: String, timeout: TimeInterval? = nil) async throws -> (PsmithUserModelProvider, [PsmithUserModel]) {
+        let detail = try await getDetail(id: id, timeout: timeout)
+        return (detail.provider, detail.enabled)
+    }
+
+    /// `get`, plus the provider's hand-added models that are turned off.
+    /// Those keep their metadata on the server so the settings screens can
+    /// list them and turn them back on; nothing else should offer them.
+    public func getDetail(id: String, timeout: TimeInterval? = nil) async throws -> (provider: PsmithUserModelProvider, enabled: [PsmithUserModel], disabled: [PsmithUserModel]) {
         var req = Psmith_V1_GetUserModelProviderRequest()
         req.id = id
         let resp: ResponseMessage<Psmith_V1_GetUserModelProviderResponse>
@@ -76,7 +84,11 @@ public final class ModelProvidersRepository: Sendable {
             resp = await client.getUserModelProvider(request: req, headers: [:])
         }
         guard let msg = resp.message else { throw resp.error.map(PsmithError.from) ?? .missingPayload("get provider") }
-        return (PsmithUserModelProvider(from: msg.provider), msg.enabledModels.map(PsmithUserModel.init(from:)))
+        return (
+            PsmithUserModelProvider(from: msg.provider),
+            msg.enabledModels.map(PsmithUserModel.init(from:)),
+            msg.disabledModels.map(PsmithUserModel.init(from:))
+        )
     }
 
     public func create(type: String, label: String, config: Data) async throws -> PsmithUserModelProvider {
@@ -123,10 +135,14 @@ public final class ModelProvidersRepository: Sendable {
         return msg.enabled.map(PsmithUserModel.init(from:))
     }
 
-    public func disableModels(providerID: String, modelIDs: [String]) async throws {
+    /// Turns models off. The server deletes discovered rows and keeps a
+    /// hand-added one turned off (its metadata exists nowhere else);
+    /// `deleteManual` deletes those too.
+    public func disableModels(providerID: String, modelIDs: [String], deleteManual: Bool = false) async throws {
         var req = Psmith_V1_DisableModelsRequest()
         req.userModelProviderID = providerID
         req.modelIds = modelIDs
+        req.deleteManual = deleteManual
         let resp = await client.disableModels(request: req, headers: [:])
         if resp.message == nil, let err = resp.error { throw PsmithError.from(err) }
     }

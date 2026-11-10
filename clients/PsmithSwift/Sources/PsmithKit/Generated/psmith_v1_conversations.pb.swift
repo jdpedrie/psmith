@@ -1111,6 +1111,13 @@ public nonisolated struct Psmith_V1_SendMessageRequest: Sendable {
   /// same moment cannot produce two speakers on one turn.
   public var continueDiscussion: Bool = false
 
+  /// fork_at_root starts the new user message as another root of the active
+  /// context, a sibling of its first message. An unset parent_message_id
+  /// means "continue from the leaf", so a fork of a context's first message
+  /// can't be said with the parent alone. parent_message_id must be unset,
+  /// and regenerate and continue_discussion can't be combined with it.
+  public var forkAtRoot: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2981,7 +2988,7 @@ nonisolated extension Psmith_V1_CreateContextManualResponse: SwiftProtobuf.Messa
 
 nonisolated extension Psmith_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SendMessageRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}parent_message_id\0\u{1}content\0\u{3}provider_id\0\u{3}model_id\0\u{3}call_settings\0\u{1}regenerate\0\u{3}attachment_file_ids\0\u{3}device_facts\0\u{3}continue_discussion\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}parent_message_id\0\u{1}content\0\u{3}provider_id\0\u{3}model_id\0\u{3}call_settings\0\u{1}regenerate\0\u{3}attachment_file_ids\0\u{3}device_facts\0\u{3}continue_discussion\0\u{3}fork_at_root\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2999,6 +3006,7 @@ nonisolated extension Psmith_V1_SendMessageRequest: SwiftProtobuf.Message, Swift
       case 8: try { try decoder.decodeRepeatedStringField(value: &self.attachmentFileIds) }()
       case 9: try { try decoder.decodeRepeatedMessageField(value: &self.deviceFacts) }()
       case 10: try { try decoder.decodeSingularBoolField(value: &self.continueDiscussion) }()
+      case 11: try { try decoder.decodeSingularBoolField(value: &self.forkAtRoot) }()
       default: break
       }
     }
@@ -3039,6 +3047,9 @@ nonisolated extension Psmith_V1_SendMessageRequest: SwiftProtobuf.Message, Swift
     if self.continueDiscussion != false {
       try visitor.visitSingularBoolField(value: self.continueDiscussion, fieldNumber: 10)
     }
+    if self.forkAtRoot != false {
+      try visitor.visitSingularBoolField(value: self.forkAtRoot, fieldNumber: 11)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3053,6 +3064,7 @@ nonisolated extension Psmith_V1_SendMessageRequest: SwiftProtobuf.Message, Swift
     if lhs.attachmentFileIds != rhs.attachmentFileIds {return false}
     if lhs.deviceFacts != rhs.deviceFacts {return false}
     if lhs.continueDiscussion != rhs.continueDiscussion {return false}
+    if lhs.forkAtRoot != rhs.forkAtRoot {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

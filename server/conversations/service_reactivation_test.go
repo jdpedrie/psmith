@@ -263,8 +263,9 @@ func TestReactivation_AcrossCompression(t *testing.T) {
 		t.Fatalf("post-promote active=%s want B=%s", active.ID, contextB)
 	}
 
-	// Reactivate A. The summary row is still there, so the next SendMessage
-	// on A is rejected with FailedPrecondition.
+	// Reactivate A. Its summary already started B, so it isn't pending: A
+	// takes sends straight away, and the summary stays as the record of
+	// how B began.
 	if _, err := svc.ActivateContext(ctxAsUser(f.user), connect.NewRequest(&psmithv1.ActivateContextRequest{
 		ContextId: contextA.String(),
 	})); err != nil {
@@ -272,30 +273,20 @@ func TestReactivation_AcrossCompression(t *testing.T) {
 	}
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	_, err = svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
-		ConversationId: f.conv.ID.String(),
-		Content:        "back in A (blocked)",
-		ProviderId:     &pid, ModelId: &mid,
+
+	// The same summary can't start a second context.
+	_, err = svc.PromoteCompactionToNewContext(ctxAsUser(f.user), connect.NewRequest(&psmithv1.PromoteCompactionToNewContextRequest{
+		MessageId: summaryID.String(),
 	}))
 	assertCode(t, err, connect.CodeFailedPrecondition)
 
-	// Delete the summary to clear the gate. Use cascade=true since some
-	// children of the (compaction-time) parent may also need to go; here
-	// the summary is a leaf so this is just a single delete.
-	if _, err := svc.DeleteMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.DeleteMessageRequest{
-		Id: summaryID.String(),
-	})); err != nil {
-		t.Fatalf("DeleteMessage(summary): %v", err)
-	}
-
-	// Now SendMessage on A succeeds.
 	sresp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "back in A",
 		ProviderId:     &pid, ModelId: &mid,
 	}))
 	if err != nil {
-		t.Fatalf("SendMessage post-delete-summary: %v", err)
+		t.Fatalf("SendMessage after reactivating A: %v", err)
 	}
 	if sresp.Msg.UserMessage.ContextId != contextA.String() {
 		t.Errorf("post-reactivation user msg landed in context=%s want A=%s",

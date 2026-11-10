@@ -6,6 +6,8 @@ import "net/http"
 func (h *Handler) mountInspector(mux *http.ServeMux) {
 	mux.HandleFunc("POST /c/{id}/elicit/{eid}", h.requireUser(h.handleElicitRespond))
 
+	mux.HandleFunc("GET /c/{id}/partials/inspector", h.requireUser(h.handleInspectorPartial))
+
 	mux.HandleFunc("GET /c/{id}/model", h.requireUser(h.handleModelPicker))
 	mux.HandleFunc("POST /c/{id}/model", h.requireUser(h.handleSetModel))
 

@@ -411,7 +411,11 @@ struct AssistantReply: View {
                 if isSelecting {
                     SelectableMessageText(text: message.displayContent ?? message.content)
                 } else if !message.uiFragments.isEmpty {
-                    FragmentView(fragments: message.uiFragments, onAction: handleFragment)
+                    FragmentView(fragments: message.uiFragments, onAction: handleFragment, onPluginAction: { plugin, action, params in
+                    // The transcript reloads to show the effect; a failure
+                    // leaves it as it was, which is what the user sees.
+                    Task { try? await model.invokeFragmentAction(plugin: plugin, action: action, params: params) }
+                })
                 } else if message.isWelcome && !model.welcomePlayed.contains(message.id) {
                     WelcomeReveal(text: message.displayContent ?? message.content) {
                         model.welcomePlayed.insert(message.id)
@@ -972,7 +976,7 @@ struct MessageEditCard: View {
         model.editingMessage = nil
         Task {
             if msg.role == .user {
-                await model.sendForking(content: text, parentMessageID: msg.parentID)
+                await model.resendBeside(msg, content: text)
             } else {
                 await model.editMessage(id: msg.id, content: text, role: nil)
                 await model.regenerateAssistant(parentMessageID: msg.id)

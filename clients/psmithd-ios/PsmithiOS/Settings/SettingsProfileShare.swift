@@ -15,7 +15,7 @@ struct SettingsProfileShare: View {
 
     var body: some View {
         let profiles = app.profiles
-        if let profile = profiles.profiles.first(where: { $0.id == profileID }) {
+        if let profile = profiles.profile(id: profileID) {
             SettingsProfileShareScreen(
                 profile: profile,
                 export: profiles.pendingExport,
@@ -33,7 +33,7 @@ struct SettingsProfileShare: View {
                     Task {
                         profiles.selectedID = profile.id
                         await profiles.deleteSelected()
-                        if !profiles.profiles.contains(where: { $0.id == profile.id }) { dismiss() }
+                        if profiles.profile(id: profile.id) == nil { dismiss() }
                     }
                 }
             )
@@ -144,7 +144,7 @@ struct SettingsProfileShareScreen: View {
             IKSHead("Delete")
             if confirmingDelete && !hasChildren {
                 IKConfirmCard(question: "Delete \(profile.name)?",
-                              detail: "Conversations that use it can’t send until you pick another profile for them.",
+                              detail: "This can’t be undone. Its prompt, models and plugins go with it.",
                               onCancel: { confirmingDelete = false },
                               onConfirm: {
                                   confirmingDelete = false
@@ -157,7 +157,7 @@ struct SettingsProfileShareScreen: View {
                         .disabled(hasChildren)
                 }
             }
-            IKSFooter("A profile with child profiles can’t be deleted. Delete its children first.")
+            IKSFooter("A profile that conversations or child profiles use can’t be deleted.")
         }
     }
 

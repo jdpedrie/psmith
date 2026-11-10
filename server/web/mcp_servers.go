@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -67,9 +68,9 @@ func secretNote(vm mcpServerVM) string {
 	return "The environment is write-only. To change it, edit the server and type it again."
 }
 
-func secretPlaceholder(set bool) string {
+func secretPlaceholder(set bool, placeholder string) string {
 	if set {
-		return "Stored. Leave empty to keep it."
+		return placeholder
 	}
 	return ""
 }
@@ -160,16 +161,6 @@ func (h *Handler) listMCPServers(ctx context.Context) ([]*psmithv1.MCPServer, er
 	return resp.Msg.GetServers(), nil
 }
 
-func failing(tests map[string]mcpTest) int {
-	n := 0
-	for _, t := range tests {
-		if !t.OK {
-			n++
-		}
-	}
-	return n
-}
-
 // --- list ---
 
 type mcpRowVM struct {
@@ -194,7 +185,6 @@ func (h *Handler) handleMCPServers(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, mcpRowVM{ID: s.GetId(), Name: s.GetName(), Summary: mcpServerSummary(mcpServerVMFromProto(s)), Error: t.Err, Tools: len(t.Tools), OK: t.OK})
 	}
 	n := h.loadSnav(r.Context(), r, "servers")
-	n.ServersBad = failing(tests)
 	h.render(w, r, http.StatusOK, mcpServersScreen(n, rows))
 }
 
@@ -244,15 +234,15 @@ func (h *Handler) handleMCPServerDetail(w http.ResponseWriter, r *http.Request) 
 	}
 	t := h.testMCPServer(r.Context(), s.GetId())
 	vm.Tools = t.Tools
-	if t.OK {
+	switch {
+	case r.URL.Query().Get("error") != "":
+		vm.Status = &testVM{Message: r.URL.Query().Get("error")}
+	case t.OK:
 		vm.Status = &testVM{OK: true, Message: "Connected and listed " + sbPlural(len(t.Tools), "tool") + ", just now"}
-	} else {
-		vm.Status = &testVM{Message: t.Err}
+	default:
+		vm.Status = connectFailed(t.Err)
 	}
 	n := h.loadSnav(r.Context(), r, "servers")
-	if !t.OK {
-		n.ServersBad = 1
-	}
 	h.render(w, r, http.StatusOK, mcpDetailScreen(n, vm))
 }
 
@@ -268,7 +258,24 @@ func sbPlural(n int, word string) string {
 type mcpFormVM struct {
 	Server  mcpServerVM
 	Headers string // typed but not saved, shown again after a failed save
-	Error   string
+	Env     string
+	// ClearHeaders and ClearEnv: Clear was pressed on the stored value.
+	ClearHeaders bool
+	ClearEnv     bool
+	Error        string
+}
+
+// secretUpdate is a write-only field's update: nil keeps what is stored,
+// "" clears it, anything typed replaces it.
+func secretUpdate(typed string, clear bool) *string {
+	if strings.TrimSpace(typed) != "" {
+		return &typed
+	}
+	if clear {
+		empty := ""
+		return &empty
+	}
+	return nil
 }
 
 func (h *Handler) handleMCPServerNew(w http.ResponseWriter, r *http.Request) {
@@ -300,34 +307,49 @@ func (h *Handler) handleMCPServerSave(w http.ResponseWriter, r *http.Request) {
 	if req.Transport == "inproc" {
 		req.Command = strings.TrimSpace(r.PostFormValue("inproc_server"))
 	}
-	// The form never shows stored secrets, so blank leaves them alone.
-	if v := r.PostFormValue("env"); strings.TrimSpace(v) != "" {
-		req.Env = &v
-	}
-	if v := r.PostFormValue("headers"); strings.TrimSpace(v) != "" {
-		req.Headers = &v
-	}
+	// The form never shows stored secrets, so blank leaves them alone and
+	// Clear sends an empty value, which the service takes as "remove".
+	// Something typed replaces what is stored either way.
+	req.Env = secretUpdate(r.PostFormValue("env"), r.PostFormValue("clear_env") == "true")
+	req.Headers = secretUpdate(r.PostFormValue("headers"), r.PostFormValue("clear_headers") == "true")
 	resp, err := h.profiles.UpsertMCPServer(r.Context(), connect.NewRequest(req))
 	if err != nil {
-		vm := mcpFormVM{Error: errMessage(err), Headers: r.PostFormValue("headers"), Server: mcpServerVM{
-			ID: req.Id, Name: req.Name, Transport: req.Transport,
-			Command: req.Command, Args: req.Args, URL: req.Url, ToolPrefix: req.ToolPrefix,
-		}}
-		h.render(w, r, http.StatusBadRequest, mcpFormScreen(h.loadSnav(r.Context(), r, "servers"), vm))
+		vm := mcpFormVM{Error: errMessage(err), Headers: r.PostFormValue("headers"), Env: r.PostFormValue("env"),
+			ClearHeaders: r.PostFormValue("clear_headers") == "true", ClearEnv: r.PostFormValue("clear_env") == "true", Server: mcpServerVM{
+				ID: req.Id, Name: req.Name, Transport: req.Transport,
+				Command: req.Command, Args: req.Args, URL: req.Url, ToolPrefix: req.ToolPrefix,
+			}}
+		if req.Id != "" {
+			// What is stored still is, so the secret fields keep saying so.
+			if servers, lerr := h.listMCPServers(r.Context()); lerr == nil {
+				for _, s := range servers {
+					if s.GetId() == req.Id {
+						vm.Server.HasEnv, vm.Server.HasHeaders = s.GetHasEnv(), s.GetHasHeaders()
+					}
+				}
+			}
+		}
+		at := "/settings/mcp-servers/new"
+		if req.Id != "" {
+			at = "/settings/mcp-servers/" + req.Id + "/edit"
+		}
+		h.showAfterPost(w, r, at, mcpFormScreen(h.loadSnav(r.Context(), r, "servers"), vm))
 		return
 	}
 	// The detail page tests on load, which is the "and test" in the button.
 	http.Redirect(w, r, "/settings/mcp-servers/"+resp.Msg.GetServer().GetId(), http.StatusSeeOther)
 }
 
+// handleMCPServerTest sends the browser to the detail page, which tests the
+// server as it loads; answering the POST itself would re-test on refresh.
 func (h *Handler) handleMCPServerTest(w http.ResponseWriter, r *http.Request) {
-	h.handleMCPServerDetail(w, r)
+	http.Redirect(w, r, "/settings/mcp-servers/"+r.PathValue("id"), http.StatusSeeOther)
 }
 
 func (h *Handler) handleMCPServerDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if _, err := h.profiles.DeleteMCPServer(r.Context(), connect.NewRequest(&psmithv1.DeleteMCPServerRequest{Id: id})); err != nil {
-		http.Error(w, errMessage(err), http.StatusBadRequest)
+		http.Redirect(w, r, "/settings/mcp-servers/"+id+"?error="+url.QueryEscape(errMessage(err)), http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, "/settings/mcp-servers", http.StatusSeeOther)

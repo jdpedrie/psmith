@@ -1298,9 +1298,9 @@ func mcpFormScreen(n snavVM, vm mcpFormVM) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var62 string
-			templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.ResolveAttributeValue(secretPlaceholder(vm.Server.HasHeaders))
+			templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.ResolveAttributeValue(secretPlaceholder(vm.Server.HasHeaders, "Type new headers to replace the stored ones."))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 324, Col: 136}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 324, Col: 184}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var62)
 			if templ_7745c5c3_Err != nil {
@@ -1313,78 +1313,111 @@ func mcpFormScreen(n snavVM, vm mcpFormVM) templ.Component {
 			var templ_7745c5c3_Var63 string
 			templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.JoinStringErrs(vm.Headers)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 324, Col: 151}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 324, Col: 199}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var63))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 117, "</textarea> <span class=\"sb-hint\">KEY: VALUE per line, usually the auth header. Stored encrypted and never shown again.</span></span></div></div></section><section aria-labelledby=\"ascmd\" class=\"sb-tr-stdio\"><h3 id=\"ascmd\" class=\"sec-title\">Command</h3><div class=\"group sb-g\"><div class=\"grow sb-top\"><label for=\"ascommand\" class=\"lbl\">Command</label> <span class=\"sb-ctl\"><input id=\"ascommand\" name=\"command\" class=\"field sb-block mono\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 117, "</textarea> ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if vm.Server.HasHeaders {
+				templ_7745c5c3_Err = secretClear("clear_headers", "The stored headers clear when you save.", "Keep them", vm.ClearHeaders).Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 118, "<span class=\"sb-hint\">KEY: VALUE per line, usually the auth header. Stored encrypted and never shown again.</span></span></div></div></section><section aria-labelledby=\"ascmd\" class=\"sb-tr-stdio\"><h3 id=\"ascmd\" class=\"sec-title\">Command</h3><div class=\"group sb-g\"><div class=\"grow sb-top\"><label for=\"ascommand\" class=\"lbl\">Command</label> <span class=\"sb-ctl\"><input id=\"ascommand\" name=\"command\" class=\"field sb-block mono\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var64 string
 			templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.ResolveAttributeValue(vm.Server.Command)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 336, Col: 99}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 339, Col: 99}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var64)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 118, "\"> <span class=\"sb-hint\">An executable on the server's PATH, like npx.</span></span></div><div class=\"grow sb-top\"><label for=\"asargs\" class=\"lbl\">Arguments</label> <span class=\"sb-ctl\"><textarea id=\"asargs\" name=\"args\" class=\"sb-ta mono sb-block\" rows=\"2\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 119, "\"> <span class=\"sb-hint\">An executable on the server's PATH, like npx.</span></span></div><div class=\"grow sb-top\"><label for=\"asargs\" class=\"lbl\">Arguments</label> <span class=\"sb-ctl\"><textarea id=\"asargs\" name=\"args\" class=\"sb-ta mono sb-block\" rows=\"2\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var65 string
 			templ_7745c5c3_Var65, templ_7745c5c3_Err = templ.JoinStringErrs(vm.Server.Args)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 343, Col: 96}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 346, Col: 96}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var65))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 119, "</textarea> <span class=\"sb-hint\">One per line.</span></span></div><div class=\"grow sb-top\"><label for=\"asenv\" class=\"lbl\">Environment</label> <span class=\"sb-ctl\"><textarea id=\"asenv\" name=\"env\" class=\"sb-ta mono sb-block\" rows=\"2\" placeholder=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 120, "</textarea> <span class=\"sb-hint\">One per line.</span></span></div><div class=\"grow sb-top\"><label for=\"asenv\" class=\"lbl\">Environment</label> <span class=\"sb-ctl\"><textarea id=\"asenv\" name=\"env\" class=\"sb-ta mono sb-block\" rows=\"2\" placeholder=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var66 string
-			templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.ResolveAttributeValue(secretPlaceholder(vm.Server.HasEnv))
+			templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.ResolveAttributeValue(secretPlaceholder(vm.Server.HasEnv, "Type a new environment to replace the stored one."))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 350, Col: 127}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 353, Col: 180}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var66)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 120, "\"></textarea> <span class=\"sb-hint\">KEY=VALUE per line. Stored encrypted and never shown again.</span></span></div></div></section><section aria-labelledby=\"asinproc\" class=\"sb-tr-inproc\"><h3 id=\"asinproc\" class=\"sec-title\">In-process server</h3><div class=\"group sb-g\"><div class=\"grow sb-top\"><label for=\"asinname\" class=\"lbl\">Server</label> <span class=\"sb-ctl\"><input id=\"asinname\" name=\"inproc_server\" class=\"field sb-block mono\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 121, "\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var67 string
-			templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.ResolveAttributeValue(vm.Server.Command)
+			templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.JoinStringErrs(vm.Env)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 362, Col: 104}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 353, Col: 191}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var67)
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var67))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 121, "\"> <span class=\"sb-hint\">The name of a server compiled into psmithd.</span></span></div></div></section><section aria-labelledby=\"astools\"><h3 id=\"astools\" class=\"sec-title\">Tools</h3><div class=\"group sb-g\"><div class=\"grow sb-top\"><label for=\"asprefix\" class=\"lbl\">Tool prefix</label> <span class=\"sb-ctl\"><input id=\"asprefix\" name=\"tool_prefix\" class=\"field sb-block mono\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 122, "</textarea> ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if vm.Server.HasEnv {
+				templ_7745c5c3_Err = secretClear("clear_env", "The stored environment clears when you save.", "Keep it", vm.ClearEnv).Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 123, "<span class=\"sb-hint\">KEY=VALUE per line. Stored encrypted and never shown again.</span></span></div></div></section><section aria-labelledby=\"asinproc\" class=\"sb-tr-inproc\"><h3 id=\"asinproc\" class=\"sec-title\">In-process server</h3><div class=\"group sb-g\"><div class=\"grow sb-top\"><label for=\"asinname\" class=\"lbl\">Server</label> <span class=\"sb-ctl\"><input id=\"asinname\" name=\"inproc_server\" class=\"field sb-block mono\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var68 string
-			templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.ResolveAttributeValue(vm.Server.ToolPrefix)
+			templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.ResolveAttributeValue(vm.Server.Command)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 374, Col: 105}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 368, Col: 104}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var68)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 122, "\" placeholder=\"Optional\"> <span class=\"sb-hint\">Optional. Prepended to every tool name so two servers with the same tools don't collide. Each attachment can override it.</span></span></div></div></section></div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 124, "\"> <span class=\"sb-hint\">The name of a server compiled into psmithd.</span></span></div></div></section><section aria-labelledby=\"astools\"><h3 id=\"astools\" class=\"sec-title\">Tools</h3><div class=\"group sb-g\"><div class=\"grow sb-top\"><label for=\"asprefix\" class=\"lbl\">Tool prefix</label> <span class=\"sb-ctl\"><input id=\"asprefix\" name=\"tool_prefix\" class=\"field sb-block mono\" value=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var69 string
+			templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.ResolveAttributeValue(vm.Server.ToolPrefix)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 380, Col: 105}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var69)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 125, "\" placeholder=\"Optional\"> <span class=\"sb-hint\">Optional. Prepended to every tool name so two servers with the same tools don't collide. Each attachment can override it.</span></span></div></div></section></div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1399,13 +1432,102 @@ func mcpFormScreen(n snavVM, vm mcpFormVM) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 123, "</form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 126, "</form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
 		templ_7745c5c3_Err = settingsScreen(mcpFormHeading(vm), n).Render(templ.WithChildren(ctx, templ_7745c5c3_Var57), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// secretClear marks a stored write-only value to be removed on save. The
+// toggle is a checkbox in a button's clothes, so it posts without script
+// and the line beside it follows it in CSS.
+func secretClear(name, note, keep string, on bool) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var70 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var70 == nil {
+			templ_7745c5c3_Var70 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 127, "<span class=\"sb-secretstate\"><span class=\"sb-lock\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = sbIcon("lock").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 128, "Stored encrypted</span> <span class=\"sb-clearnote\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var71 string
+		templ_7745c5c3_Var71, templ_7745c5c3_Err = templ.JoinStringErrs(note)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 406, Col: 35}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var71))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 129, "</span> <label class=\"btn h32 sb-n sb-clearbtn\"><input class=\"sr-only\" type=\"checkbox\" name=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var72 string
+		templ_7745c5c3_Var72, templ_7745c5c3_Err = templ.ResolveAttributeValue(name)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 407, Col: 92}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var72)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 130, "\" value=\"true\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if on {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 131, " checked")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 132, "><span class=\"off\">Clear</span><span class=\"on\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var73 string
+		templ_7745c5c3_Var73, templ_7745c5c3_Err = templ.JoinStringErrs(keep)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/setb_tools.templ`, Line: 407, Col: 178}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var73))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 133, "</span></label></span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

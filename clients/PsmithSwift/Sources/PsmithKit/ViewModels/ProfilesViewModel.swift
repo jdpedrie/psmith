@@ -109,6 +109,53 @@ public final class ProfilesViewModel {
         }
     }
 
+    /// Profiles fetched by id because they sit past the loaded pages:
+    /// a profile opened from a conversation, or the parent of one that
+    /// was. Kept apart from `profiles` so the list still pages in order.
+    public private(set) var fetched: [String: PsmithProfile] = [:]
+
+    /// The profile with this id, from the loaded pages or a fetch.
+    public func profile(id: String?) -> PsmithProfile? {
+        guard let id else { return nil }
+        return profiles.first { $0.id == id } ?? fetched[id]
+    }
+
+    /// Every profile this model has seen: the loaded pages, then the
+    /// fetched ones. Parent-chain walks use it.
+    public var known: [PsmithProfile] {
+        let paged = Set(profiles.map(\.id))
+        return profiles + fetched.values.filter { !paged.contains($0.id) }.sorted { $0.name < $1.name }
+    }
+
+    /// Finds a profile that may not be on a loaded page, and its parent
+    /// chain with it, so pages that walk parents see the whole chain.
+    /// nil when the server says it's gone; other failures throw, so a
+    /// dropped connection never reads as a deleted profile. A parent that
+    /// fails to load ends the walk quietly. The walk stops at 16 hops.
+    @discardableResult
+    public func fetch(id: String) async throws -> PsmithProfile? {
+        var next: String? = id
+        var first: PsmithProfile?
+        for _ in 0..<16 {
+            guard let want = next, !want.isEmpty else { break }
+            let p: PsmithProfile
+            if let have = profile(id: want) {
+                p = have
+            } else {
+                do {
+                    p = try await client.profiles.get(id: want).0
+                } catch {
+                    if first == nil, !PsmithError.isNotFound(error) { throw error }
+                    break
+                }
+                fetched[p.id] = p
+            }
+            if first == nil { first = p }
+            next = p.parentProfileID
+        }
+        return first
+    }
+
     public func select(_ id: String) {
         selectedID = id
         detailMode = .viewing
@@ -190,6 +237,7 @@ public final class ProfilesViewModel {
         if let idx = profiles.firstIndex(where: { $0.id == id }) {
             profiles[idx] = updated
         }
+        if fetched[id] != nil { fetched[id] = updated }
         profiles.sort { $0.name < $1.name }
         return updated
     }
@@ -437,6 +485,7 @@ public final class ProfilesViewModel {
         do {
             try await client.profiles.delete(id: id)
             profiles.removeAll { $0.id == id }
+            fetched[id] = nil
             selectedID = profiles.first?.id
             detailMode = .viewing
         } catch {

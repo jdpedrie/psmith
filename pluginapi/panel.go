@@ -143,6 +143,17 @@ func (p Pipeline) PanelFor(ctx context.Context, pluginName string, decorate func
 	return nil, fmt.Errorf("plugin %q is not active on this conversation", pluginName)
 }
 
+// HasPanel reports whether the named plugin is active and draws a panel.
+func (p Pipeline) HasPanel(pluginName string) bool {
+	for _, pl := range p {
+		if pl.Name() == pluginName {
+			_, ok := pl.(PanelProvider)
+			return ok
+		}
+	}
+	return false
+}
+
 // DispatchAction routes a panel action to its plugin.
 func (p Pipeline) DispatchAction(ctx context.Context, pluginName, action string, params map[string]string, decorate func(context.Context, string) context.Context) error {
 	for _, pl := range p {

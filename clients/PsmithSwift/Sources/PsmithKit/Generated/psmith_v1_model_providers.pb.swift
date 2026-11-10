@@ -216,6 +216,11 @@ public nonisolated struct Psmith_V1_GetUserModelProviderResponse: Sendable {
 
   public var enabledModels: [Psmith_V1_UserModel] = []
 
+  /// Hand-added models that are turned off. They keep their metadata so they
+  /// can be turned back on with EnableModels; nothing else lists them, and
+  /// they can't be sent to.
+  public var disabledModels: [Psmith_V1_UserModel] = []
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -447,6 +452,10 @@ public nonisolated struct Psmith_V1_EnableModelsResponse: Sendable {
   public init() {}
 }
 
+/// Turning a model off deletes its row, except for a model added by hand
+/// (AddManualModel): that row is kept, turned off, so EnableModels can bring
+/// it back with the metadata the user typed. delete_manual deletes those rows
+/// too, for a client's explicit "Delete Model".
 public nonisolated struct Psmith_V1_DisableModelsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -455,6 +464,8 @@ public nonisolated struct Psmith_V1_DisableModelsRequest: Sendable {
   public var userModelProviderID: String = String()
 
   public var modelIds: [String] = []
+
+  public var deleteManual: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1446,7 +1457,7 @@ nonisolated extension Psmith_V1_GetUserModelProviderRequest: SwiftProtobuf.Messa
 
 nonisolated extension Psmith_V1_GetUserModelProviderResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetUserModelProviderResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}provider\0\u{3}enabled_models\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}provider\0\u{3}enabled_models\0\u{3}disabled_models\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1456,6 +1467,7 @@ nonisolated extension Psmith_V1_GetUserModelProviderResponse: SwiftProtobuf.Mess
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularMessageField(value: &self._provider) }()
       case 2: try { try decoder.decodeRepeatedMessageField(value: &self.enabledModels) }()
+      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.disabledModels) }()
       default: break
       }
     }
@@ -1472,12 +1484,16 @@ nonisolated extension Psmith_V1_GetUserModelProviderResponse: SwiftProtobuf.Mess
     if !self.enabledModels.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.enabledModels, fieldNumber: 2)
     }
+    if !self.disabledModels.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.disabledModels, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Psmith_V1_GetUserModelProviderResponse, rhs: Psmith_V1_GetUserModelProviderResponse) -> Bool {
     if lhs._provider != rhs._provider {return false}
     if lhs.enabledModels != rhs.enabledModels {return false}
+    if lhs.disabledModels != rhs.disabledModels {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1875,7 +1891,7 @@ nonisolated extension Psmith_V1_EnableModelsResponse: SwiftProtobuf.Message, Swi
 
 nonisolated extension Psmith_V1_DisableModelsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DisableModelsRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_ids\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_ids\0\u{3}delete_manual\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1885,6 +1901,7 @@ nonisolated extension Psmith_V1_DisableModelsRequest: SwiftProtobuf.Message, Swi
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.userModelProviderID) }()
       case 2: try { try decoder.decodeRepeatedStringField(value: &self.modelIds) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.deleteManual) }()
       default: break
       }
     }
@@ -1897,12 +1914,16 @@ nonisolated extension Psmith_V1_DisableModelsRequest: SwiftProtobuf.Message, Swi
     if !self.modelIds.isEmpty {
       try visitor.visitRepeatedStringField(value: self.modelIds, fieldNumber: 2)
     }
+    if self.deleteManual != false {
+      try visitor.visitSingularBoolField(value: self.deleteManual, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Psmith_V1_DisableModelsRequest, rhs: Psmith_V1_DisableModelsRequest) -> Bool {
     if lhs.userModelProviderID != rhs.userModelProviderID {return false}
     if lhs.modelIds != rhs.modelIds {return false}
+    if lhs.deleteManual != rhs.deleteManual {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

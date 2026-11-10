@@ -57,7 +57,7 @@ public struct ElicitSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: "key.fill")
                     .foregroundStyle(.tint)
-                Text("Psmith needs input")
+                Text(pending.title)
                     .scaledFont(.headline)
             }
             Text(pending.message)

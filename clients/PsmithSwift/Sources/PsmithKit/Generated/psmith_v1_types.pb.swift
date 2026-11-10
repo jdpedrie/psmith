@@ -458,7 +458,10 @@ public nonisolated enum Psmith_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseItera
 
   /// Synthetic — emitted by the conversations-side tool loop when an
   /// in-process MCP tool calls ctx.Elicit (MCP elicitation). Payload is
-  /// JSON `{"elicitation_id":"<uuid>","message":"...","requested_schema":{...}}`.
+  /// JSON `{"elicitation_id":"<uuid>","message":"...","requested_schema":{...},
+  /// "source":"GitHub","tool":"create_issue"}`. source and tool name who is
+  /// asking (the plugin or MCP server, and the tool the model called); both
+  /// may be absent.
   /// Clients render a form bound to the JSON Schema; submitting POSTs
   /// the user's response to `/conversations/{id}/elicitations/{eid}/respond`,
   /// which unblocks the waiting tool. Not persisted as message content
@@ -691,61 +694,125 @@ public nonisolated struct Psmith_V1_ProviderType: Sendable {
 }
 
 /// A user-configured instance of a driver type with credentials/endpoint/etc.
-public nonisolated struct Psmith_V1_UserModelProvider: Sendable {
+public nonisolated struct Psmith_V1_UserModelProvider: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var id: String = String()
+  public var id: String {
+    get {_storage._id}
+    set {_uniqueStorage()._id = newValue}
+  }
 
   /// driver type name
-  public var type: String = String()
+  public var type: String {
+    get {_storage._type}
+    set {_uniqueStorage()._type = newValue}
+  }
 
-  public var label: String = String()
+  public var label: String {
+    get {_storage._label}
+    set {_uniqueStorage()._label = newValue}
+  }
 
   /// driver-specific JSON
-  public var config: Data = Data()
+  public var config: Data {
+    get {_storage._config}
+    set {_uniqueStorage()._config = newValue}
+  }
 
-  public var ownerUserID: String = String()
+  public var ownerUserID: String {
+    get {_storage._ownerUserID}
+    set {_uniqueStorage()._ownerUserID = newValue}
+  }
 
   public var createdAt: SwiftProtobuf.Google_Protobuf_Timestamp {
-    get {_createdAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
-    set {_createdAt = newValue}
+    get {_storage._createdAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._createdAt = newValue}
   }
   /// Returns true if `createdAt` has been explicitly set.
-  public var hasCreatedAt: Bool {self._createdAt != nil}
+  public var hasCreatedAt: Bool {_storage._createdAt != nil}
   /// Clears the value of `createdAt`. Subsequent reads from it will return its default value.
-  public mutating func clearCreatedAt() {self._createdAt = nil}
+  public mutating func clearCreatedAt() {_uniqueStorage()._createdAt = nil}
 
   public var updatedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
-    get {_updatedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
-    set {_updatedAt = newValue}
+    get {_storage._updatedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._updatedAt = newValue}
   }
   /// Returns true if `updatedAt` has been explicitly set.
-  public var hasUpdatedAt: Bool {self._updatedAt != nil}
+  public var hasUpdatedAt: Bool {_storage._updatedAt != nil}
   /// Clears the value of `updatedAt`. Subsequent reads from it will return its default value.
-  public mutating func clearUpdatedAt() {self._updatedAt = nil}
+  public mutating func clearUpdatedAt() {_uniqueStorage()._updatedAt = nil}
 
   /// Provider-level default CallSettings — bottom layer of the resolution
   /// chain (conversation > profile > model > provider). Sparse: any unset
   /// field inherits nothing (this is the floor), but unset fields here let
   /// higher layers contribute their own values normally.
   public var defaultSettings: Psmith_V1_CallSettings {
-    get {_defaultSettings ?? Psmith_V1_CallSettings()}
-    set {_defaultSettings = newValue}
+    get {_storage._defaultSettings ?? Psmith_V1_CallSettings()}
+    set {_uniqueStorage()._defaultSettings = newValue}
   }
   /// Returns true if `defaultSettings` has been explicitly set.
-  public var hasDefaultSettings: Bool {self._defaultSettings != nil}
+  public var hasDefaultSettings: Bool {_storage._defaultSettings != nil}
   /// Clears the value of `defaultSettings`. Subsequent reads from it will return its default value.
-  public mutating func clearDefaultSettings() {self._defaultSettings = nil}
+  public mutating func clearDefaultSettings() {_uniqueStorage()._defaultSettings = nil}
+
+  /// The last connection test, absent until the provider is first tested.
+  public var lastTest: Psmith_V1_ConnectionTest {
+    get {_storage._lastTest ?? Psmith_V1_ConnectionTest()}
+    set {_uniqueStorage()._lastTest = newValue}
+  }
+  /// Returns true if `lastTest` has been explicitly set.
+  public var hasLastTest: Bool {_storage._lastTest != nil}
+  /// Clears the value of `lastTest`. Subsequent reads from it will return its default value.
+  public mutating func clearLastTest() {_uniqueStorage()._lastTest = nil}
+
+  /// The model ids the last discovery found, so a client can count the ones
+  /// not yet enabled ("3 new") without asking the provider again.
+  public var lastDiscoveredModelIds: [String] {
+    get {_storage._lastDiscoveredModelIds}
+    set {_uniqueStorage()._lastDiscoveredModelIds = newValue}
+  }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
-  fileprivate var _updatedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
-  fileprivate var _defaultSettings: Psmith_V1_CallSettings? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+/// The outcome of the last connection test of a provider or MCP server, as
+/// Settings shows it: a status dot, "Connected in 212 ms", or the failure.
+public nonisolated struct Psmith_V1_ConnectionTest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var testedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_testedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_testedAt = newValue}
+  }
+  /// Returns true if `testedAt` has been explicitly set.
+  public var hasTestedAt: Bool {self._testedAt != nil}
+  /// Clears the value of `testedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearTestedAt() {self._testedAt = nil}
+
+  public var ok: Bool = false
+
+  /// Providers only: how long discovery took.
+  public var latencyMs: Int64 = 0
+
+  /// Why it failed; empty when ok.
+  public var message: String = String()
+
+  /// MCP servers only: how many tools the server advertised.
+  public var toolCount: Int32 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _testedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
 /// A template surfaced from the catalog to accelerate "add provider" UX.
@@ -2720,6 +2787,11 @@ public nonisolated struct Psmith_V1_UIFragment: Sendable {
   /// Empty when the renderer doesn't need stable identity.
   public var key: String = String()
 
+  /// The plugin that drew this fragment, so a `plugin:` action inside it
+  /// goes back to that plugin (InvokePluginAction's plugin_name). Empty for
+  /// text the host split out and for fragments from before it was recorded.
+  public var plugin: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -3293,7 +3365,140 @@ nonisolated extension Psmith_V1_ProviderType: SwiftProtobuf.Message, SwiftProtob
 
 nonisolated extension Psmith_V1_UserModelProvider: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UserModelProvider"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}type\0\u{1}label\0\u{1}config\0\u{3}owner_user_id\0\u{3}created_at\0\u{3}updated_at\0\u{3}default_settings\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}type\0\u{1}label\0\u{1}config\0\u{3}owner_user_id\0\u{3}created_at\0\u{3}updated_at\0\u{3}default_settings\0\u{3}last_test\0\u{3}last_discovered_model_ids\0")
+
+  fileprivate class _StorageClass {
+    var _id: String = String()
+    var _type: String = String()
+    var _label: String = String()
+    var _config: Data = Data()
+    var _ownerUserID: String = String()
+    var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _updatedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _defaultSettings: Psmith_V1_CallSettings? = nil
+    var _lastTest: Psmith_V1_ConnectionTest? = nil
+    var _lastDiscoveredModelIds: [String] = []
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _id = source._id
+      _type = source._type
+      _label = source._label
+      _config = source._config
+      _ownerUserID = source._ownerUserID
+      _createdAt = source._createdAt
+      _updatedAt = source._updatedAt
+      _defaultSettings = source._defaultSettings
+      _lastTest = source._lastTest
+      _lastDiscoveredModelIds = source._lastDiscoveredModelIds
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._id) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._type) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._label) }()
+        case 4: try { try decoder.decodeSingularBytesField(value: &_storage._config) }()
+        case 5: try { try decoder.decodeSingularStringField(value: &_storage._ownerUserID) }()
+        case 6: try { try decoder.decodeSingularMessageField(value: &_storage._createdAt) }()
+        case 7: try { try decoder.decodeSingularMessageField(value: &_storage._updatedAt) }()
+        case 8: try { try decoder.decodeSingularMessageField(value: &_storage._defaultSettings) }()
+        case 9: try { try decoder.decodeSingularMessageField(value: &_storage._lastTest) }()
+        case 10: try { try decoder.decodeRepeatedStringField(value: &_storage._lastDiscoveredModelIds) }()
+        default: break
+        }
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._id.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._id, fieldNumber: 1)
+      }
+      if !_storage._type.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._type, fieldNumber: 2)
+      }
+      if !_storage._label.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._label, fieldNumber: 3)
+      }
+      if !_storage._config.isEmpty {
+        try visitor.visitSingularBytesField(value: _storage._config, fieldNumber: 4)
+      }
+      if !_storage._ownerUserID.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._ownerUserID, fieldNumber: 5)
+      }
+      try { if let v = _storage._createdAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
+      } }()
+      try { if let v = _storage._updatedAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
+      } }()
+      try { if let v = _storage._defaultSettings {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
+      } }()
+      try { if let v = _storage._lastTest {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
+      } }()
+      if !_storage._lastDiscoveredModelIds.isEmpty {
+        try visitor.visitRepeatedStringField(value: _storage._lastDiscoveredModelIds, fieldNumber: 10)
+      }
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_UserModelProvider, rhs: Psmith_V1_UserModelProvider) -> Bool {
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._id != rhs_storage._id {return false}
+        if _storage._type != rhs_storage._type {return false}
+        if _storage._label != rhs_storage._label {return false}
+        if _storage._config != rhs_storage._config {return false}
+        if _storage._ownerUserID != rhs_storage._ownerUserID {return false}
+        if _storage._createdAt != rhs_storage._createdAt {return false}
+        if _storage._updatedAt != rhs_storage._updatedAt {return false}
+        if _storage._defaultSettings != rhs_storage._defaultSettings {return false}
+        if _storage._lastTest != rhs_storage._lastTest {return false}
+        if _storage._lastDiscoveredModelIds != rhs_storage._lastDiscoveredModelIds {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_ConnectionTest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ConnectionTest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}tested_at\0\u{1}ok\0\u{3}latency_ms\0\u{1}message\0\u{3}tool_count\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3301,14 +3506,11 @@ nonisolated extension Psmith_V1_UserModelProvider: SwiftProtobuf.Message, SwiftP
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.type) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self.label) }()
-      case 4: try { try decoder.decodeSingularBytesField(value: &self.config) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self.ownerUserID) }()
-      case 6: try { try decoder.decodeSingularMessageField(value: &self._createdAt) }()
-      case 7: try { try decoder.decodeSingularMessageField(value: &self._updatedAt) }()
-      case 8: try { try decoder.decodeSingularMessageField(value: &self._defaultSettings) }()
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._testedAt) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.ok) }()
+      case 3: try { try decoder.decodeSingularInt64Field(value: &self.latencyMs) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.message) }()
+      case 5: try { try decoder.decodeSingularInt32Field(value: &self.toolCount) }()
       default: break
       }
     }
@@ -3319,42 +3521,30 @@ nonisolated extension Psmith_V1_UserModelProvider: SwiftProtobuf.Message, SwiftP
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    if !self.id.isEmpty {
-      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
-    }
-    if !self.type.isEmpty {
-      try visitor.visitSingularStringField(value: self.type, fieldNumber: 2)
-    }
-    if !self.label.isEmpty {
-      try visitor.visitSingularStringField(value: self.label, fieldNumber: 3)
-    }
-    if !self.config.isEmpty {
-      try visitor.visitSingularBytesField(value: self.config, fieldNumber: 4)
-    }
-    if !self.ownerUserID.isEmpty {
-      try visitor.visitSingularStringField(value: self.ownerUserID, fieldNumber: 5)
-    }
-    try { if let v = self._createdAt {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
+    try { if let v = self._testedAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
     } }()
-    try { if let v = self._updatedAt {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
-    } }()
-    try { if let v = self._defaultSettings {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
-    } }()
+    if self.ok != false {
+      try visitor.visitSingularBoolField(value: self.ok, fieldNumber: 2)
+    }
+    if self.latencyMs != 0 {
+      try visitor.visitSingularInt64Field(value: self.latencyMs, fieldNumber: 3)
+    }
+    if !self.message.isEmpty {
+      try visitor.visitSingularStringField(value: self.message, fieldNumber: 4)
+    }
+    if self.toolCount != 0 {
+      try visitor.visitSingularInt32Field(value: self.toolCount, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Psmith_V1_UserModelProvider, rhs: Psmith_V1_UserModelProvider) -> Bool {
-    if lhs.id != rhs.id {return false}
-    if lhs.type != rhs.type {return false}
-    if lhs.label != rhs.label {return false}
-    if lhs.config != rhs.config {return false}
-    if lhs.ownerUserID != rhs.ownerUserID {return false}
-    if lhs._createdAt != rhs._createdAt {return false}
-    if lhs._updatedAt != rhs._updatedAt {return false}
-    if lhs._defaultSettings != rhs._defaultSettings {return false}
+  public static func ==(lhs: Psmith_V1_ConnectionTest, rhs: Psmith_V1_ConnectionTest) -> Bool {
+    if lhs._testedAt != rhs._testedAt {return false}
+    if lhs.ok != rhs.ok {return false}
+    if lhs.latencyMs != rhs.latencyMs {return false}
+    if lhs.message != rhs.message {return false}
+    if lhs.toolCount != rhs.toolCount {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -5417,7 +5607,7 @@ nonisolated extension Psmith_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._M
 
 nonisolated extension Psmith_V1_UIFragment: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UIFragment"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}component\0\u{1}props\0\u{1}key\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}component\0\u{1}props\0\u{1}key\0\u{1}plugin\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -5428,6 +5618,7 @@ nonisolated extension Psmith_V1_UIFragment: SwiftProtobuf.Message, SwiftProtobuf
       case 1: try { try decoder.decodeSingularStringField(value: &self.component) }()
       case 2: try { try decoder.decodeSingularBytesField(value: &self.props) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.key) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.plugin) }()
       default: break
       }
     }
@@ -5443,6 +5634,9 @@ nonisolated extension Psmith_V1_UIFragment: SwiftProtobuf.Message, SwiftProtobuf
     if !self.key.isEmpty {
       try visitor.visitSingularStringField(value: self.key, fieldNumber: 3)
     }
+    if !self.plugin.isEmpty {
+      try visitor.visitSingularStringField(value: self.plugin, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -5450,6 +5644,7 @@ nonisolated extension Psmith_V1_UIFragment: SwiftProtobuf.Message, SwiftProtobuf
     if lhs.component != rhs.component {return false}
     if lhs.props != rhs.props {return false}
     if lhs.key != rhs.key {return false}
+    if lhs.plugin != rhs.plugin {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

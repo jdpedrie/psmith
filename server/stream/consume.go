@@ -301,7 +301,7 @@ loop:
 		// compaction in their history. New-context creation remains
 		// gated on a clean run; the user retries by deleting the failed
 		// summary or kicking off a fresh compaction.
-		mid, cid, err := s.materializeCompression(params, contentBuilder.String(), usage, errPayload, logger)
+		mid, cid, err := s.materializeCompression(params, contentBuilder.String(), usage, errPayload, cancelled, logger)
 		if err != nil {
 			logger.Error("materialize compression failed", "err", err)
 		} else {
@@ -847,7 +847,7 @@ func intToPtrInt32(p *int) *int32 {
 // Returns (compressionSummaryID, uuid.Nil, error). The second return slot is
 // retained for backwards compat with the consume loop's existing two-id
 // handling; it is always uuid.Nil now.
-func (s *Supervisor) materializeCompression(params StartParams, summary string, usage *providers.Usage, errPayload []byte, logger interface{ Error(string, ...any) }) (uuid.UUID, uuid.UUID, error) {
+func (s *Supervisor) materializeCompression(params StartParams, summary string, usage *providers.Usage, errPayload []byte, cancelled bool, logger interface{ Error(string, ...any) }) (uuid.UUID, uuid.UUID, error) {
 	insertCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -866,6 +866,12 @@ func (s *Supervisor) materializeCompression(params StartParams, summary string, 
 	var finishReason *string
 	if usage != nil {
 		finishReason = usage.FinishReason
+	}
+	// A stopped compression reads as stopped, as a stopped reply does:
+	// the partial summary is the user's to review, not a finished one.
+	if cancelled {
+		c := "user_cancelled"
+		finishReason = &c
 	}
 	if _, err := s.queries.CreateAssistantMessageWithUsage(insertCtx, store.CreateAssistantMessageWithUsageParams{
 		ID:                summaryID,

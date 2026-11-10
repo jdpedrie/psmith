@@ -6,6 +6,7 @@ type generalVM struct {
 	Index       bool // served at /settings: a phone shows the navigation instead
 	WarnSel     string
 	WarnCustom  string
+	WarnError   string
 	UserName    string
 	Login       string
 	Initial     string
@@ -36,11 +37,14 @@ templ generalScreen(n snavVM, g generalVM) {
 								}
 							</select>
 							<span id="warn-custom" class="custom" hidden?={ g.WarnSel != "custom" }>
-								<input name="custom" class="field num" inputmode="numeric" aria-label="Custom warning in tokens" value={ g.WarnCustom } placeholder="Tokens"/>
+								<input name="custom" class="field num" aria-invalid?={ g.WarnError != "" } inputmode="numeric" aria-label="Custom warning in tokens" value={ g.WarnCustom } placeholder="Tokens"/>
 								<button class="btn h32" type="submit">Set</button>
 							</span>
 						</div>
 					</form>
+					if g.WarnError != "" {
+						<p role="alert" class="result bad"><span class="dot"></span>{ g.WarnError }</p>
+					}
 					<p class="foot-note">Past this size, a conversation’s context shows beside the model under the message field. Click it to compress. Near a model’s own limit it shows in red whatever this is set to. Applies on all your devices.</p>
 				</section>
 				<section aria-labelledby="acct">
@@ -48,7 +52,11 @@ templ generalScreen(n snavVM, g generalVM) {
 					<div class="group">
 						<div class="grow">
 							<span class="lbl">Signed in as</span>
-							<span class="who"><span class="avatar" aria-hidden="true">{ g.Initial }</span><b>{ g.UserName }</b><span class="mono-sm">{ g.Login }</span></span>
+							<span class="who"><span class="avatar" aria-hidden="true">{ g.Initial }</span><b>{ g.UserName }</b>
+								if g.Login != g.UserName {
+									<span class="mono-sm">{ g.Login }</span>
+								}
+							</span>
 							if g.Admin {
 								<span class="tag">Admin</span>
 							}
@@ -177,12 +185,12 @@ templ appearanceScreen(n snavVM, a appearanceVM) {
 					<h3 id="transcript" class="sec-title">Transcript</h3>
 					<form class="group" method="post" action="/prefs/display">
 						<div class="grow">
-							<span class="lbl fill two"><span id="turnl">Show turn details</span><span class="sub">Thinking and tool chips on every reply, with the model, token counts and times.</span></span>
+							<span class="lbl fill two"><span id="turnl">Show turn details</span><span class="sub">Who said what and when above every turn, how long each reply took, and its tokens in and out.</span></span>
 							<input type="hidden" name="turn_details" value={ strconv.FormatBool(!a.Turns) }/>
 							<button class="switch" type="submit" role="switch" aria-checked={ strconv.FormatBool(a.Turns) } aria-labelledby="turnl"></button>
 						</div>
 					</form>
-					<p class="foot-note">Off, a reply shows only what’s worth noticing: a model change, a poor cache on a big prompt, a reply that stopped early. The details stay one click away under the reply.</p>
+					<p class="foot-note">Off, each reply keeps its usage line, and the full breakdown opens from it.</p>
 				</section>
 			</div>
 		</div>

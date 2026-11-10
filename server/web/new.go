@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"net/url"
 
 	"connectrpc.com/connect"
 
@@ -46,6 +47,18 @@ func (h *Handler) handleNewForm(w http.ResponseWriter, r *http.Request) {
 	for _, v := range order {
 		m := models[v]
 		d.Models = append(d.Models, draftModelVM{Value: v, Name: m.Name, Provider: m.Provider})
+	}
+	// A profile with no model of its own starts on the model the
+	// conversation's composer would show and send with, so the draft
+	// names it and the first send carries it: without one, SendMessage
+	// has nothing to resolve.
+	if len(order) > 0 {
+		fallback := h.modelPicker(ctx, "", "", capsVM{}, nil).Current.Value
+		for i := range d.Profiles {
+			if d.Profiles[i].ModelValue == "" {
+				d.Profiles[i].ModelValue = fallback
+			}
+		}
 	}
 	pick := q.Get("pick")
 	if pick == "" {
@@ -99,10 +112,10 @@ func (h *Handler) handleNewCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	sent, err := h.convos.SendMessage(ctx, connect.NewRequest(req))
 	if err != nil {
-		// The conversation exists; open it so the message can be retried
-		// from its composer rather than lost on an error page.
+		// The conversation exists; open it with the message back in its
+		// composer, so a retry is one click rather than a retype.
 		h.logger.Warn("web: first send failed", "err", err)
-		http.Redirect(w, r, "/c/"+id, http.StatusSeeOther)
+		http.Redirect(w, r, "/c/"+id+"?failed=1&draft="+url.QueryEscape(text), http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, "/c/"+id+"?run="+sent.Msg.GetStreamRun().GetId(), http.StatusSeeOther)

@@ -88,6 +88,11 @@ These are recorded so nobody "restores" the old drawing:
   color picker profiles don't have; Appearance lists themes in the app's order.
 - **Selection:** under the System theme, selection uses the accent at 22%,
   because System's highlight is the solid accent (`Theme.selection`).
+- **ListEmptyArchive** (new, dark and light): with conversations in the
+  archive, the empty list says "No active conversations" and offers an
+  Archived button under New Conversation. The filter chips that normally reach
+  the archive aren't drawn on an empty list, so without it the archive was
+  only reachable from search.
 
 ## Progress
 

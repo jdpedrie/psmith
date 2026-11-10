@@ -30,7 +30,7 @@ func (q *Queries) DeleteUserMCPServer(ctx context.Context, arg DeleteUserMCPServ
 }
 
 const getUserMCPServer = `-- name: GetUserMCPServer :one
-SELECT id, user_id, name, config, config_encrypted, created_at, updated_at FROM user_mcp_servers
+SELECT id, user_id, name, config, config_encrypted, created_at, updated_at, last_test_at, last_test_ok, last_test_message, last_test_tool_count FROM user_mcp_servers
 WHERE id = $1
 `
 
@@ -45,6 +45,10 @@ func (q *Queries) GetUserMCPServer(ctx context.Context, id uuid.UUID) (UserMcpSe
 		&i.ConfigEncrypted,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastTestAt,
+		&i.LastTestOk,
+		&i.LastTestMessage,
+		&i.LastTestToolCount,
 	)
 	return i, err
 }
@@ -52,7 +56,7 @@ func (q *Queries) GetUserMCPServer(ctx context.Context, id uuid.UUID) (UserMcpSe
 const insertUserMCPServer = `-- name: InsertUserMCPServer :one
 INSERT INTO user_mcp_servers (id, user_id, name, config_encrypted)
 VALUES ($1, $2, $3, $4)
-RETURNING id, user_id, name, config, config_encrypted, created_at, updated_at
+RETURNING id, user_id, name, config, config_encrypted, created_at, updated_at, last_test_at, last_test_ok, last_test_message, last_test_tool_count
 `
 
 type InsertUserMCPServerParams struct {
@@ -78,12 +82,16 @@ func (q *Queries) InsertUserMCPServer(ctx context.Context, arg InsertUserMCPServ
 		&i.ConfigEncrypted,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastTestAt,
+		&i.LastTestOk,
+		&i.LastTestMessage,
+		&i.LastTestToolCount,
 	)
 	return i, err
 }
 
 const listUserMCPServers = `-- name: ListUserMCPServers :many
-SELECT id, user_id, name, config, config_encrypted, created_at, updated_at FROM user_mcp_servers
+SELECT id, user_id, name, config, config_encrypted, created_at, updated_at, last_test_at, last_test_ok, last_test_message, last_test_tool_count FROM user_mcp_servers
 WHERE user_id = $1
 ORDER BY name, id
 `
@@ -105,6 +113,10 @@ func (q *Queries) ListUserMCPServers(ctx context.Context, userID uuid.UUID) ([]U
 			&i.ConfigEncrypted,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LastTestAt,
+			&i.LastTestOk,
+			&i.LastTestMessage,
+			&i.LastTestToolCount,
 		); err != nil {
 			return nil, err
 		}
@@ -116,6 +128,29 @@ func (q *Queries) ListUserMCPServers(ctx context.Context, userID uuid.UUID) ([]U
 	return items, nil
 }
 
+const recordUserMCPServerTest = `-- name: RecordUserMCPServerTest :exec
+UPDATE user_mcp_servers
+SET last_test_at = now(), last_test_ok = $2, last_test_message = $3, last_test_tool_count = $4
+WHERE id = $1
+`
+
+type RecordUserMCPServerTestParams struct {
+	ID                uuid.UUID
+	LastTestOk        bool
+	LastTestMessage   string
+	LastTestToolCount int32
+}
+
+func (q *Queries) RecordUserMCPServerTest(ctx context.Context, arg RecordUserMCPServerTestParams) error {
+	_, err := q.db.Exec(ctx, recordUserMCPServerTest,
+		arg.ID,
+		arg.LastTestOk,
+		arg.LastTestMessage,
+		arg.LastTestToolCount,
+	)
+	return err
+}
+
 const updateUserMCPServer = `-- name: UpdateUserMCPServer :one
 UPDATE user_mcp_servers
 SET name = $3,
@@ -123,7 +158,7 @@ SET name = $3,
     config_encrypted = $4,
     updated_at = NOW()
 WHERE id = $1 AND user_id = $2
-RETURNING id, user_id, name, config, config_encrypted, created_at, updated_at
+RETURNING id, user_id, name, config, config_encrypted, created_at, updated_at, last_test_at, last_test_ok, last_test_message, last_test_tool_count
 `
 
 type UpdateUserMCPServerParams struct {
@@ -149,6 +184,10 @@ func (q *Queries) UpdateUserMCPServer(ctx context.Context, arg UpdateUserMCPServ
 		&i.ConfigEncrypted,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastTestAt,
+		&i.LastTestOk,
+		&i.LastTestMessage,
+		&i.LastTestToolCount,
 	)
 	return i, err
 }

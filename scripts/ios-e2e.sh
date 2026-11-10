@@ -3,7 +3,9 @@
 # target's E2E tests (which skip without it) run against it in the simulator.
 # The simulator reaches the Mac's localhost directly.
 #
-#   scripts/ios-e2e.sh [xcodebuild -only-testing filter]
+#   scripts/ios-e2e.sh [xcodebuild -only-testing filter ...]
+#
+# With no filter it runs every *E2ETests class in the iOS test target.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
@@ -12,7 +14,16 @@ PGUSER=${PGTESTDB_USER:-clark}; PGPASS=${PGTESTDB_PASSWORD:-clark}
 DB="psmith_ios_e2e_$(date +%s)"
 DSN="postgres://$PGUSER:$PGPASS@$PGHOST:$PGPORT/$DB?sslmode=disable"
 PORT=${PSMITH_E2E_PORT:-18091}
-FILTER=${1:-PsmithiOSSnapshotTests/NewConversationE2ETests}
+if [ $# -gt 0 ]; then
+	FILTERS=("$@")
+else
+	FILTERS=()
+	for f in clients/psmithd-ios/PsmithiOSSnapshotTests/*E2ETests.swift; do
+		FILTERS+=("PsmithiOSSnapshotTests/$(basename "$f" .swift)")
+	done
+fi
+ONLY=()
+for f in "${FILTERS[@]}"; do ONLY+=("-only-testing:$f"); done
 SIM=${IOS_SIMULATOR:-iPhone 17 Pro}
 ADMIN_PASSWORD=admin-password-not-secret
 
@@ -31,7 +42,8 @@ go build -o bin/psmithd-test ./cmd/psmithd
 # The demo seeder's fake OpenAI-compatible model, streaming word by word with
 # a delay, so tests can watch a reply arrive.
 go build -o bin/demo-seed-test ./cmd/demo-seed
-bin/demo-seed-test -llm-only -llm-port "$LLM_PORT" -chunk-delay "${PSMITH_E2E_CHUNK_DELAY:-80ms}" >"${TMPDIR:-/tmp}/psmith-ios-e2e-llm.log" 2>&1 &
+bin/demo-seed-test -llm-only -llm-port "$LLM_PORT" -chunk-delay "${PSMITH_E2E_CHUNK_DELAY:-80ms}" \
+	-slow-start "${PSMITH_E2E_SLOW_START:-4s}" >"${TMPDIR:-/tmp}/psmith-ios-e2e-llm.log" 2>&1 &
 LLM_PID=$!
 PSMITH_DSN="$DSN" PSMITH_ADDR="127.0.0.1:$PORT" PSMITH_BOOTSTRAP_ADMIN_USERNAME=admin \
 	PSMITH_BOOTSTRAP_ADMIN_PASSWORD="$ADMIN_PASSWORD" PSMITH_CATALOG_REFRESH_INTERVAL=0 \
@@ -70,4 +82,4 @@ xcodebuild test \
 	-project clients/psmithd-ios/PsmithiOS.xcodeproj -scheme PsmithiOS \
 	-destination "platform=iOS Simulator,id=$UDID" \
 	-derivedDataPath clients/psmithd-ios/.build \
-	-only-testing:"$FILTER"
+	"${ONLY[@]}"

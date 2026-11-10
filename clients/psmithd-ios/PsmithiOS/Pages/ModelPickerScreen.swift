@@ -198,19 +198,7 @@ struct ModelPickerScreen: View {
     /// Drops the conversation's own model so it follows the profile again.
     private func useProfileModel() async {
         guard model.canChangeProvider else { return }
-        do {
-            let (live, _) = try await app.client.conversations.get(id: model.conversation.id)
-            var s = live.settings ?? PsmithConversationSettings()
-            s.defaultProviderID = nil
-            s.defaultModelID = nil
-            _ = try await app.client.conversations.updateSettings(id: live.id, settings: s)
-            if let p = profileModel {
-                model.selectedProviderID = p.providerID
-                model.selectedModelID = p.modelID
-            }
-            dismiss()
-        } catch {
-            model.loadError = PsmithError.display(error)
-        }
+        await model.useProfileModel()
+        if model.loadError == nil { dismiss() }
     }
 }

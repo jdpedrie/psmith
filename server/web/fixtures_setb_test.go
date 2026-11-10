@@ -63,9 +63,9 @@ func boardProfilePlugins() profilePluginsVM {
 			{Name: "memory", Display: "Memory", Desc: "Searches older messages when the context has been compressed. Off for Demo.", Tags: []sbTagVM{{Label: "Tool"}}},
 		},
 		Attached: []attPluginVM{
-			{Index: 0, Name: "brave_search", Display: "Brave Search", Desc: "Gives the model a web_search tool backed by the Brave Search API.", Tags: []sbTagVM{{Label: "Tool"}, {Label: "Needs an API key in Plugins", Warn: true}}},
+			{Index: 0, Name: "brave_search", Display: "Brave Search", Desc: "Gives the model a web_search tool backed by the Brave Search API.", Tags: []sbTagVM{{Label: "Tool"}, {Label: "Needs an API key in Plugins", Warn: true, Href: "/settings/plugins/brave_search"}}},
 			{Index: 1, Name: "imagegen", Display: "Image Generation", Desc: "Gives the model a generate_image tool backed by an image model you choose.", Tags: []sbTagVM{{Label: "Tool"}, {Label: "1 required field", Warn: true}}},
-			{Index: 2, Name: "mcp:linear", Display: "Linear", Desc: "MCP server at mcp.linear.app. 6 tools, prefixed linear_.", Tags: []sbTagVM{{Label: "Tool"}, {Label: "MCP"}}},
+			{Index: 2, Last: true, Name: "mcp:linear", Display: "Linear", Desc: "MCP server at mcp.linear.app. 6 tools, prefixed linear_.", Tags: []sbTagVM{{Label: "Tool"}, {Label: "MCP"}}},
 		},
 		Add: []addPluginVM{
 			{Name: "context_packs", Display: "Context Packs", Desc: "Named background packs, sent on demand"},
@@ -183,4 +183,17 @@ func boardSpeech() sbSpeechVM {
 		Status:       &testVM{OK: true, Message: "Synthesized 18,432 bytes of audio in 640 ms, just now"},
 		Reset:        speechReset(false),
 	}
+}
+
+func boardLangfuseSetup() sbLangfuseVM {
+	return sbLangfuseVM{Replace: true, Locked: true, LastEmit: "None since the server started", Remove: langfuseRemove(false)}
+}
+
+func boardServerFailing() mcpDetailVM {
+	s := mcpServerVM{ID: "firecrawl", Name: "Firecrawl", Transport: "stdio", Command: "npx", Args: "-y\nfirecrawl-mcp", HasEnv: true}
+	return mcpDetailVM{Server: s, Status: connectFailed("exit status 1: FIRECRAWL_API_KEY is not set"), Delete: mcpDeleteConfirm(s, false)}
+}
+
+func boardEditServer() mcpFormVM {
+	return mcpFormVM{Server: mcpServerVM{ID: "linear", Name: "Linear", Transport: "http", URL: "https://mcp.linear.app/mcp", ToolPrefix: "linear_", HasHeaders: true}, ClearHeaders: true}
 }

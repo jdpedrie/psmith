@@ -172,7 +172,7 @@ func commandCatalog(conv *psmithv1.Conversation, active *psmithv1.Context, mode 
 		out = append(out,
 			cmdVM{Label: "Compress this context", Hint: tokens, Icon: "compress", Href: "/c/" + id + "/compact"},
 			cmdVM{Label: "Change model", Hint: "M", Icon: "gauge", Href: "/c/" + id + "/model"},
-			cmdVM{Label: "Rename this conversation", Icon: "edit", Href: "/c/" + id + "?rename=" + id},
+			cmdVM{Label: "Rename this conversation", Icon: "edit", Href: "/c/" + id + "?rename=1"},
 			cmdVM{Label: "Generate a title", Icon: "regen", Post: "/chats/" + id + "/title", Fields: back},
 			cmdVM{Label: pin, Icon: "plus", Post: "/c/" + id + "/pin", Fields: back},
 		)
@@ -181,7 +181,7 @@ func commandCatalog(conv *psmithv1.Conversation, active *psmithv1.Context, mode 
 		} else {
 			out = append(out, cmdVM{Label: "Archive this conversation", Icon: "trash", Post: "/c/" + id + "/archive", Fields: back})
 		}
-		out = append(out, cmdVM{Label: "Delete this conversation", Icon: "trash", Href: "/c/" + id + "?confirm=" + id})
+		out = append(out, cmdVM{Label: "Delete this conversation", Icon: "trash", Href: "/c/" + id + "?tab=info&confirm=delete"})
 	}
 	other := "dark"
 	if mode == "dark" {

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"slices"
 	"strconv"
@@ -15,17 +16,33 @@ import (
 
 // --- General ---
 
+// pwFlashCookie carries "Password changed" across the redirect after a
+// change, once: a query string would say it again on every reload.
+const pwFlashCookie = "psmith_pw_changed"
+
 func (h *Handler) handleGeneral(w http.ResponseWriter, r *http.Request) {
-	var res *testVM
-	if r.URL.Query().Get("pw") == "ok" {
-		res = &testVM{OK: true, Message: "Password changed just now"}
+	st := generalState{Warn: r.URL.Query().Get("warn")}
+	if c, err := r.Cookie(pwFlashCookie); err == nil && c.Value == "1" {
+		st.Pw = &testVM{OK: true, Message: "Password changed just now"}
+		http.SetCookie(w, &http.Cookie{Name: pwFlashCookie, Value: "", Path: "/settings/general", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil})
 	}
-	h.renderGeneral(w, r, http.StatusOK, false, r.URL.Query().Get("warn"), res)
+	h.renderGeneral(w, r, http.StatusOK, st)
 }
 
-func (h *Handler) renderGeneral(w http.ResponseWriter, r *http.Request, status int, index bool, warn string, pw *testVM) {
+// generalState is what a General render carries beyond the stored values:
+// the warning choice and the number typed for Custom, a refused warning,
+// and the password form's outcome.
+type generalState struct {
+	Index      bool
+	Warn       string
+	WarnCustom string
+	WarnError  string
+	Pw         *testVM
+}
+
+func (h *Handler) renderGeneral(w http.ResponseWriter, r *http.Request, status int, st generalState) {
 	ctx := r.Context()
-	g := generalVM{Index: index, Server: r.Host, Version: auth.BuildVersion(), PwResult: pw, WarnSel: "0"}
+	g := generalVM{Index: st.Index, Server: r.Host, Version: auth.BuildVersion(), PwResult: st.Pw, WarnSel: "0"}
 	if u, ok := auth.FromContext(ctx); ok {
 		g.Login, g.UserName, g.Admin = u.Username, u.Username, u.IsAdmin
 		if u.DisplayName != nil && *u.DisplayName != "" {
@@ -40,8 +57,11 @@ func (h *Handler) renderGeneral(w http.ResponseWriter, r *http.Request, status i
 			g.WarnSel, g.WarnCustom = saWarnChoice(resp.Msg.GetPreferences().GetContextWarningTokens())
 		}
 	}
-	if warn == "custom" {
+	if st.Warn == "custom" {
 		g.WarnSel = "custom"
+	}
+	if st.WarnError != "" {
+		g.WarnCustom, g.WarnError = st.WarnCustom, st.WarnError
 	}
 	h.render(w, r, status, generalScreen(h.loadSnav(ctx, r, "general"), g))
 }
@@ -61,10 +81,18 @@ func (h *Handler) handleWarningSave(w http.ResponseWriter, r *http.Request) {
 	sel := r.PostFormValue("warn")
 	var tokens int32
 	if sel == "custom" {
-		n, err := saParseInt(r.PostFormValue("custom"))
-		if err != nil || n == nil || *n < 0 {
+		raw := r.PostFormValue("custom")
+		if strings.TrimSpace(raw) == "" {
 			// Custom chosen with no number yet: show the field and wait.
 			http.Redirect(w, r, "/settings/general?warn=custom", http.StatusSeeOther)
+			return
+		}
+		n, err := saParseInt("The warning", raw)
+		if err == nil && *n < 0 {
+			err = errors.New("The warning can’t be below zero")
+		}
+		if err != nil {
+			h.renderGeneral(w, r, http.StatusUnprocessableEntity, generalState{Warn: "custom", WarnCustom: raw, WarnError: err.Error()})
 			return
 		}
 		tokens = *n
@@ -87,7 +115,7 @@ func (h *Handler) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	cur, nw, conf := r.PostFormValue("current"), r.PostFormValue("new"), r.PostFormValue("confirm")
 	fail := func(msg string) {
-		h.renderGeneral(w, r, http.StatusUnprocessableEntity, false, "", &testVM{Message: msg})
+		h.renderGeneral(w, r, http.StatusUnprocessableEntity, generalState{Pw: &testVM{Message: msg}})
 	}
 	switch {
 	case nw == "":
@@ -105,7 +133,8 @@ func (h *Handler) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 		fail(saErrMsg(err))
 		return
 	}
-	http.Redirect(w, r, "/settings/general?pw=ok", http.StatusSeeOther)
+	http.SetCookie(w, &http.Cookie{Name: pwFlashCookie, Value: "1", Path: "/settings/general", MaxAge: 60, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil})
+	http.Redirect(w, r, "/settings/general", http.StatusSeeOther)
 }
 
 // --- Appearance ---

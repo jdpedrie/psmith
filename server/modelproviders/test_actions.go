@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jdpedrie/psmith/server/store"
 	"strings"
 	"time"
 
@@ -63,10 +64,17 @@ func (s *Service) TestUserModelProvider(ctx context.Context, req *connect.Reques
 	if derr != nil {
 		resp.Ok = false
 		resp.ErrorMessage = firstLine(derr.Error())
-		return connect.NewResponse(resp), nil
+	} else {
+		resp.Ok = true
+		resp.ModelCount = int32(len(models))
 	}
-	resp.Ok = true
-	resp.ModelCount = int32(len(models))
+	// The result outlives the request: Settings shows it until the next test.
+	// A failure to record costs the status dot, not the test.
+	if err := s.queries.RecordUserModelProviderTest(ctx, store.RecordUserModelProviderTestParams{
+		ID: row.ID, LastTestOk: resp.Ok, LastTestLatencyMs: resp.LatencyMs, LastTestMessage: resp.ErrorMessage,
+	}); err != nil {
+		s.logger.Warn("record provider test", "provider_id", row.ID, "error", err)
+	}
 	return connect.NewResponse(resp), nil
 }
 

@@ -1284,9 +1284,21 @@ public nonisolated struct Psmith_V1_MCPServer: Sendable {
   /// per-attachment config can still override it.
   public var toolPrefix: String = String()
 
+  /// The last connection test, absent until the server is first tested.
+  public var lastTest: Psmith_V1_ConnectionTest {
+    get {_lastTest ?? Psmith_V1_ConnectionTest()}
+    set {_lastTest = newValue}
+  }
+  /// Returns true if `lastTest` has been explicitly set.
+  public var hasLastTest: Bool {self._lastTest != nil}
+  /// Clears the value of `lastTest`. Subsequent reads from it will return its default value.
+  public mutating func clearLastTest() {self._lastTest = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+
+  fileprivate var _lastTest: Psmith_V1_ConnectionTest? = nil
 }
 
 public nonisolated struct Psmith_V1_ListMCPServersRequest: Sendable {
@@ -3417,7 +3429,7 @@ nonisolated extension Psmith_V1_UpsertUserPluginSettingsResponse: SwiftProtobuf.
 
 nonisolated extension Psmith_V1_MCPServer: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".MCPServer"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}transport\0\u{1}command\0\u{1}args\0\u{3}has_env\0\u{1}url\0\u{3}has_headers\0\u{3}tool_prefix\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}transport\0\u{1}command\0\u{1}args\0\u{3}has_env\0\u{1}url\0\u{3}has_headers\0\u{3}tool_prefix\0\u{3}last_test\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3434,12 +3446,17 @@ nonisolated extension Psmith_V1_MCPServer: SwiftProtobuf.Message, SwiftProtobuf.
       case 7: try { try decoder.decodeSingularStringField(value: &self.url) }()
       case 8: try { try decoder.decodeSingularBoolField(value: &self.hasHeaders_p) }()
       case 9: try { try decoder.decodeSingularStringField(value: &self.toolPrefix) }()
+      case 10: try { try decoder.decodeSingularMessageField(value: &self._lastTest) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.id.isEmpty {
       try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
     }
@@ -3467,6 +3484,9 @@ nonisolated extension Psmith_V1_MCPServer: SwiftProtobuf.Message, SwiftProtobuf.
     if !self.toolPrefix.isEmpty {
       try visitor.visitSingularStringField(value: self.toolPrefix, fieldNumber: 9)
     }
+    try { if let v = self._lastTest {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3480,6 +3500,7 @@ nonisolated extension Psmith_V1_MCPServer: SwiftProtobuf.Message, SwiftProtobuf.
     if lhs.url != rhs.url {return false}
     if lhs.hasHeaders_p != rhs.hasHeaders_p {return false}
     if lhs.toolPrefix != rhs.toolPrefix {return false}
+    if lhs._lastTest != rhs._lastTest {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

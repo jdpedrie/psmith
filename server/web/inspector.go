@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,13 +30,20 @@ type inspVM struct {
 	// column only shows when asked for, and then as the whole page.
 	Page bool
 
-	Cost     string
-	Turns    int
-	Cache    string
-	Changes  int
+	Cost    string
+	Turns   int
+	Cache   string
+	Changes int
+	// Charts draws the run's context growth and cost per reply; nil under
+	// two replies. Unpriced names models whose replies the cost leaves out.
+	Charts   *runChartsVM
+	Unpriced string
 	Contexts []ctxRowVM
 	Branches []branchRowVM // the transcript's branch points, in order
 	Title    string        // the conversation's title, for the narrow page header
+	// Back is where a sub-view's back button goes: the tab it was opened
+	// from, or the conversation.
+	Back string
 
 	// Compress is the context tab's button state: "" (offer it), "open" (the
 	// card is showing), "running", "review".
@@ -56,6 +64,7 @@ type inspVM struct {
 type ctxRowVM struct {
 	N      int // position, oldest first; 0 in fixtures that list rows as drawn
 	ID     string
+	Parent string // the context it was started from, if any
 	Label  string // "Context 2"
 	Title  string // the context's own title, or Label when it has none
 	Detail string
@@ -110,6 +119,7 @@ func (h *Handler) fillInspector(ctx context.Context, r *http.Request, vm *convVM
 			}
 		}
 	}
+	in.Back = subViewBack(r, vm.ID)
 	q := r.URL.Query()
 	if t := q.Get("tab"); t != "" {
 		in.Page = true
@@ -124,11 +134,16 @@ func (h *Handler) fillInspector(ctx context.Context, r *http.Request, vm *convVM
 		}
 	}
 	if in.View == "contexts" {
-		in.Rename = q.Get("rename")
+		in.Rename = q.Get("ctx_rename")
 		in.Confirm = q.Get("confirm")
 	}
 
 	h.fillSlot(ctx, r, vm, conv, active, msgs)
+
+	if in.Tab == "context" || in.Tab == "" {
+		in.Charts = runCharts(turnSamples(msgs), int64(vm.Gauge.Warn))
+		in.Unpriced = h.unpricedModels(ctx, msgs)
+	}
 
 	switch {
 	case in.View == "info":
@@ -165,7 +180,7 @@ func (h *Handler) contextRows(ctx context.Context, convID, activeID string) []ct
 // creation is when this one was compressed); nil for the newest.
 func ctxRow(n int, c, next *psmithv1.Context, active bool, turns int) ctxRowVM {
 	label := fmt.Sprintf("Context %d", n)
-	row := ctxRowVM{N: n, ID: c.GetId(), Label: label, Title: label, Active: active, Turns: turns, CostUSD: c.GetCumulativeCostUsd(), Tokens: c.GetLastMessageTotalTokens()}
+	row := ctxRowVM{N: n, ID: c.GetId(), Parent: c.GetParentContextId(), Label: label, Title: label, Active: active, Turns: turns, CostUSD: c.GetCumulativeCostUsd(), Tokens: c.GetLastMessageTotalTokens()}
 	if t := strings.TrimSpace(c.GetTitle()); t != "" {
 		row.Title = t
 	}
@@ -313,4 +328,43 @@ func firstLine(s string) string {
 		}
 	}
 	return ""
+}
+
+// handleInspectorPartial re-renders the inspector's context tab. The tab
+// asks for it when the account stream says the conversation changed, so the
+// gauge, the stats and the contexts follow a reply that just landed.
+func (h *Handler) handleInspectorPartial(w http.ResponseWriter, r *http.Request) {
+	c, err := h.loadConversation(r.Context(), r, r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "conversation not found", http.StatusNotFound)
+		return
+	}
+	h.render(w, r, http.StatusOK, inspector(c))
+}
+
+// cacheGood reports whether the last reply's cache line reads as healthy:
+// green from an 80% hit up, as on the Mac. "None yet" and a cold cache stay
+// plain text.
+func cacheGood(s string) bool {
+	pct, ok := strings.CutSuffix(s, "% hit")
+	if !ok {
+		return false
+	}
+	n, err := strconv.Atoi(pct)
+	return err == nil && n >= 80
+}
+
+// subViewBack is where the model picker's and the info view's back button
+// goes: the inspector tab the reader came from (the Settings tab's model
+// card, say), else the conversation.
+func subViewBack(r *http.Request, convID string) string {
+	back := "/c/" + convID
+	ref, err := url.Parse(r.Referer())
+	if err != nil || ref.Path != back || (ref.Host != "" && ref.Host != r.Host) {
+		return back
+	}
+	if t := ref.Query().Get("tab"); validTab(t) {
+		return tabHref(convID, t)
+	}
+	return back
 }

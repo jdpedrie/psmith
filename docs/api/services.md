@@ -146,7 +146,7 @@ Provider CRUD:
 | RPC | Notes |
 |---|---|
 | `CreateUserModelProvider` | Encrypts and stores credentials. |
-| `ListUserModelProviders` / `GetUserModelProvider` | List / one (the latter with enabled models). |
+| `ListUserModelProviders` / `GetUserModelProvider` | List / one (the latter with enabled models, and manual models that are off as `disabled_models`). |
 | `UpdateUserModelProvider` | Sparse: label, config, default settings. |
 | `DeleteUserModelProvider` | Delete (does not touch historical messages). |
 
@@ -155,7 +155,7 @@ Models:
 | RPC | Notes |
 |---|---|
 | `DiscoverModels` | Ask the driver what the provider offers. Returns discovered models (not persisted) with metadata and an `already_enabled` flag. |
-| `EnableModels` / `DisableModels` | Snapshot metadata into `user_models` rows / drop them. |
+| `EnableModels` / `DisableModels` | Snapshot metadata into `user_models` rows / drop them. A manual row is turned off instead, unless `delete_manual` is set, and `EnableModels` turns it back on as it was ([providers](../design/providers.md#enabled-models)). |
 | `ListUserModels` / `ListAllUserModels` | Enabled models on one provider / flat across all providers (drives the picker). |
 | `ToggleUserModelFavorite` | Favorite flag for the picker's favorites section. |
 | `UpdateUserModel` | Default settings + metadata, with explicit clear flags for nullable fields. |

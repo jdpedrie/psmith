@@ -89,6 +89,75 @@ func TestHandleStream_E2E(t *testing.T) {
 	}
 }
 
+// While a reply thinks, the chip names a panel and the stream fills it, so
+// the thought can be opened before the answer starts. Once the answer
+// starts, the chip still opens the same panel.
+func TestHandleStream_ThinkingCanBeOpenedLive(t *testing.T) {
+	t.Parallel()
+
+	fake := fakellm.NewServer(t, fakellm.FlavorAnthropic)
+	fake.Enqueue(fakellm.Script{
+		Events: []fakellm.Event{
+			{Type: fakellm.EventThinking, Text: "Weighing the eager stack."},
+			{Type: fakellm.EventText, Text: "Hello, "},
+			{Type: fakellm.EventText, Text: "world!"},
+		},
+		Usage: &fakellm.Usage{InputTokens: 12, OutputTokens: 4},
+	})
+
+	pool := testutil.Pool(t)
+	q := store.New(pool)
+	cat := modelmeta.NewLiveCatalog(nil)
+	sup := stream.New(q, slog.Default())
+	convos := conversations.NewService(q, pool, cat, sup, crypto.Nop{}, nil, slog.Default())
+	models := modelproviders.NewService(q, cat, crypto.Nop{}, slog.Default())
+	h := New(Deps{Queries: q, Auth: auth.NewService(q), Conversations: convos, Models: models, Supervisor: sup, Logger: slog.Default()})
+
+	fx := seedSendable(t, q, fake.URL())
+	userCtx := auth.ContextWithUser(context.Background(), auth.User{ID: fx.userID, Username: "webtest"})
+
+	// Launch the run with explicit provider/model (the conversation has no
+	// default model in this seed; model selection in the composer is a
+	// fan-out item).
+	pid, mid := fx.providerID.String(), fx.modelID
+	sendResp, err := convos.SendMessage(userCtx, connect.NewRequest(&psmithv1.SendMessageRequest{
+		ConversationId: fx.convID.String(),
+		Content:        "hi",
+		ProviderId:     &pid,
+		ModelId:        &mid,
+	}))
+	if err != nil {
+		t.Fatalf("SendMessage: %v", err)
+	}
+	runID := sendResp.Msg.GetStreamRun().GetId()
+
+	// Drive the web stream handler for that run.
+	ctx, cancel := context.WithTimeout(userCtx, 10*time.Second)
+	defer cancel()
+	req := httptest.NewRequest("GET", "/c/"+fx.convID.String()+"/stream?run="+runID, nil).WithContext(ctx)
+	req.SetPathValue("id", fx.convID.String())
+	rec := httptest.NewRecorder()
+
+	h.handleStream(rec, req)
+
+	body := rec.Body.String()
+	panel := "think-live-" + runID
+	for _, want := range []string{
+		"event: thinking",
+		"Weighing the eager stack.",
+		`aria-controls="` + panel + `" data-disclose`,
+		"Thought for",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("stream missing %q; body:\n%s", want, body)
+		}
+	}
+	page := renderString(t, liveReply(fx.convID.String(), runID, liveInit{}))
+	if !strings.Contains(page, `id="`+panel+`" hidden sse-swap="thinking"`) {
+		t.Errorf("live reply has no thinking panel:\n%s", page)
+	}
+}
+
 // TestHandleConversation_RendersComposer proves the conversation page renders
 // with the model picker populated from the user's enabled models.
 func TestHandleConversation_RendersComposer(t *testing.T) {

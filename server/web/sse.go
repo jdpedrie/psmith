@@ -27,6 +27,9 @@ func newSSE(w http.ResponseWriter) (*sseStream, bool) {
 	h.Set("Content-Type", "text/event-stream")
 	h.Set("Cache-Control", "no-cache")
 	h.Set("Connection", "keep-alive")
+	// nginx (and proxies that copy it) hold a response until it ends unless
+	// told not to; a held event stream shows nothing until the reply is done.
+	h.Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	f.Flush()
 	return &sseStream{w: w, f: f}, true

@@ -24,11 +24,13 @@ import (
 	"github.com/jdpedrie/psmith/server/conversations"
 	"github.com/jdpedrie/psmith/server/crypto"
 	"github.com/jdpedrie/psmith/server/events"
+	"github.com/jdpedrie/psmith/server/files"
 	"github.com/jdpedrie/psmith/server/modelmeta"
 	"github.com/jdpedrie/psmith/server/modelproviders"
 	"github.com/jdpedrie/psmith/server/preferencessvc"
 	"github.com/jdpedrie/psmith/server/profiles"
 	_ "github.com/jdpedrie/psmith/server/providers/anthropic"
+	"github.com/jdpedrie/psmith/server/storage"
 	"github.com/jdpedrie/psmith/server/store"
 	"github.com/jdpedrie/psmith/server/stream"
 	"github.com/jdpedrie/psmith/server/streamsvc"
@@ -96,9 +98,14 @@ func newBrowserEnv(t *testing.T) *browserEnv {
 	// "conversation changed" event the page refreshes on.
 	sup.SetOnAssistantMaterialized(convos.OnAssistantPersisted)
 	sup.SetOnRunMaterialized(convos.OnRunMaterialized)
+	st, err := storage.NewFS(t.TempDir())
+	if err != nil {
+		t.Fatalf("storage: %v", err)
+	}
+	filesSvc := files.NewService(q, st, []byte("test-signing-key-0123456789abcdef"), "")
 	h := New(Deps{Queries: q, Auth: authSvc, Conversations: convos, Models: models, Profiles: profs,
 		Supervisor: sup, Bus: bus, Preferences: preferencessvc.NewService(q), Streams: streamsvc.NewService(q, sup),
-		Logger: slog.Default()})
+		Files: filesSvc, Logger: slog.Default()})
 	mux := http.NewServeMux()
 	h.Mount(mux)
 	srv := httptest.NewServer(mux)
@@ -158,7 +165,7 @@ func (e *browserEnv) record(t *testing.T, needles []string, timeout time.Duratio
 		var text, state string
 		var shot []byte
 		if err := chromedp.Run(e.ctx,
-			chromedp.Evaluate(`document.body.innerText`, &text),
+			chromedp.Evaluate(`document.body ? document.body.innerText : ""`, &text),
 			chromedp.Evaluate(`(() => {
 				const m = document.getElementById('messages');
 				const bubbles = m ? m.querySelectorAll('.bubble').length : -1;

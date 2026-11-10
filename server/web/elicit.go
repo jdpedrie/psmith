@@ -28,9 +28,10 @@ type elicitVM struct {
 	ID      string
 	Message string
 	Fields  []elicitField
-	// Source and Tool name who asked, when the stream knows; the chunk
-	// payload carries neither today, so the card falls back to a generic
-	// title.
+	// Source and Tool name who asked: the plugin or MCP server as the user
+	// knows it, and the tool the model called. Payloads from before the
+	// stream carried them have neither, and the card falls back to a
+	// generic title.
 	Source string
 	Tool   string
 }
@@ -51,11 +52,16 @@ func elicitEvent(ctx context.Context, convID string, payload []byte, tool string
 		ElicitationID   string          `json:"elicitation_id"`
 		Message         string          `json:"message"`
 		RequestedSchema json.RawMessage `json:"requested_schema"`
+		Source          string          `json:"source"`
+		Tool            string          `json:"tool"`
 	}
 	if json.Unmarshal(payload, &p) != nil {
 		return ""
 	}
-	e := &elicitVM{ID: p.ElicitationID, Message: p.Message, Fields: parseElicitFields(p.RequestedSchema), Tool: tool}
+	if p.Tool != "" {
+		tool = p.Tool
+	}
+	e := &elicitVM{ID: p.ElicitationID, Message: p.Message, Fields: parseElicitFields(p.RequestedSchema), Source: p.Source, Tool: tool}
 	return renderComp(ctx, elicitSlot(slotVM{Kind: "elicit", ConvID: convID, Elicit: e}))
 }
 

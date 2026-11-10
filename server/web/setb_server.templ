@@ -1,5 +1,7 @@
 package web
 
+import "strconv"
+
 // --- Embedder ---
 
 templ embedderScreen(n snavVM, vm sbEmbedderVM) {
@@ -87,10 +89,14 @@ templ langfuseScreen(n snavVM, vm sbLangfuseVM) {
 						@sbCrumbs("Settings", "/settings", "Langfuse")
 						<div class="page-title">
 							<h2>Langfuse</h2>
-							<button class="btn raised" type="submit" formaction="/settings/langfuse/test" formnovalidate data-needs-saved if vm.Dirty > 0 { aria-disabled="true" }>Send test trace</button>
+							<button class="btn raised" type="submit" formaction="/settings/langfuse/test" formnovalidate data-needs-saved if vm.Dirty > 0 { aria-disabled="true" } disabled?={ !vm.SecretSet }>Send test trace</button>
 						</div>
 						<p class="sb-lede">Mirrors every assistant turn into your Langfuse instance for observability and cost tracking. Off by default. Credentials are encrypted at rest.</p>
-						<p class="sb-lede sm" data-needs-saved-note hidden?={ vm.Dirty == 0 }>Save your changes to test them.</p>
+						if vm.SecretSet {
+							<p class="sb-lede sm" data-needs-saved-note hidden?={ vm.Dirty == 0 }>Save your changes to test them.</p>
+						} else {
+							<p class="sb-lede sm">Save both keys to send a test trace.</p>
+						}
 						@sbStatus(vm.Status)
 					</div>
 					<section aria-labelledby="lfconn">
@@ -111,7 +117,15 @@ templ langfuseScreen(n snavVM, vm sbLangfuseVM) {
 					<section aria-labelledby="lfstate">
 						<h3 id="lfstate" class="sec-title">State</h3>
 						<div class="group sb-g">
-							@sbSwitchRow("lfon", "enabled", "Send traces to Langfuse", "Every assistant turn becomes a trace with its cost and latency.", vm.Enabled)
+							<div class="grow" data-lf-switch data-secret-set={ strconv.FormatBool(vm.SecretSet) }>
+								<span id="lfon" class="lbl fill">
+									Send traces to Langfuse
+									<span class="sb-sub" hidden?={ vm.Locked }>Every assistant turn becomes a trace with its cost and latency.</span>
+									<span class="sb-sub warn" hidden?={ !vm.Locked }>Needs a public key and a secret key.</span>
+								</span>
+								<button class="switch" type="button" role="switch" aria-checked={ strconv.FormatBool(vm.Enabled) } aria-labelledby="lfon" data-switch="enabled" disabled?={ vm.Locked }></button>
+								<input type="hidden" name="enabled" value={ strconv.FormatBool(vm.Enabled) }/>
+							</div>
 							<div class="grow">
 								<span class="lbl">Last successful emit</span>
 								<span class="sb-val tnum">{ vm.LastEmit }</span>

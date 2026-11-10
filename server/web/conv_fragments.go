@@ -21,11 +21,14 @@ type fragVM struct {
 	Message string // error
 	Code    string
 	Retry   string // error: an action, like a choice's
+	// Plugin drew the fragment; its `plugin:` actions go back to it.
+	Plugin string
 }
 
 type cardVM struct {
 	Title, Description, URL, Host, Image string
 	Badges                               []string
+	Action                               string // "plugin:arm?id=x": the card is a button
 }
 
 type pairVM struct{ Key, Value string }
@@ -43,7 +46,20 @@ type imageFragVM struct{ URL, Alt, Caption string }
 func fragmentsOf(frags []*psmithv1.UIFragment) []fragVM {
 	out := make([]fragVM, 0, len(frags))
 	for _, f := range frags {
-		out = append(out, fragmentOf(f.GetComponent(), f.GetProps()))
+		v := fragmentOf(f.GetComponent(), f.GetProps())
+		v.Plugin = f.GetPlugin()
+		if v.Plugin == "" {
+			// Nowhere to send a plugin action: show the row, inert.
+			for i := range v.Choices {
+				if strings.HasPrefix(v.Choices[i].Action, "plugin:") {
+					v.Choices[i].Action = ""
+				}
+			}
+			for i := range v.Cards {
+				v.Cards[i].Action = ""
+			}
+		}
+		out = append(out, v)
 	}
 	return out
 }
@@ -67,6 +83,7 @@ func fragmentOf(component string, props []byte) fragVM {
 				URL         string   `json:"url"`
 				Image       string   `json:"image"`
 				Badges      []string `json:"badges"`
+				Action      string   `json:"action"`
 			} `json:"items"`
 		}
 		if json.Unmarshal(props, &p) != nil {
@@ -75,6 +92,11 @@ func fragmentOf(component string, props []byte) fragVM {
 		v := fragVM{Kind: "card_list"}
 		for _, it := range p.Items {
 			c := cardVM{Title: it.Title, Description: it.Description, Badges: it.Badges, Image: safeURL(it.Image)}
+			if strings.HasPrefix(it.Action, "plugin:") {
+				c.Action = it.Action
+			} else if u, ok := strings.CutPrefix(it.Action, "external:"); ok && it.URL == "" {
+				it.URL = u
+			}
 			if u := safeURL(it.URL); u != "" {
 				c.URL = u
 				if pu, err := url.Parse(u); err == nil {
@@ -111,7 +133,7 @@ func fragmentOf(component string, props []byte) fragVM {
 			}
 			label := strings.TrimPrefix(it.Label, letter+". ")
 			c := choiceVM{Letter: letter, Label: label}
-			if scheme, payload, ok := strings.Cut(it.Action, ":"); ok && (scheme == "send" || scheme == "compose") {
+			if scheme, payload, ok := strings.Cut(it.Action, ":"); ok && (scheme == "send" || scheme == "compose" || scheme == "plugin") {
 				c.Action, c.Payload = it.Action, payload
 			}
 			v.Choices = append(v.Choices, c)

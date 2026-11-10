@@ -645,6 +645,7 @@ func contentPartsToProto(parts []pluginapi.ContentPart) []*psmithv1.UIFragment {
 			Component: part.Fragment.Component,
 			Props:     append([]byte(nil), part.Fragment.Props...),
 			Key:       part.Fragment.Key,
+			Plugin:    part.Fragment.Plugin,
 		})
 	}
 	if len(out) == 0 {

@@ -33,6 +33,13 @@ WHERE user_id = $1
 ORDER BY created_at, id
 LIMIT sqlc.arg('page_limit');
 
+-- name: LockProfilesForDefault :exec
+-- Serializes concurrent set-default calls for one user. Without it two
+-- transactions each clear the old default, then each mark their own, and
+-- the second trips profiles_one_default_per_user: under READ COMMITTED
+-- the second clear never sees the row the first one marked.
+SELECT id FROM profiles WHERE user_id = $1 FOR UPDATE;
+
 -- name: ClearDefaultProfile :exec
 -- Half of the set-default transaction. Clear must land before Mark: the
 -- partial unique index (user_id WHERE is_default) is checked per row, so

@@ -90,8 +90,12 @@ Recorded so nobody restores the old drawing:
   "Archived"), not a count. `ListConversations` returns no total.
 - **Select many:** "Select all", not "Select all 27", for the same reason.
 - **Reply actions:** every reply row is Copy, Regenerate, Edit, Delete, More.
-- **Provider models table:** lists enabled models only. Turning one off
-  disables it, which removes the row; there is no "off" row to draw.
+- **Provider models table:** lists the models that are on, then hand-added
+  models that are off. The server keeps a hand-added model's row when it's
+  turned off (`disabled_models`), so the row stays with its switch off and a
+  Delete that asks in place (board SettingsProviderCompat). A model from the
+  provider's own list has no off row: turning it off removes it, and
+  Discover brings it back. Every row that is on has a Test.
 - **Default profile:** one profile carries Default (`is_default`), not two.
 - **Destructive page actions:** Remove and Delete live in a section at the
   bottom of the page and confirm in place. Reversible actions (Disable model)
@@ -116,6 +120,59 @@ Recorded so nobody restores the old drawing:
   does. The embedder's dimensions are fixed at 768 (the vector column's
   size), so the page shows them as a value, not a field, and warns that
   saving a new model deletes the stored vectors and embeds everything again.
+
+- **Fourth pass:** a new board, TurnDetails (Conversation page, dark and
+  light), draws "Show turn details" on: who and when above each turn, the
+  provider and time taken on a reply's line, and tokens split in and out. The
+  Appearance board's copy for the setting now says what it does on the web.
+  Offline's conversation column (the lost-connection line and "Send when
+  back") was on the board already and is now built to it.
+
+- **Fifth pass, list gaps from the deep test:** four new boards, each with
+  its light twin. PhoneRowMenu (Phone width) draws a row's menu open at
+  390, and PhoneList now draws the more button on every row: a phone has no
+  hover to reveal it. ListEmptyFilter, ListEmptyArchive and ListLoadError
+  (Sign in, list and shell, the row under DraftNoProfile) draw a profile
+  chip with nothing in it, an account whose conversations are all archived,
+  and a failed load. ListArchived's hovered row gains Delete beside
+  Unarchive, and Main's "Council: pricing debate" row shows an unread reply.
+  The Archived chip with nothing in it reads "Nothing archived" (the Mac's
+  copy) without a board of its own.
+
+- **Fifth pass, inspector gaps:** new boards (each with its Light twin) on
+  the composer slot and inspector page: ContextCharts (the Mac's two run
+  charts and the "No pricing" footnote on Main's Context tab),
+  InspectorPluginsEmpty, PluginConfigList (a list setting as rows, Context
+  Packs' packs), ReviewStopped, InspectorInfoError (a title that didn't
+  save) and InspectorSettingsLocked (a temperature the model locks).
+  InspectorPlugins gains Clear conversation changes under Add plugin, since
+  its conversation has overrides. A plugin's boolean settings are switches
+  in the inspector, as in the Plugins tab. InspectorSettings still draws
+  Claude Opus 4.7 with a temperature of 0.7, which that model's constraints
+  lock at 1.0; it stays as the board for a value set here, and
+  InspectorSettingsLocked is the same conversation as it really renders.
+
+- **Fifth pass, Settings B gaps:** three new boards on the Settings page,
+  each with its Light twin, in the row under Langfuse and Speech.
+  SettingsLangfuseSetup draws Langfuse with nothing saved: Send traces off
+  and disabled with "Needs a public key and a secret key.", and Send test
+  trace held back. SettingsServerFailing is Firecrawl's page when its test
+  fails, and draws the failure line every Test uses: a plain sentence, then
+  the service's error in small mono type. SettingsEditServer edits Linear
+  with its stored headers marked to clear on save. SettingsProfilePlugins
+  gains Move up and Move down on each attached row (the Mac drags; arrows
+  reach the keyboard), its footnote says so, and "Needs an API key in
+  Plugins" is a link with a chevron.
+- **Fifth pass, providers and models:** two new boards. SettingsProviderCompat
+  (an OpenAI-compatible provider) draws the base URL and model catalog rows the
+  Mac has, an off hand-added row and a row asking before Delete.
+  SettingsModelManual draws a hand-added model's page at its end, with Delete
+  asking in place; only hand-added models have it, since Discover can't bring
+  them back. SettingsModelDetail gains the knowledge cutoff and a locked
+  temperature: a setting the model's constraints fix shows its value read
+  only behind a lock, with "This model locks temperature at 1." beside it, the
+  treatment drawn here first for the conversation inspector to reuse. SettingsAddModel gains the
+  knowledge cutoff. Settings and PhoneSettingsPage gain a Test per model row.
 
 ## Progress
 

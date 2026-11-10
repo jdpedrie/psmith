@@ -273,6 +273,19 @@ func (q *Queries) ListProfilesByUserPaged(ctx context.Context, arg ListProfilesB
 	return items, nil
 }
 
+const lockProfilesForDefault = `-- name: LockProfilesForDefault :exec
+SELECT id FROM profiles WHERE user_id = $1 FOR UPDATE
+`
+
+// Serializes concurrent set-default calls for one user. Without it two
+// transactions each clear the old default, then each mark their own, and
+// the second trips profiles_one_default_per_user: under READ COMMITTED
+// the second clear never sees the row the first one marked.
+func (q *Queries) LockProfilesForDefault(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockProfilesForDefault, userID)
+	return err
+}
+
 const markDefaultProfile = `-- name: MarkDefaultProfile :exec
 UPDATE profiles SET is_default = TRUE WHERE id = $1
 `

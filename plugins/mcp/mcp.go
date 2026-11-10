@@ -112,6 +112,11 @@ type mcpConfig struct {
 	// conversations-side tool loop's owner-by-name map silently drops
 	// duplicates; the prefix avoids the collision).
 	ToolPrefix string `json:"tool_prefix"`
+
+	// Label is the registered server's name ("GitHub"), set by the
+	// registry when it resolves a reference. Not a form field: a custom
+	// server has no registry row to name it.
+	Label string `json:"label,omitempty"`
 }
 
 func newMCP(configBytes json.RawMessage) (pluginapi.Plugin, error) {
@@ -160,6 +165,20 @@ func (p *mcpPlugin) Name() string { return Name }
 // surface as their own pseudo-plugin entries named after the server);
 // this generic entry is the hand-configured escape hatch.
 func (p *mcpPlugin) DisplayName() string { return "Custom MCP server (advanced)" }
+
+// Label is what prompts call this server: its registered name, "Psmith"
+// for the in-process server, else the tool prefix.
+func (p *mcpPlugin) Label() string {
+	switch {
+	case p.cfg.Label != "":
+		return p.cfg.Label
+	case p.cfg.Transport == mcpTransportInproc:
+		return "Psmith"
+	case p.cfg.ToolPrefix != "":
+		return p.cfg.ToolPrefix
+	}
+	return "An MCP server"
+}
 
 func (p *mcpPlugin) Description() string {
 	return "Bridges any Model Context Protocol (MCP) server's tools into Psmith's tool surface. " +

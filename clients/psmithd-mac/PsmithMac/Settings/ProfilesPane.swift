@@ -138,6 +138,10 @@ private struct ProfileEditor: View {
     @State private var titleModelID: String?
     @State private var titleGuide = ""
     @State private var plugins: [PluginDraft] = []
+    /// This profile's rows that switch an inherited plugin off. There's no
+    /// control for them on the Mac yet (other clients can make them); they
+    /// ride along unchanged so a save doesn't turn the plugin back on.
+    @State private var turnedOff: [String] = []
     @State private var pluginsBaseline = ""
     @State private var pluginsLoaded = false
 
@@ -255,13 +259,13 @@ private struct ProfileEditor: View {
             if confirmingDelete {
                 SKRawRow(vertical: 8, horizontal: 8) {
                     SKConfirmStrip(question: "Delete \(profile.name)?",
-                                   detail: "Conversations using it keep working but lose what they inherit from it.",
+                                   detail: "This can’t be undone. Its prompt, models and plugins go with it.",
                                    confirmLabel: "Delete Profile",
                                    onCancel: { confirmingDelete = false },
                                    onConfirm: { confirmingDelete = false; Task { await model.deleteSelected() } })
                 }
             } else {
-                SKRow("Delete profile", detail: children.isEmpty ? "Conversations using it keep working."
+                SKRow("Delete profile", detail: children.isEmpty ? "This can’t be undone. A profile that conversations use can’t be deleted."
                       : "\(children.map(\.name).joined(separator: ", ")) inherit\(children.count == 1 ? "s" : "") from this one. Change or delete \(children.count == 1 ? "it" : "them") first.") {
                     Button(model.isDeleting ? "Deleting…" : "Delete…") { confirmingDelete = true }
                         .skButton(.destructive)
@@ -382,13 +386,30 @@ private struct ProfileEditor: View {
         return out
     }
 
+    /// The plugins this profile inherits, as the pipeline runs them: each
+    /// ancestor adds its own, a row that switches one off removes it for
+    /// everything below, and this profile's own switch-offs apply last.
+    private var inherited: [(name: String, from: String)] {
+        var out: [(name: String, from: String)] = []
+        var off: Set<String> = []
+        for a in ancestors {
+            for pp in (model.profilePlugins[a.id] ?? []).sorted(by: { $0.ordinal < $1.ordinal }) {
+                if pp.disabled {
+                    off.insert(pp.pluginName)
+                    out.removeAll { $0.name == pp.pluginName }
+                } else if !off.contains(pp.pluginName), !out.contains(where: { $0.name == pp.pluginName }) {
+                    out.append((pp.pluginName, a.name))
+                }
+            }
+        }
+        return out.filter { !turnedOff.contains($0.name) }
+    }
+
     private var pluginsTab: some View {
         VStack(alignment: .leading, spacing: 0) {
             SKGroup("Attached, in the order they run") {
-                ForEach(ancestors) { a in
-                    ForEach(model.profilePlugins[a.id] ?? [], id: \.id) { pp in
-                        pluginRow(name: pp.pluginName, inheritedFrom: a.name, draft: nil)
-                    }
+                ForEach(inherited, id: \.name) { i in
+                    pluginRow(name: i.name, inheritedFrom: i.from, draft: nil)
                 }
                 ForEach(plugins) { p in
                     if confirmingRemove == p.id {
@@ -409,7 +430,7 @@ private struct ProfileEditor: View {
                             }
                     }
                 }
-                if plugins.isEmpty, ancestors.allSatisfy({ (model.profilePlugins[$0.id] ?? []).isEmpty }) {
+                if plugins.isEmpty, inherited.isEmpty {
                     SKRawRow { Text("No plugins yet. Add one below.").sk(13, SK.secondary) }
                 }
             } trailing: {
@@ -633,8 +654,10 @@ private struct ProfileEditor: View {
     }
 
     private func resetPlugins() {
-        guard let id = profile?.id else { plugins = []; pluginsBaseline = Self.key([]); return }
-        plugins = (model.profilePlugins[id] ?? []).sorted { $0.ordinal < $1.ordinal }.map { PluginDraft(name: $0.pluginName, config: Self.dict($0.config)) }
+        guard let id = profile?.id else { plugins = []; turnedOff = []; pluginsBaseline = Self.key([]); return }
+        let rows = (model.profilePlugins[id] ?? []).sorted { $0.ordinal < $1.ordinal }
+        plugins = rows.filter { !$0.disabled }.map { PluginDraft(name: $0.pluginName, config: Self.dict($0.config)) }
+        turnedOff = rows.filter(\.disabled).map(\.pluginName)
         pluginsBaseline = Self.key(plugins)
     }
 
@@ -729,9 +752,12 @@ private struct ProfileEditor: View {
                 model.selectedID = id
             }
             if pluginsLoaded, Self.key(plugins) != pluginsBaseline {
-                let list = try plugins.enumerated().map { i, p in
+                var list = try plugins.enumerated().map { i, p in
                     PsmithProfilePlugin(pluginName: p.name, ordinal: Int32(i),
                                         config: try JSONSerialization.data(withJSONObject: p.config, options: [.sortedKeys]))
+                }
+                for name in turnedOff where !plugins.contains(where: { $0.name == name }) {
+                    list.append(PsmithProfilePlugin(pluginName: name, ordinal: Int32(list.count), config: Data("{}".utf8), disabled: true))
                 }
                 try await model.savePlugins(forProfileID: id, plugins: list)
                 pluginsBaseline = Self.key(plugins)

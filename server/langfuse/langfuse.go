@@ -349,17 +349,30 @@ func (e *Emitter) flush() {
 }
 
 func (e *Emitter) send(cfg Config, batch []envelopeEventBody) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return post(ctx, e.httpClient, cfg, batch)
+}
+
+// Probe posts one trace and its generation straight to cfg's host and
+// returns what the host said. The emitter's batching path only logs a
+// failed POST, which is right for a turn's trace and useless for
+// "is this host and key pair any good"; Probe is that question.
+func Probe(ctx context.Context, client *http.Client, cfg Config, trace Trace, generation Generation) error {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	return post(ctx, client, cfg, []envelopeEventBody{eventTrace(trace), eventGeneration(generation)})
+}
+
+func post(ctx context.Context, client *http.Client, cfg Config, batch []envelopeEventBody) error {
 	host := strings.TrimRight(cfg.Host, "/")
 	url := host + "/api/public/ingestion"
 
-	body := envelope{Batch: batch}
-	payload, err := json.Marshal(body)
+	payload, err := json.Marshal(envelope{Batch: batch})
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
@@ -367,16 +380,14 @@ func (e *Emitter) send(cfg Config, batch []envelopeEventBody) error {
 	req.SetBasicAuth(cfg.PublicKey, cfg.SecretKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := e.httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("post: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		// Langfuse responds 207 Multi-Status when a partial batch
-		// has problems; 4xx for credential / payload issues. Either
-		// way, a non-2xx is signal we can't fix here — log and move
-		// on so we don't block the queue.
+		// 4xx is credentials or payload; 207 (a 2xx) is a partial
+		// batch, which a one-trace probe never is.
 		return fmt.Errorf("status %s", resp.Status)
 	}
 	return nil

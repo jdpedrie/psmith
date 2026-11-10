@@ -89,7 +89,7 @@ func TestUsageOfDetail(t *testing.T) {
 		InputCostUsd: f(0.01441), OutputCostUsd: f(0.0321), CacheReadCostUsd: f(0.0386), CacheWriteCostUsd: f(0.0128), TotalCostUsd: f(0.0979),
 	}}
 	u := usageOf(m)
-	if u.Model != "Opus 4.7" || u.Cached != "94% cached" || u.Total != "$0.0979" || u.Stop != "end_turn" || u.CacheR != "77,210" {
+	if u.Model != "claude-opus-4-7" || u.Cached != "94% cached" || u.Total != "$0.0979" || u.Stop != "end_turn" || u.CacheR != "77,210" {
 		t.Errorf("usage = %+v", u)
 	}
 	if u.Saved == "" || !strings.HasPrefix(u.Saved, "$0.34") {

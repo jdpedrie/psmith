@@ -143,8 +143,7 @@ func TestSettingsChangePassword(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "current password is wrong") {
 		t.Errorf("wrong current: %d %s", rec.Code, rec.Body.String())
 	}
-	e.mustRedirect(e.do("POST", "/settings/general/password", url.Values{"current": {"old-pass"}, "new": {"new-pass"}, "confirm": {"new-pass"}}), "/settings/general?pw=ok")
-	e.mustOK(e.do("GET", "/settings/general?pw=ok", nil), "Password changed just now")
+	e.mustRedirect(e.do("POST", "/settings/general/password", url.Values{"current": {"old-pass"}, "new": {"new-pass"}, "confirm": {"new-pass"}}), "/settings/general")
 	row, _ := e.q.GetUserByID(e.ctx, e.user.ID)
 	if bcrypt.CompareHashAndPassword([]byte(row.PasswordHash), []byte("new-pass")) != nil {
 		t.Error("password not changed")
@@ -334,7 +333,7 @@ func TestSettingsUsers(t *testing.T) {
 	e.mustOK(e.do("GET", "/settings/users?reset="+maya, nil), "New password for Maya")
 	e.mustOK(e.do("GET", "/settings/users?delete="+maya, nil), "Delete Maya?")
 	e.mustRedirect(e.do("POST", "/settings/users/"+maya+"/role", url.Values{"role": {"admin"}}), "/settings/users")
-	e.mustOK(e.do("POST", "/settings/users/"+maya+"/password", url.Values{"password": {"fresh"}}), "Password set")
+	e.mustOK(e.do("GET", e.mustRedirect(e.do("POST", "/settings/users/"+maya+"/password", url.Values{"password": {"fresh"}}), "/settings/users"), nil), "Password set")
 	row, _ := e.q.GetUserByID(e.ctx, uuid.MustParse(maya))
 	if !row.IsAdmin || bcrypt.CompareHashAndPassword([]byte(row.PasswordHash), []byte("fresh")) != nil {
 		t.Error("role or password not saved")

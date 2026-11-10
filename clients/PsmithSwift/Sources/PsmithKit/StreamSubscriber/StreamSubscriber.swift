@@ -93,7 +93,7 @@ public struct PsmithChunk: Sendable, Hashable {
         public let elapsedMs: Int64
     }
 
-    /// Decoded `{elicitation_id, message, requested_schema}` payload for
+    /// Decoded `{elicitation_id, message, requested_schema, source, tool}` payload for
     /// ChunkElicit. Nil when this isn't an elicit chunk or the payload
     /// is malformed. `schemaJSON` carries the JSON Schema bytes verbatim
     /// so the renderer can introspect format hints (e.g. `password`).
@@ -107,13 +107,20 @@ public struct PsmithChunk: Sendable, Hashable {
         if let schema = obj["requested_schema"] {
             schemaData = (try? JSONSerialization.data(withJSONObject: schema)) ?? Data()
         }
-        return ElicitInfo(id: id, message: message, schemaJSON: schemaData)
+        func named(_ key: String) -> String? {
+            (obj[key] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        }
+        return ElicitInfo(id: id, message: message, schemaJSON: schemaData,
+                          source: named("source"), tool: named("tool"))
     }
 
     public struct ElicitInfo: Sendable, Hashable {
         public let id: String
         public let message: String
         public let schemaJSON: Data
+        /// The plugin or MCP server asking, and the tool the model called.
+        public var source: String? = nil
+        public var tool: String? = nil
     }
 
     /// Decoded `{call_id, tool_name, input, issued_at}` payload for a

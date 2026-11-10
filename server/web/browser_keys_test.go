@@ -167,3 +167,73 @@ func (e *browserEnv) addConversation(t *testing.T, title string) string {
 	}
 	return c.ID.String()
 }
+
+// Offline (board Offline): while the stream is down the transcript says so,
+// the composer says it will wait, and a send is held rather than lost. When
+// the stream comes back the held message goes out.
+func TestBrowser_OfflineHoldsTheSend(t *testing.T) {
+	e := newBrowserEnv(t)
+	e.fake.Enqueue(fakellm.Script{Events: []fakellm.Event{{Type: fakellm.EventText, Text: "Back online."}}})
+	e.open(t, "/c/"+e.convID)
+	waitUntil(t, e, "composer", `!!document.getElementById('composer-text')`, 5*time.Second)
+	// The account stream opens on its own schedule (through a shared worker
+	// when the browser has one); a drop faked before it opens is undone by
+	// its first open.
+	waitUntil(t, e, "the account stream opened", `(() => { const d = document.querySelector('[sse-connect="/events"]'); const s = d && d['htmx-internal-data'] && d['htmx-internal-data'].sseEventSource; return !!s && s.readyState === 1; })()`, 5*time.Second)
+	if eval[bool](t, e, `getComputedStyle(document.querySelector('.conn-lost')).display !== 'none'`) {
+		t.Fatal("the lost-connection line shows while connected")
+	}
+
+	eval[bool](t, e, `document.body.dispatchEvent(new CustomEvent('htmx:sseError', {bubbles: true, detail: {}}))`)
+	waitUntil(t, e, "offline line", `getComputedStyle(document.querySelector('.conn-lost')).display === 'flex'`, 2*time.Second)
+	if got := eval[string](t, e, `document.querySelector('.composer .csend').innerText.trim()`); got != "Send when back" {
+		t.Errorf("send button reads %q offline", got)
+	}
+	if !strings.Contains(eval[string](t, e, `document.querySelector('[data-lost-text]').innerText`), "Lost the connection at ") {
+		t.Error("the line doesn't say when the connection dropped")
+	}
+
+	e.keys(t, chromedp.SendKeys(`#composer-text`, "Held while offline", chromedp.ByID), chromedp.KeyEvent(kb.Enter))
+	time.Sleep(600 * time.Millisecond)
+	if n := len(e.fake.Requests()); n != 0 {
+		t.Fatalf("the model was called %d times while offline", n)
+	}
+	if !eval[bool](t, e, `document.getElementById('composer').hasAttribute('data-held')`) {
+		t.Error("the composer doesn't mark the held send")
+	}
+
+	eval[bool](t, e, `document.body.dispatchEvent(new CustomEvent('htmx:sseOpen', {bubbles: true, detail: {}}))`)
+	eval[bool](t, e, `document.documentElement.removeAttribute('data-offline') || true`)
+	waitUntil(t, e, "held send goes out", `document.getElementById('messages').innerText.includes('Held while offline')`, 5*time.Second)
+	waitUntil(t, e, "reply", `document.getElementById('messages').innerText.includes('Back online.')`, 8*time.Second)
+}
+
+// The live Thinking chip opens its panel while the reply is still thinking,
+// shows the thought so far, and stays open when the chip row redraws as the
+// answer starts.
+func TestBrowser_LiveThinkingOpens(t *testing.T) {
+	e := newBrowserEnv(t)
+	evs := []fakellm.Event{{Type: fakellm.EventThinking, Text: "Weighing the eager stack. ", Delay: 50 * time.Millisecond}}
+	for i := 0; i < 15; i++ {
+		evs = append(evs, fakellm.Event{Type: fakellm.EventThinking, Text: "still thinking ", Delay: 150 * time.Millisecond})
+	}
+	for i := 0; i < 40; i++ {
+		evs = append(evs, fakellm.Event{Type: fakellm.EventText, Text: "answer ", Delay: 150 * time.Millisecond})
+	}
+	e.fake.Enqueue(fakellm.Script{Events: evs})
+	e.open(t, "/c/"+e.convID)
+	e.keys(t, chromedp.SendKeys(`#composer-text`, "Think first", chromedp.ByID), chromedp.KeyEvent(kb.Enter))
+	waitUntil(t, e, "thinking chip", `!!document.querySelector('#messages .reply.live .rchip.think')`, 6*time.Second)
+
+	eval[bool](t, e, `document.querySelector('#messages .reply.live .rchip.think').click() || true`)
+	waitUntil(t, e, "panel open with the thought", `(() => { const p = document.querySelector('#messages .reply.live .think-panel'); return !!p && !p.hidden && p.innerText.includes('Weighing the eager stack') })()`, 3*time.Second)
+	if eval[string](t, e, `document.querySelector('#messages .reply.live .rchip.think').getAttribute('aria-expanded')`) != "true" {
+		t.Error("the chip doesn't say it's open")
+	}
+
+	waitUntil(t, e, "answer starts", `!!document.querySelector('#messages .reply.live .md[sse-swap="message"]')?.innerText.includes('answer')`, 8*time.Second)
+	waitUntil(t, e, "chip stays open after redraw", `document.querySelector('#messages .reply.live [aria-controls^="think-live-"]')?.getAttribute('aria-expanded') === 'true'`, 2*time.Second)
+	if eval[bool](t, e, `document.querySelector('#messages .reply.live .think-panel').hidden`) {
+		t.Error("the panel closed when the chips redrew")
+	}
+}

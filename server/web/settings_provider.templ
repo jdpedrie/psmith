@@ -1,6 +1,9 @@
 package web
 
-import "strconv"
+import (
+	"net/url"
+	"strconv"
+)
 
 // providerPageVM is one provider's page: connection, its models, and the
 // call-setting defaults every model under it inherits.
@@ -10,6 +13,10 @@ type providerPageVM struct {
 	Name       string
 	KeyMasked  string
 	KeyEditing bool // the key row is an input for a replacement
+	Compatible bool // an OpenAI-compatible driver: its host and catalog are editable
+	BaseURL    string
+	Catalog    string // catalog_provider_id, "" for none
+	Catalogs   []saOpt
 	Test       *testVM
 	Models     []providerModelVM
 	NewCount   int // discoverable models not yet enabled
@@ -27,16 +34,31 @@ type providerModelVM struct {
 	Name, ID, Context, Cost string
 	Caps                    []string
 	On                      bool
+	Confirming              bool    // an off hand-added row asking before Delete
+	Test                    *testVM // this row's Test outcome
 }
 
 func (p providerPageVM) url(suffix string) templ.SafeURL {
 	return templ.SafeURL("/settings/providers/" + p.ID + suffix)
 }
 
+func (p providerPageVM) onCount() int {
+	n := 0
+	for _, m := range p.Models {
+		if m.On {
+			n++
+		}
+	}
+	return n
+}
+
+// saRowTestID names a model row's result slot, which Test swaps in place.
+func saRowTestID(i int) string { return "mtest-" + strconv.Itoa(i) }
+
 templ providerActions(p providerPageVM) {
 	<div class="ptacts">
-		<button class="btn raised" type="submit" formaction={ p.url("/test") }>Test connection</button>
-		<a class="btn danger phone" href={ p.url("?remove=1#premove") }>Remove</a>
+		<button class="btn raised" type="submit" formaction={ p.url("/test") } hx-post={ string(p.url("/test")) } hx-select="#head-result" hx-target="#head-result" hx-swap="outerHTML" hx-disabled-elt="this">Test connection</button>
+		<a class="btn danger phone" href={ p.url("?remove=1#premove") } hx-get={ string(p.url("?remove=1")) } hx-select="#premove" hx-target="#premove" hx-swap="outerHTML show:#premove:top">Remove</a>
 	</div>
 }
 
@@ -46,7 +68,9 @@ templ providerScreen(n snavVM, p providerPageVM) {
 			<div class="spage-scroll">
 				<div class="spage-inner">
 					@saPageHead(saHead{Crumbs: []saCrumb{{"Providers", "/settings/providers"}}, Title: p.Name, Actions: providerActions(p)}) {
-						@saResult(p.Test)
+						<div id="head-result" class="sa-live">
+							@saResult(p.Test)
+						</div>
 						if p.Error != "" {
 							<p role="alert" class="result bad"><span class="dot"></span>{ p.Error }</p>
 						}
@@ -59,29 +83,49 @@ templ providerScreen(n snavVM, p providerPageVM) {
 								<input id="pname" name="label" class="field wide" value={ p.Name }/>
 							</div>
 							if p.KeyEditing {
-								<div class="grow">
+								<div id="keyrow" class="grow">
 									<label for="pkey" class="lbl">API key</label>
 									<input id="pkey" name="api_key" type="password" class="field wide" autocomplete="off" placeholder="Paste the new key" autofocus/>
-									<a class="btn h32 ghost" href={ p.url("") }>Cancel</a>
+									<a class="btn h32 ghost" href={ p.url("") } hx-get={ string(p.url("")) } hx-select="#keyrow" hx-target="#keyrow" hx-swap="outerHTML">Cancel</a>
 								</div>
 							} else {
-								<div class="grow keyrow">
+								<div id="keyrow" class="grow keyrow">
 									<span class="lbl">API key</span>
 									<span class="secret">{ saKeyHead(p.KeyMasked) }<span class="wide-only">{ saKeyWide(p.KeyMasked) }</span>{ saKeyTail(p.KeyMasked) }</span>
-									<a class="btn h32" href={ p.url("?key=1") }>Replace</a>
+									<a class="btn h32" href={ p.url("?key=1") } hx-get={ string(p.url("?key=1")) } hx-select="#keyrow" hx-target="#keyrow" hx-swap="outerHTML">Replace</a>
+								</div>
+							}
+							if p.Compatible {
+								<div class="grow">
+									<label for="purl" class="lbl">Base URL</label>
+									<input id="purl" name="base_url" class="field wide mono" value={ p.BaseURL } required/>
+								</div>
+								<div class="grow">
+									<label for="pcat" class="lbl">Model catalog</label>
+									<select id="pcat" name="catalog" class="field sel">
+										<option value="" selected?={ p.Catalog == "" }>None</option>
+										for _, o := range p.Catalogs {
+											<option value={ o.Value } selected?={ o.Value == p.Catalog }>{ o.Label }</option>
+										}
+									</select>
+									<span class="hint">Fills in prices and limits from models.dev</span>
 								</div>
 							}
 						</div>
-						<p class="foot-note">The key stays on this server. Browsers and apps never see it.</p>
+						if p.Compatible {
+							<p class="foot-note">The key stays on this server. Browsers and apps never see it. Change the base URL when the server moves.</p>
+						} else {
+							<p class="foot-note">The key stays on this server. Browsers and apps never see it.</p>
+						}
 					</section>
 					<section aria-labelledby="models">
 						<div class="sec-bar">
-							<h3 id="models" class="sec-title">{ "Models · " + strconv.Itoa(len(p.Models)) + " on" }</h3>
+							<h3 id="models" class="sec-title">{ "Models · " + strconv.Itoa(p.onCount()) + " on" }</h3>
 							<label class="filter">
 								@icon("search13")
 								<input aria-label="Filter models" placeholder="Filter" data-filter="#model-rows"/>
 							</label>
-							<a class="btn h32 primary" href={ p.url("/discover") }>
+							<a id="discover-btn" class="btn h32 primary" href={ p.url("/discover") }>
 								<span>Discover<span class="wide-only">{ " models" }</span></span>
 								if p.NewCount > 0 {
 									<span class="badge-count">{ strconv.Itoa(p.NewCount) + " new" }</span>
@@ -91,30 +135,66 @@ templ providerScreen(n snavVM, p providerPageVM) {
 						<div class="group tbl-wrap">
 							<table class="tbl mtbl">
 								<thead>
-									<tr><th scope="col">Model</th><th scope="col">Context</th><th scope="col">Cost</th><th scope="col">Can do</th><th scope="col">On</th></tr>
+									<tr><th scope="col">Model</th><th scope="col">Context</th><th scope="col">Cost</th><th scope="col">Can do</th><th scope="col" class="mtest"><span class="sr-only">Test</span></th><th scope="col">On</th></tr>
 								</thead>
 								<tbody id="model-rows">
-									for _, m := range p.Models {
-										<tr class={ templ.KV("off", !m.On) }>
-											<td class="mname"><a class="name" href={ p.url("/models/" + saModelPath(m.ID)) }>{ m.Name }</a><span class="id">{ m.ID }</span></td>
-											<td class="tnum mctx">{ m.Context }</td>
-											<td class="mcost">{ m.Cost }</td>
-											<td class="mcaps">
-												<span class="tags">
-													for _, c := range m.Caps {
-														<span>{ c }</span>
+									for i, m := range p.Models {
+										if m.Confirming {
+											<tr class="confirm">
+												<td colspan="6">
+													<div class="rowconfirm" role="group" aria-label="Confirm delete">
+														<div class="q"><b>{ "Delete " + m.Name + "?" }</b><span>You added it by hand, so Discover models won’t bring it back. Conversations using it can’t send until they switch.</span></div>
+														<a class="btn h28 cancel" href={ p.url("") } hx-get={ string(p.url("")) } hx-select="#model-rows" hx-target="#model-rows" hx-swap="outerHTML">Cancel</a>
+														<button class="btn h28 destructive" type="submit" formaction={ p.url("/delete-model/" + saModelPath(m.ID)) }>Delete model</button>
+													</div>
+												</td>
+											</tr>
+										} else {
+											<tr class={ templ.KV("off", !m.On) }>
+												<td class="mname">
+													if m.On {
+														<a class="name" href={ p.url("/models/" + saModelPath(m.ID)) }>{ m.Name }</a>
+													} else {
+														<span class="name">{ m.Name }</span><span class="byhand">Added by hand</span>
 													}
-												</span>
-											</td>
-											<td class="mon"><button class="switch" type="submit" role="switch" aria-checked={ strconv.FormatBool(m.On) } aria-label={ m.Name + " on" } name="model_id" value={ m.ID } formaction={ p.url("/disable") }></button></td>
-										</tr>
+													<span class="id">{ m.ID }</span>
+													<span id={ saRowTestID(i) } class="sa-live">
+														if m.Test != nil {
+															<span role="status" class={ "result", templ.KV("bad", !m.Test.OK) }><span class="dot"></span>{ m.Test.Message }</span>
+														}
+													</span>
+												</td>
+												<td class="tnum mctx">{ m.Context }</td>
+												<td class="mcost">{ m.Cost }</td>
+												<td class="mcaps">
+													<span class="tags">
+														for _, c := range m.Caps {
+															<span>{ c }</span>
+														}
+													</span>
+												</td>
+												<td class="mtest">
+													if m.On {
+														<button class="btn h28" type="submit" aria-label={ "Test " + m.Name } formaction={ p.url("/row-test/" + saModelPath(m.ID)) } hx-post={ string(p.url("/row-test/" + saModelPath(m.ID))) } hx-select={ "#" + saRowTestID(i) } hx-target={ "#" + saRowTestID(i) } hx-swap="outerHTML" hx-disabled-elt="this">Test</button>
+													} else {
+														<a class="btn h28 danger" aria-label={ "Delete " + m.Name } href={ p.url("?delmodel=" + url.QueryEscape(m.ID) + "#models") } hx-get={ string(p.url("?delmodel=" + url.QueryEscape(m.ID))) } hx-select="#model-rows" hx-target="#model-rows" hx-swap="outerHTML">Delete</a>
+													}
+												</td>
+												<td class="mon">
+													if m.On {
+														<button class="switch" type="submit" role="switch" aria-checked="true" aria-label={ m.Name + " on" } name="model_id" value={ m.ID } formaction={ p.url("/disable") } hx-post={ string(p.url("/disable")) } hx-select="#model-rows" hx-target="#model-rows" hx-swap="outerHTML" hx-select-oob="#models,#models-empty,#discover-btn,#models-off"></button>
+													} else {
+														<button class="switch" type="submit" role="switch" aria-checked="false" aria-label={ m.Name + " on" } name="model_ids" value={ m.ID } formaction={ p.url("/enable") } hx-post={ string(p.url("/enable")) } hx-select="#model-rows" hx-target="#model-rows" hx-swap="outerHTML" hx-select-oob="#models,#models-empty,#discover-btn,#models-off"></button>
+													}
+												</td>
+											</tr>
+										}
 									}
 								</tbody>
 							</table>
-							if len(p.Models) == 0 {
-								<p class="tbl-empty">No models on yet. Discover models to turn some on.</p>
-							}
+							<p id="models-empty" class="tbl-empty" hidden?={ len(p.Models) > 0 }>No models on yet. Discover models to turn some on.</p>
 						</div>
+						<p id="models-off" class="foot-note" hidden?={ p.onCount() == len(p.Models) }>A model you added by hand stays here when it’s off, so it can come back on with what you typed. Delete it to remove it for good.</p>
 					</section>
 					<section aria-labelledby="defaults">
 						<h3 id="defaults" class="sec-title">Defaults for this provider</h3>

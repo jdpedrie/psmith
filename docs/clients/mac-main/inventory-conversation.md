@@ -185,7 +185,7 @@ A full-width plain button: HStack spacing 10 of icon (`gearshape` for system, `t
 - Empty body: "(empty)" secondary.
 - Selection mode for this message: `SelectableMessageText` (AppKit text view; section 4.9).
 - Welcome message (`isWelcome`) not yet played this session: `WelcomeReveal` types out word by word at 30 words/sec, then marks itself played.
-- Otherwise `BoundedMarkdownText`: renders in full up to 48,000 characters (chunked at ~4,000 char paragraph boundaries for performance). Past the limit: a head preview plus a small bordered button `Label("Show full text (48 KB)", systemImage: "doc.text.magnifyingglass")` caption, which opens the **Full text sheet** (`MarkdownDocumentView`: NavigationStack, title "Full text", lazy chunked markdown, selectable, "Done" confirmation button; min 560x640).
+- Otherwise `BoundedMarkdownText`: renders in full up to 48,000 characters (chunked at ~4,000 char paragraph boundaries for performance). Past the limit: a head preview plus a small bordered button `Label("Show full text (48 KB)", systemImage: "doc.text.magnifyingglass")` caption, which opens the **Full text page** in the reading pane (`ConversationPage.fullText`, through the `openFullText` environment action; the breadcrumb leads back).
 - Markdown theme `clarkChat`: primary text; headings semibold at 1.5 / 1.3 / 1.15 em for h1 to h3, body size h4 to h6, 1em top margin; inline code monospaced 0.92em with `secondary.opacity(0.18)` background; code blocks monospaced 0.88em, padding 10, `secondary.opacity(0.12)` fill, corner 6, own horizontal scroller (no wrap), 0.5em margins; blockquotes secondary text, 11pt leading inset, 3pt `secondary` bar; tables in their own horizontal scroller.
 - Per-paragraph SwiftUI selection is turned off; drag anywhere on the body enters selection mode instead (4.9).
 
@@ -400,7 +400,7 @@ HStack spacing 10, padding 16 h / 10 v, `.thinMaterial` background, then outer p
 
 ### 9.5 Drafts (unsent text)
 
-Per-conversation draft text is restored from `DraftStore` (UserDefaults) when the view model is created and cleared on a successful send. On the Mac, the store is written only when a send fails non-transiently (iOS writes on every keystroke). Typed text otherwise lives on the view model for the life of the screen.
+Per-conversation draft text is restored from `DraftStore` (UserDefaults) when the view model is created and cleared on a successful send. The view model writes the store on every change to `draft`, on both platforms, so unsent text survives leaving the conversation or quitting.
 
 No slash commands or @mentions exist in the Mac composer.
 
@@ -484,7 +484,7 @@ Inspector Context tab button "Compress into a New Context…" (section 16.1) or 
 
 ### 13.3 Review (after a clean summary lands)
 
-- **CompressionSummaryCard** in the transcript (success variant): padding 12, regularMaterial over `orange.opacity(0.08)`, stroke `orange.opacity(0.35)` 1.5pt, corner 10, spacing 10. Header: `wand.and.stars` orange + "Compression summary" caption semibold orange; spacer; "Truncated" `scissors` label caption2 semibold red (when output was cut); model label caption2 tertiary; "Done selecting" small bordered button in selection mode. Body: bounded markdown callout with a 1,500 character preview limit and "Show full text (size)" opening the full-text sheet titled "Compression summary". Truncation warning: "Cut off at the model's output limit — the tail of the summary is missing. Delete and re-run compaction rather than confirming." caption red. Usage line caption2 tertiary: "in: 12,345 (1,000 cached) · cw: 2,000 · out: 1,234 · $0.0123".
+- **CompressionSummaryCard** in the transcript (success variant): padding 12, regularMaterial over `orange.opacity(0.08)`, stroke `orange.opacity(0.35)` 1.5pt, corner 10, spacing 10. Header: `wand.and.stars` orange + "Compression summary" caption semibold orange; spacer; "Truncated" `scissors` label caption2 semibold red (when output was cut); model label caption2 tertiary; "Done selecting" small bordered button in selection mode. Body: bounded markdown callout with a 1,500 character preview limit and "Show full text (size)" opening the full-text page titled "Compression summary". Truncation warning: "Cut off at the model's output limit — the tail of the summary is missing. Delete and re-run compaction rather than confirming." caption red. Usage line caption2 tertiary: "in: 12,345 (1,000 cached) · cw: 2,000 · out: 1,234 · $0.0123".
 - Card context menu: "Edit" (`pencil`, opens inline editor via MessageRow), "Copy" (`doc.on.doc`), "Select Text"/"Done Selecting" (`character.cursor.ibeam`), divider, "Delete" (`trash`, destructive). Custom context-menu preview: header + first 600 chars of markdown, max width 340, padding 12.
 - **CompressionReviewBar** replaces the composer (Mac layout): HStack spacing 12, padding 14 h / 10 v, thinMaterial, top divider with a 1pt `orange.opacity(0.5)` hairline. `wand.and.stars` orange; title subheadline semibold "Compression awaiting review" or "Truncated summary awaiting review"; subtext caption, wrapping: "Confirm to continue in a fresh context, or delete to resume here." (secondary) or "The summary hit the model's output limit and is incomplete. Delete and re-run compaction; confirming keeps the cut text." (red). Buttons: "Delete" bordered red tint (opens confirmation); "Confirm" glass prominent orange tint, min width 64, spinner while promoting, tooltip "Confirm the summary, open a fresh context, and continue from there". Both disabled while promoting.
 - Sends, regenerate-safe actions and further compactions are blocked while a summary awaits review.
@@ -591,7 +591,7 @@ Sheets:
 3. ModelPickerSheet (680x620): model menu "All Models…".
 4. Edit Call Settings sheet (660x680): inspector Settings tab.
 5. Image lightbox sheet (min 480x360, ideal 800x600): clicking an image thumbnail.
-6. Full text sheet (MarkdownDocumentView, min 560x640): "Show full text (size)" on long messages, compression summaries, partial summaries.
+6. Full text page (`ConversationPage.fullText`): "Show full text (size)" on long messages, compression summaries, partial summaries.
 
 Popovers:
 7. Usage and Cost popover: More menu "Usage and Cost…".
@@ -653,5 +653,5 @@ Coverage gaps a redesign should know about (no snapshot found): queued/offline p
 - The composer's maximum is 10 lines (`maxLines: 10`), but the snapshot test is named `composerCapsAtEightLinesAndScrolls`.
 - Comments in `CompactView.swift`, `ContextListView.swift`, `ConversationSettingsView.swift` and `ConversationModelPicker.swift` still describe a "page replaces pane" pattern and toolbar back chevrons; in the current code these render inside sheets or the inspector.
 - `ContextListPane` is unreachable from the UI but still snapshot-tested.
-- Mac never writes `DraftStore` while typing (only on a failed send), so unsent text survives only while the view model lives; iOS persists on each keystroke.
+- ~~Mac never writes `DraftStore` while typing.~~ Fixed: the view model writes it on every change, for both platforms.
 - `StreamingRow`'s comment mentions a "~720pt" fallback cap; the Mac pane actually caps the column at 820 and bubbles at 80% (fallback 600).

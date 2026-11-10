@@ -131,6 +131,10 @@ final class ListProbeTests: XCTestCase {
         IKRender.shoot("ListEmpty") { ListFixture.view(ListState(), []) }
     }
 
+    func testEmptyArchive() {
+        IKRender.shoot("ListEmptyArchive") { ListFixture.view(ListState(), [], archived: Shell.archived) }
+    }
+
     func testArchived() {
         IKRender.shoot("ListArchived") {
             let s = ListState()

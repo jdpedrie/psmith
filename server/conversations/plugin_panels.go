@@ -62,6 +62,12 @@ func (s *Service) InvokePluginAction(ctx context.Context, req *connect.Request[p
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
+	// An action from a message fragment can come from a plugin with no
+	// panel; there is nothing to re-render, and the transcript shows the
+	// effect.
+	if !pipeline.HasPanel(req.Msg.PluginName) {
+		return connect.NewResponse(&psmithv1.InvokePluginActionResponse{}), nil
+	}
 	parts, err := pipeline.PanelFor(ctx, req.Msg.PluginName, decorate)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("re-render panel: %w", err))

@@ -23,6 +23,7 @@ type testVM struct {
 	OK         bool
 	Message    string
 	ModelCount int32
+	Detail     string // the service's own error, under a failure's line
 }
 
 // --- settings home ---
@@ -30,7 +31,7 @@ type testVM struct {
 // handleSettings is General. On a phone the same URL shows the navigation
 // list instead; the page carries a marker the stylesheet keys on.
 func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
-	h.renderGeneral(w, r, http.StatusOK, true, "", nil)
+	h.renderGeneral(w, r, http.StatusOK, generalState{Index: true})
 }
 
 // --- shared helpers ---
@@ -65,29 +66,29 @@ func saGroupInt(n int64) string {
 	return b.String()
 }
 
-// saParseInt reads a form number that may carry thousands separators.
-// Empty means unset.
-func saParseInt(v string) (*int32, error) {
+// saParseInt reads the form number for the field called name. It may carry
+// thousands separators; empty means unset.
+func saParseInt(name, v string) (*int32, error) {
 	v = strings.ReplaceAll(strings.TrimSpace(v), ",", "")
 	if v == "" {
 		return nil, nil
 	}
 	n, err := strconv.ParseInt(v, 10, 32)
 	if err != nil {
-		return nil, fmt.Errorf("%q is not a whole number", v)
+		return nil, fmt.Errorf("%s must be a whole number, not %q", name, v)
 	}
 	i := int32(n)
 	return &i, nil
 }
 
-func saParseFloat(v string) (*float64, error) {
+func saParseFloat(name, v string) (*float64, error) {
 	v = strings.ReplaceAll(strings.TrimSpace(v), ",", "")
 	if v == "" {
 		return nil, nil
 	}
 	f, err := strconv.ParseFloat(v, 64)
 	if err != nil {
-		return nil, fmt.Errorf("%q is not a number", v)
+		return nil, fmt.Errorf("%s must be a number, not %q", name, v)
 	}
 	return &f, nil
 }
@@ -129,6 +130,7 @@ type providerConfig struct {
 	APIKey   string `json:"api_key"`
 	BaseURL  string `json:"base_url"`
 	PresetID string `json:"preset_id"`
+	Catalog  string `json:"catalog_provider_id"`
 }
 
 func readProviderConfig(raw []byte) (providerConfig, map[string]any) {
@@ -188,12 +190,16 @@ func (h *Handler) handleProvider(w http.ResponseWriter, r *http.Request) {
 	h.renderProviderPage(w, r, http.StatusOK, r.PathValue("id"), providerPageState{
 		KeyEditing: q.Get("key") != "",
 		Confirming: q.Get("remove") != "",
+		DelModel:   q.Get("delmodel"),
 	})
 }
 
 type providerPageState struct {
 	KeyEditing bool
 	Confirming bool
+	DelModel   string // the off hand-added model whose row asks before Delete
+	TestModel  string // the model whose row shows Test
+	Test       *testVM
 	Error      string
 }
 
@@ -204,6 +210,13 @@ func (h *Handler) renderProviderPage(w http.ResponseWriter, r *http.Request, sta
 		return
 	}
 	vm.KeyEditing, vm.Confirming, vm.Error = st.KeyEditing, st.Confirming, st.Error
+	for i := range vm.Models {
+		m := &vm.Models[i]
+		m.Confirming = !m.On && m.ID == st.DelModel
+		if m.ID == st.TestModel {
+			m.Test = st.Test
+		}
+	}
 	h.render(w, r, status, providerScreen(h.loadSnav(r.Context(), r, "providers"), vm))
 }
 
@@ -222,7 +235,11 @@ func (h *Handler) loadProviderPage(r *http.Request, id string) (providerPageVM, 
 		NoCache:   prov.GetType() != "anthropic",
 		Caching:   true,
 	}
-	if st, ok := lastTest(id); ok {
+	if prov.GetType() == "openai-compatible" {
+		vm.Compatible, vm.BaseURL, vm.Catalog = true, cfg.BaseURL, cfg.Catalog
+		vm.Catalogs = h.catalogOptions(r, cfg.Catalog)
+	}
+	if st, ok := lastTest(prov); ok {
 		vm.Test = st.vm(time.Now())
 	}
 	enabled := map[string]bool{}
@@ -243,13 +260,22 @@ func (h *Handler) loadProviderPage(r *http.Request, id string) (providerPageVM, 
 		vm.Models = append(vm.Models, pm)
 	}
 	sort.Slice(vm.Models, func(i, j int) bool { return vm.Models[i].Name < vm.Models[j].Name })
-	if ids, ok := lastDiscovered(id); ok {
-		for _, mid := range ids {
-			if !enabled[mid] {
-				vm.NewCount++
-			}
+	// Hand-added models that are off keep their rows on the server, so they
+	// list after the ones that are on, ready to come back.
+	var off []providerModelVM
+	for _, m := range resp.Msg.GetDisabledModels() {
+		pm := providerModelVM{Name: saModelName(m.GetDisplayName(), m.GetModelId()), ID: m.GetModelId(), Caps: saCapTags(m.GetCapabilities())}
+		if m.ContextWindow != nil {
+			pm.Context = abbrevTokens(m.GetContextWindow())
 		}
+		if m.GetPricing() != nil {
+			pm.Cost, _ = costBucket(m.GetPricing())
+		}
+		off = append(off, pm)
 	}
+	sort.Slice(off, func(i, j int) bool { return off[i].Name < off[j].Name })
+	vm.Models = append(vm.Models, off...)
+	vm.NewCount = newModels(prov, func(mid string) bool { return enabled[mid] })
 	if ds := prov.GetDefaultSettings(); ds != nil {
 		if ds.MaxOutputTokens != nil {
 			vm.MaxTokens = saGroupInt(int64(ds.GetMaxOutputTokens()))
@@ -283,20 +309,45 @@ func (h *Handler) handleProviderSave(w http.ResponseWriter, r *http.Request) {
 	if label := strings.TrimSpace(r.PostFormValue("label")); label != "" && label != prov.GetLabel() {
 		req.Label = &label
 	}
+	// The server merges config keys over the stored ones, so only what this
+	// page edits is sent.
+	patch := map[string]any{}
 	if key := strings.TrimSpace(r.PostFormValue("api_key")); key != "" {
-		_, all := readProviderConfig(prov.GetConfig())
-		all["api_key"] = key
-		raw, _ := json.Marshal(all)
+		patch["api_key"] = key
+	}
+	if prov.GetType() == "openai-compatible" {
+		cfg, _ := readProviderConfig(prov.GetConfig())
+		if _, ok := r.PostForm["base_url"]; ok {
+			base := strings.TrimSpace(r.PostFormValue("base_url"))
+			if base == "" {
+				h.renderProviderPage(w, r, http.StatusUnprocessableEntity, id, providerPageState{Error: "An OpenAI-compatible provider needs a base URL"})
+				return
+			}
+			if base != cfg.BaseURL {
+				patch["base_url"] = base
+			}
+		}
+		if cat, ok := r.PostForm["catalog"]; ok && cat[0] != cfg.Catalog {
+			patch["catalog_provider_id"] = cat[0]
+		}
+	}
+	if len(patch) > 0 {
+		raw, _ := json.Marshal(patch)
 		req.Config = raw
 	}
 	ds := prov.GetDefaultSettings()
 	if ds == nil {
 		ds = &psmithv1.CallSettings{}
 	}
-	maxTok, err := saParseInt(r.PostFormValue("max_output_tokens"))
+	maxTok, err := saParseInt("Max output tokens", r.PostFormValue("max_output_tokens"))
+	if err == nil {
+		err = saInRange("Max output tokens", maxTok, 1, 1<<30)
+	}
 	if err == nil {
 		var temp *float64
-		temp, err = saParseFloat(r.PostFormValue("temperature"))
+		if temp, err = saParseFloat("Temperature", r.PostFormValue("temperature")); err == nil {
+			err = saInRange("Temperature", temp, 0, 2)
+		}
 		ds.MaxOutputTokens, ds.Temperature = maxTok, temp
 	}
 	if err != nil {
@@ -329,8 +380,8 @@ func (h *Handler) handleProviderTest(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings/providers/"+id, http.StatusSeeOther)
 }
 
-// testProvider runs the connection test and remembers the outcome for the
-// list's status dot.
+// testProvider runs the connection test; the server records the outcome for
+// the list's status dot.
 func (h *Handler) testProvider(r *http.Request, id string) provStatus {
 	resp, err := h.models.TestUserModelProvider(r.Context(), connect.NewRequest(&psmithv1.TestUserModelProviderRequest{
 		UserModelProviderId: id,
@@ -344,7 +395,6 @@ func (h *Handler) testProvider(r *http.Request, id string) provStatus {
 	default:
 		st.OK, st.LatencyMS = true, resp.Msg.GetLatencyMs()
 	}
-	rememberTest(id, st)
 	return st
 }
 
@@ -362,6 +412,60 @@ func (h *Handler) handleProviderDisable(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, "/settings/providers/"+id, http.StatusSeeOther)
 }
 
+// catalogOptions lists the models.dev catalogs an OpenAI-compatible provider
+// can borrow prices and limits from: every compatible template's. cur stays
+// listed even when no template names it.
+func (h *Handler) catalogOptions(r *http.Request, cur string) []saOpt {
+	var out []saOpt
+	seen := map[string]bool{"": true}
+	if resp, err := h.models.ListProviderTemplates(r.Context(), connect.NewRequest(&psmithv1.ListProviderTemplatesRequest{})); err == nil {
+		for _, t := range resp.Msg.GetTemplates() {
+			id := t.GetCatalogProviderId()
+			if t.GetDriverType() != "openai-compatible" || seen[id] {
+				continue
+			}
+			seen[id] = true
+			out = append(out, saOpt{Value: id, Label: t.GetName()})
+		}
+	}
+	if !seen[cur] {
+		out = append(out, saOpt{Value: cur, Label: cur})
+	}
+	return out
+}
+
+// handleProviderRowTest tests one model from the provider's list and draws
+// the outcome in its row.
+func (h *Handler) handleProviderRowTest(w http.ResponseWriter, r *http.Request) {
+	id, mid := r.PathValue("id"), r.PathValue("model")
+	resp, err := h.models.TestUserModel(r.Context(), connect.NewRequest(&psmithv1.TestUserModelRequest{UserModelProviderId: id, ModelId: mid}))
+	h.renderProviderPage(w, r, http.StatusOK, id, providerPageState{TestModel: mid, Test: rowTestResult(resp, err)})
+}
+
+func rowTestResult(resp *connect.Response[psmithv1.TestUserModelResponse], err error) *testVM {
+	if err != nil {
+		return &testVM{Message: "Test failed: " + saErrMsg(err)}
+	}
+	t := resp.Msg
+	if !t.GetOk() {
+		return &testVM{Message: "Test failed: " + t.GetErrorMessage()}
+	}
+	return &testVM{OK: true, Message: fmt.Sprintf("Answered in %d ms · %d tokens in, %d out", t.GetLatencyMs(), t.GetInputTokens(), t.GetOutputTokens())}
+}
+
+// handleModelDelete deletes a model added by hand, on or off. Discover won't
+// bring it back, so the page asks first.
+func (h *Handler) handleModelDelete(w http.ResponseWriter, r *http.Request) {
+	id, mid := r.PathValue("id"), r.PathValue("model")
+	if _, err := h.models.DisableModels(r.Context(), connect.NewRequest(&psmithv1.DisableModelsRequest{
+		UserModelProviderId: id, ModelIds: []string{mid}, DeleteManual: true,
+	})); err != nil {
+		h.renderProviderPage(w, r, http.StatusUnprocessableEntity, id, providerPageState{Error: saErrMsg(err)})
+		return
+	}
+	http.Redirect(w, r, "/settings/providers/"+id, http.StatusSeeOther)
+}
+
 func (h *Handler) handleProviderDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if _, err := h.models.DeleteUserModelProvider(r.Context(), connect.NewRequest(&psmithv1.DeleteUserModelProviderRequest{
@@ -370,7 +474,6 @@ func (h *Handler) handleProviderDelete(w http.ResponseWriter, r *http.Request) {
 		h.renderProviderPage(w, r, http.StatusUnprocessableEntity, id, providerPageState{Error: saErrMsg(err)})
 		return
 	}
-	forgetProvider(id)
 	http.Redirect(w, r, "/settings/providers", http.StatusSeeOther)
 }
 

@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // The inspector column: three tabs (Context, Settings, Plugins), each a URL
@@ -26,7 +27,7 @@ func tabHref(convID, tab string) string {
 templ inspector(c convVM) {
 	<aside class={ "inspector", templ.KV("as-page", c.Inspector.Page) } id="inspector" aria-label="Inspector">
 		<header class="insp-page-head">
-			<a class="insp-page-back" href={ templ.SafeURL("/c/" + c.ID) } aria-label="Back to the conversation">
+			<a class="insp-page-back" href={ templ.SafeURL(inspPageBack(c)) } aria-label={ inspPageBackLabel(c) }>
 				@icon("back")
 			</a>
 			<div class="insp-page-title">
@@ -36,10 +37,10 @@ templ inspector(c convVM) {
 		</header>
 		switch c.Inspector.View {
 			case "model":
-				@inspSubHead("/c/"+c.ID, "Back to the inspector", "Model")
+				@inspSubHead(inspBack(c), inspBackLabel(c), "Model")
 				@pickerView(c, c.Inspector.Picker)
 			case "info":
-				@inspSubHead("/c/"+c.ID, "Back to the inspector", "Conversation")
+				@inspSubHead(inspBack(c), inspBackLabel(c), "Conversation")
 				@infoView(c.Inspector.Info)
 			case "panel":
 				@inspSubHead(tabHref(c.ID, "plugins"), "Back to plugins", c.Inspector.Panel.Title)
@@ -67,12 +68,63 @@ templ inspector(c convVM) {
 							@pluginsTab(c.Inspector.Plugins)
 						}
 					default:
-						<div class="insp-body">
-							@contextTab(c)
-						</div>
+						if c.Inspector.View == "" {
+							<div
+								class="insp-body"
+								id="insp-context"
+								hx-get={ "/c/" + c.ID + "/partials/inspector" }
+								hx-trigger={ "sse:conversation-changed-" + c.ID }
+								hx-select="#insp-context"
+								hx-swap="outerHTML"
+							>
+								@contextTab(c)
+							</div>
+						} else {
+							<div class="insp-body">
+								@contextTab(c)
+							</div>
+						}
 				}
 		}
 	</aside>
+}
+
+// inspBack is the model picker's and info view's back: the tab they were
+// opened from, or the conversation.
+func inspBack(c convVM) string {
+	if c.Inspector.Back != "" {
+		return c.Inspector.Back
+	}
+	return "/c/" + c.ID
+}
+
+func inspBackLabel(c convVM) string {
+	if i := strings.Index(inspBack(c), "?tab="); i >= 0 {
+		return "Back to " + tabName(inspBack(c)[i+5:])
+	}
+	return "Back to the conversation"
+}
+
+// inspPageBack is the narrow page header's back: a sub-view goes where its
+// own back goes; a tab goes to the conversation.
+func inspPageBack(c convVM) string {
+	switch c.Inspector.View {
+	case "model", "info":
+		return inspBack(c)
+	case "panel", "config":
+		return tabHref(c.ID, "plugins")
+	}
+	return "/c/" + c.ID
+}
+
+func inspPageBackLabel(c convVM) string {
+	switch c.Inspector.View {
+	case "model", "info":
+		return inspBackLabel(c)
+	case "panel", "config":
+		return "Back to Plugins"
+	}
+	return "Back to the conversation"
 }
 
 func inspPageTitle(in inspVM) string {
@@ -129,10 +181,16 @@ templ contextTab(c convVM) {
 		<dl class="stats">
 			<dt>Cost</dt><dd class="tnum">{ c.Inspector.Cost }</dd>
 			<dt>Turns</dt><dd>{ strconv.Itoa(c.Inspector.Turns) }</dd>
-			<dt>Cache, last reply</dt><dd class="good">{ c.Inspector.Cache }</dd>
+			<dt>Cache, last reply</dt><dd class={ templ.KV("good", cacheGood(c.Inspector.Cache)) }>{ c.Inspector.Cache }</dd>
 			<dt>Model changes</dt><dd>{ strconv.Itoa(c.Inspector.Changes) }</dd>
 		</dl>
+		if c.Inspector.Unpriced != "" {
+			<p class="insp-note unpriced">{ "No pricing for " + c.Inspector.Unpriced + ", so the cost leaves those turns out." }</p>
+		}
 	</section>
+	if c.Inspector.Charts != nil && c.Inspector.View != "contexts" {
+		@runChartsT(c.Inspector.Charts)
+	}
 	if c.Inspector.View == "contexts" {
 		@contextsManage(c)
 	} else {
@@ -143,6 +201,36 @@ templ contextTab(c convVM) {
 		if len(c.Inspector.Branches) == 0 {
 			@keysSection()
 		}
+	}
+}
+
+templ runChartsT(ch *runChartsVM) {
+	<section class="run-chart">
+		<h2 class="h2-gap">Context over this run</h2>
+		<figure>
+			<svg viewBox="0 0 100 84" preserveAspectRatio="none" width="100%" height="84" role="img" aria-label={ ch.Label }>
+				if ch.Warn {
+					<line x1="0" x2="100" y1={ f2(ch.WarnY) } y2={ f2(ch.WarnY) } class="warn-rule" vector-effect="non-scaling-stroke"></line>
+				}
+				<polyline points={ ch.Line } class="growth" vector-effect="non-scaling-stroke"></polyline>
+			</svg>
+			<figcaption class="axis"><span>1</span><span>{ strconv.Itoa(ch.Replies) + " replies" }</span></figcaption>
+		</figure>
+	</section>
+	if len(ch.Bars) > 0 {
+		<section class="run-chart">
+			<h2 class="h2-gap">Cost per reply</h2>
+			<figure>
+				<svg viewBox="0 0 100 56" preserveAspectRatio="none" width="100%" height="56" role="img" aria-label={ ch.CostLabel }>
+					for _, b := range ch.Bars {
+						<rect x={ f2(b.X) } y={ f2(b.Y) } width={ f2(b.W) } height={ f2(b.H) } class={ templ.KV("miss", b.Miss) }></rect>
+					}
+				</svg>
+				if ch.AnyMiss {
+					<figcaption>Orange replies missed the cache on a large prompt.</figcaption>
+				}
+			</figure>
+		</section>
 	}
 }
 
@@ -182,7 +270,11 @@ templ compressButton(c convVM) {
 			<a class={ "btn", "h36", "full", "cmp-btn", "on", templ.KV("warn", c.Gauge.State != "") } href={ templ.SafeURL("/c/" + c.ID) } aria-pressed="true">Compress into a new context</a>
 		default:
 			if c.Slot != "archived" {
-				<a class={ "btn", "h36", "full", "cmp-btn", templ.KV("warn", c.Gauge.State != "") } href={ templ.SafeURL("/c/" + c.ID + "/compact") }>Compress into a new context</a>
+				if c.Inspector.Turns == 0 {
+					<button class="btn h36 full cmp-btn off" type="button" disabled>Compress into a new context</button>
+				} else {
+					<a class={ "btn", "h36", "full", "cmp-btn", templ.KV("warn", c.Gauge.State != "") } href={ templ.SafeURL("/c/" + c.ID + "/compact") }>Compress into a new context</a>
+				}
 			}
 	}
 }
@@ -256,7 +348,7 @@ templ contextsManage(c convVM) {
 					<div class={ "ctx-row", templ.KV("on", x.Active) }>
 						<div class="ctx-row-top">
 							<a href={ templ.SafeURL(ctxHref(c.ID, x)) }>{ x.Title }</a>
-							<a class="ibtn" href={ templ.SafeURL(tabHref(c.ID, "contexts") + "&rename=" + x.ID) } aria-label={ "Rename " + x.Label }>
+							<a class="ibtn" href={ templ.SafeURL(tabHref(c.ID, "contexts") + "&ctx_rename=" + x.ID) } aria-label={ "Rename " + x.Label }>
 								@ii("edit14")
 							</a>
 							if !x.Active {
@@ -339,6 +431,30 @@ templ settingsTab(s *callSettingsVM) {
 }
 
 templ setRow(r setRowVM) {
+	if r.Locked != "" {
+		<div class="set-row locked">
+			<div class="set-lbl">
+				<label for={ "cs-" + r.Name }>
+					{ r.Label }
+					<span class="set-lock">
+						@lockGlyph()
+					</span>
+				</label>
+				<span>{ r.Sub() }</span>
+			</div>
+			<input id={ "cs-" + r.Name } value={ r.Value } placeholder={ r.Placeholder } class={ "set-in", templ.KV("wide", r.Wide || r.Kind == "select") } disabled/>
+			<span class="set-pad"></span>
+		</div>
+	} else {
+		@setRowEditable(r)
+	}
+}
+
+templ lockGlyph() {
+	<svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><rect x="2.5" y="5.5" width="7" height="5" rx="1.2"></rect><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5"></path></svg>
+}
+
+templ setRowEditable(r setRowVM) {
 	<div class={ "set-row", templ.KV("set", r.Set() || r.Dirty) } data-set-row data-from={ r.From } data-inherits={ r.Inherits }>
 		<div class="set-lbl">
 			<label for={ "cs-" + r.Name }>{ r.Label }<span class="set-dot" aria-label="Set for this conversation"></span></label>
@@ -399,8 +515,16 @@ func unsavedLabel(n int) string {
 templ pluginsTab(p *pluginsTabVM) {
 	<form class="insp-body padded" method="post" action={ templ.SafeURL("/c/" + p.ConvID + "/plugins") } id="insp-plugins">
 		<section>
-			<div class="sec-head"><h2>Pipeline</h2><span class="muted">{ plural(len(p.Rows), "plugin") }</span></div>
+			<div class="sec-head">
+				<h2>Pipeline</h2>
+				if len(p.Rows) > 0 {
+					<span class="muted">{ plural(len(p.Rows), "plugin") }</span>
+				}
+			</div>
 			<p class="insp-intro wide">{ "Plugins run in this order. Inherited ones come from the " + p.Profile + " profile. Switching one off here leaves the profile alone." }</p>
+			if len(p.Rows) == 0 {
+				<p class="plugs-empty">No plugins are running for this conversation.</p>
+			}
 			<ol class="plugs">
 				for _, r := range p.Rows {
 					<li class={ "plug", r.Kind }>
@@ -452,6 +576,12 @@ templ pluginsTab(p *pluginsTabVM) {
 						}
 					</div>
 				</details>
+			}
+			if p.Overrides > 0 {
+				<button type="submit" class="plug-clear" name="clear" value="1">
+					@ii("reset")
+					Clear conversation changes
+				</button>
 			}
 		</section>
 		@inspSaveBar(p.Dirty)

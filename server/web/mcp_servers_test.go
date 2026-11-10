@@ -68,7 +68,7 @@ func TestMCPServersSettings(t *testing.T) {
 	editReq := httptest.NewRequest("GET", "/settings/mcp-servers/"+id+"/edit", nil).WithContext(userCtx)
 	editReq.SetPathValue("id", id)
 	editRec := do(h.handleMCPServerEdit, editReq)
-	if editRec.Code != http.StatusOK || !strings.Contains(editRec.Body.String(), "Leave empty to keep it") {
+	if editRec.Code != http.StatusOK || !strings.Contains(editRec.Body.String(), "Type new headers to replace the stored ones.") {
 		t.Fatalf("edit form should hint at kept secrets; code=%d", editRec.Code)
 	}
 	if strings.Contains(editRec.Body.String(), "fc-secret") {

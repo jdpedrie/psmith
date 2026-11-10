@@ -225,6 +225,17 @@ func (s *Service) PromoteCompactionToNewContext(ctx context.Context, req *connec
 	if err := s.requireNoActiveStream(ctx, conv.ID); err != nil {
 		return nil, err
 	}
+	// A summary starts one context. A second promote, from a client still
+	// showing the review after switching back, would start a duplicate.
+	siblings, err := s.queries.ListContextsByConversation(ctx, conv.ID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	for _, c := range siblings {
+		if c.ParentContextID != nil && *c.ParentContextID == sourceCtx.ID {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this summary already started a new context"))
+		}
+	}
 
 	// Resolve compression_mode from profile chain (defaulting to REPLACE).
 	prof, err := s.queries.GetProfileByID(ctx, conv.ProfileID)

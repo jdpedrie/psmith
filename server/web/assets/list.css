@@ -36,10 +36,12 @@
 .msep{height:1px;margin:5px 4px;background:var(--line)}
 .msep.top{margin:0 4px 5px}
 
-/* Archived rows offer Unarchive on hover instead of a menu. */
-.unarch{position:absolute;top:8px;right:8px;height:28px;padding:0 10px;border:0;border-radius:7px;background:var(--fill2);color:var(--t1);font-size:12.5px;font-weight:500;display:none}
+/* Archived rows offer Unarchive and Delete on hover instead of a menu. */
+.unarch{position:absolute;top:8px;right:40px;height:28px;padding:0 10px;border:0;border-radius:7px;background:var(--fill2);color:var(--t1);font-size:12.5px;font-weight:500;display:none}
+.rdel{position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:7px;background:var(--fill2);color:var(--red);display:none;align-items:center;justify-content:center}
 .ritem:is(:hover,.hover,:focus-within) .unarch{display:block}
-.ritem:is(:hover,.hover):has(.unarch) .row-body{padding-right:84px}
+.ritem:is(:hover,.hover,:focus-within) .rdel{display:flex}
+.ritem:is(:hover,.hover):has(.unarch) .row-body{padding-right:116px}
 .arch-note{margin:14px 8px 0;font-size:12px;color:var(--t3)}
 
 /* Rename: the row becomes its title field. */
@@ -58,18 +60,30 @@
 .confirm-btns .cancel{background:var(--fill2);color:var(--t1)}
 
 /* Search results. */
-.list-meta.search-meta{padding:0 16px 6px}
-.incarch{display:flex;align-items:center;gap:8px}
+.list-meta.search-meta{padding:0 16px 6px;white-space:nowrap}
+/* One line at any width (board ListSearch): when the column is narrower
+   than the board's 288px, the count gives way before the switch does. */
+.search-meta [role=status]{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.incarch{display:flex;align-items:center;gap:8px;flex:none}
 .incarch > span{color:var(--t2);font-weight:600}
 a.switch{display:inline-block;box-sizing:content-box}
 .keyhints{margin:18px 8px 0;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--t3)}
 .no-match{margin:10px 8px 0;font-size:13px;color:var(--t2)}
 
-/* Empty account. */
+/* Empty account, an empty filter, and a list that failed to load. */
 .empty{margin-top:56px;padding:0 20px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
 .empty-icon{color:var(--t3);margin-bottom:4px;display:flex}
+.load-error .empty-icon{color:var(--orange)}
 .empty-title{font-weight:600}
-.empty-sub{font-size:12.5px;color:var(--t2);line-height:1.45}
+.empty-sub{font-size:12.5px;color:var(--t2);line-height:1.45;overflow-wrap:anywhere}
+.empty-btn{height:28px;padding:0 10px;border-radius:7px;background:var(--fill2);color:var(--t1);display:flex;align-items:center;gap:6px;text-decoration:none;font-size:12.5px;font-weight:500;margin-top:6px}
+.empty-btn .n{color:var(--t2);font-weight:400}
+
+/* A reply that finished while its conversation wasn't open here. list.js
+   marks the row; the apps call it an unread reply. */
+.row .unread{width:8px;height:8px;border-radius:4px;background:var(--accent);flex:none}
+.row.unseen .row-top b{font-weight:700}
+.row.unseen .row-time{display:flex;align-items:center;gap:6px;color:var(--accentInk);font-weight:600}
 
 /* Select many. */
 .sel-count{color:var(--t1);font-weight:600}
@@ -106,6 +120,7 @@ a.switch{display:inline-block;box-sizing:content-box}
 .acct{flex:1;min-width:0}
 .acct-btn{height:36px;display:flex;align-items:center;gap:10px;margin-left:-6px;padding:0 6px;border-radius:8px;color:var(--t2);list-style:none;cursor:pointer}
 .acct-btn::-webkit-details-marker{display:none}
+.acct-btn .who{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .acct[open] .acct-btn{background:var(--fill)}
 .amenu{position:absolute;z-index:2;left:10px;bottom:calc(100% + 6px);width:260px;box-sizing:border-box;padding:5px;border-radius:12px;background:var(--raise);box-shadow:inset 0 0 0 1px var(--line),0 12px 32px var(--shadow)}
 .amenu-head{display:flex;align-items:center;gap:10px;padding:8px 10px 10px}
@@ -118,9 +133,9 @@ a.switch{display:inline-block;box-sizing:content-box}
 .amenu .mk{margin-left:auto}
 .appear{height:36px;display:flex;align-items:center;gap:10px;padding:0 6px 0 10px;font-size:13.5px}
 .appear > span{flex:1}
-.seg{display:flex;width:138px;height:28px;border-radius:7px;background:var(--fill);padding:2px;box-sizing:border-box}
-.seg button{flex:1;border:0;border-radius:5px;background:transparent;color:var(--t2);font-size:12px;padding:0}
-.seg button[aria-checked="true"]{background:var(--raise);color:var(--t1);font-weight:600;box-shadow:0 1px 2px var(--shadow)}
+.amenu .seg{display:flex;width:138px;height:28px;border-radius:7px;background:var(--fill);padding:2px;box-sizing:border-box}
+.amenu .seg button{flex:1;border:0;border-radius:5px;background:transparent;color:var(--t2);font-size:12px;padding:0}
+.amenu .seg button[aria-checked="true"]{background:var(--raise);color:var(--t1);font-weight:600;box-shadow:0 1px 2px var(--shadow)}
 
 /* --- command results ---------------------------------------------------------- */
 #command-results{flex:1;min-height:0;display:flex;flex-direction:column}
@@ -195,6 +210,13 @@ a.switch{display:inline-block;box-sizing:content-box}
 .sc-keys{margin:0;display:grid;grid-template-columns:1fr auto;row-gap:9px;color:var(--t2);font-size:12.5px}
 .sc-keys kbd{padding:3px 6px}
 .sc-note{margin:0;font-size:12px;color:var(--t3)}
+/* Below 1180px there's no third column: the panel is the page, as the
+   inspector is, and its close button goes back. */
+@media (max-width:1179px){
+  .app:has(> #shortcuts) > :not(#shortcuts){display:none}
+  #shortcuts{display:flex;flex:1 1 100%;max-height:100vh;border-left:0;background:var(--chrome)}
+  #shortcuts .sc-close{width:44px;height:44px;border-radius:10px}
+}
 
 /* --- sign in and setup ------------------------------------------------------------ */
 .mark.big{width:44px;height:44px;border-radius:11px;font-size:22px}
@@ -331,4 +353,24 @@ form.contents{display:contents}
   .draft-send svg{display:block}
   .home-scroll{padding:0 16px}
   .home-inner{padding-top:40px}
+}
+
+/* --- touch -------------------------------------------------------------------- */
+/* Without hover there's nothing to reveal a row's actions, so they're
+   always there (board PhoneRowMenu): the more button beside the time, a
+   menu with touch-sized items, and Unarchive and Delete on archived rows. */
+@media (max-width:759px),(hover:none){
+  .ritem > .row{padding-right:50px}
+  .ritem .rmore > summary{display:flex;top:10px;right:4px;width:44px;height:44px;border-radius:10px;background:transparent;color:var(--t2)}
+  .ritem .rmore[open] > summary{background:var(--fill2);color:var(--t1)}
+  .ritem:is(:hover,.hover,:has(.rmore[open])) .row-time{display:block}
+  .ritem:is(:hover,.hover,:has(.rmore[open])) .row-time:is(.pinned,.row.unseen *){display:flex}
+  .ritem:is(:hover,.hover,:has(.rmore[open])) .row-body{padding-right:0}
+  .rmenu{top:calc(100% - 4px);right:4px;width:240px;padding:6px;border-radius:14px}
+  .rmenu :is(a,button){height:44px;gap:12px;padding:0 12px;border-radius:9px;font-size:15px}
+  .rmenu .mi svg{width:16px;height:16px}
+  .ritem:has(.unarch) > .row{padding-right:156px}
+  .ritem:is(:hover,.hover):has(.unarch) .row-body{padding-right:0}
+  .ritem .unarch{display:block;top:10px;right:52px;height:44px;padding:0 14px;border-radius:10px;font-size:14px}
+  .ritem .rdel{display:flex;top:10px;right:4px;width:44px;height:44px;border-radius:10px}
 }

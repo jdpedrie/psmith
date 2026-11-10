@@ -58,11 +58,11 @@ func (h *Handler) renderProviders(w http.ResponseWriter, r *http.Request, catalo
 		}
 		on := counts[p.GetId()]
 		models := strconv.Itoa(on) + " " + saPlural(on, "model", "models") + " on"
-		if ids, ok := lastDiscovered(p.GetId()); ok && len(ids) > on {
+		if ids := p.GetLastDiscoveredModelIds(); len(ids) > on {
 			models = strconv.Itoa(on) + " of " + strconv.Itoa(len(ids)) + " models on"
 		}
 		row := provRowVM{ID: p.GetId(), Name: p.GetLabel(), Initial: saInitial(p.GetLabel()), Sub: strings.Join(append(parts, models), " · "), StatusText: "Not tested"}
-		if st, ok := lastTest(p.GetId()); ok {
+		if st, ok := lastTest(p); ok {
 			if st.OK {
 				row.Status, row.StatusText = "ok", "Connected"
 			} else {
@@ -291,7 +291,6 @@ func (h *Handler) handleProviderDiscover(w http.ResponseWriter, r *http.Request)
 		}
 		d.Rows = append(d.Rows, row)
 	}
-	rememberDiscovered(id, ids)
 	// Models already on first, then by name: the list reads as "what you
 	// have, then what you could add".
 	sort.SliceStable(d.Rows, func(i, j int) bool {

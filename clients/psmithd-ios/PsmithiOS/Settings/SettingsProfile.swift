@@ -11,26 +11,45 @@ struct SettingsProfile: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var draft: ProfileDraft?
+    /// The server answered a fetch for a profile past the loaded pages.
+    @State private var fetchedMissing = false
+    @State private var fetchError: String?
 
     var body: some View {
         Group {
             if let draft {
                 SettingsProfileScreen(draft: draft, onSave: { Task { await save(draft) } })
-            } else if profileID != nil && app.profiles.profiles.first(where: { $0.id == profileID }) == nil {
+            } else if fetchedMissing {
                 IKSettingsPage(title: "Profile") {
                     IKSFooter("This profile is gone. It may have been deleted on another device.", top: 0)
+                }
+            } else if let fetchError {
+                IKSettingsPage(title: "Profile") {
+                    IKSFooter("Couldn't load this profile. \(fetchError)", top: 0)
                 }
             } else {
                 Color.clear.background(IK.settingsGround.ignoresSafeArea())
             }
         }
-        .onAppear {
-            guard draft == nil else { return }
-            let profile = profileID.flatMap { id in app.profiles.profiles.first { $0.id == id } }
-            if profileID != nil && profile == nil { return }
-            draft = ProfileDraft.draft(for: profile)
-        }
         .task {
+            // The list pages, so a profile opened from elsewhere may not be
+            // on a loaded page yet. Fetch it (and its parents) by id.
+            if draft == nil {
+                if let id = profileID {
+                    do {
+                        guard let profile = try await app.profiles.fetch(id: id) else {
+                            fetchedMissing = true
+                            return
+                        }
+                        draft = ProfileDraft.draft(for: profile)
+                    } catch {
+                        if !PsmithError.isCancellation(error) { fetchError = PsmithError.display(error) }
+                        return
+                    }
+                } else {
+                    draft = ProfileDraft.draft(for: nil)
+                }
+            }
             // Model names and plugin rows need these; both are cheap when warm.
             async let models: Void = app.profiles.loadAvailableModels()
             async let plugins: Void = draft?.loadPlugins(app.profiles) ?? ()
@@ -54,8 +73,8 @@ struct SettingsProfileScreen: View {
     @Environment(\.theme) private var theme
 
     private var profiles: ProfilesViewModel { app.profiles }
-    private var stored: PsmithProfile? { profiles.profiles.first { $0.id == draft.profileID } }
-    private var parent: PsmithProfile? { profiles.profiles.first { $0.id == draft.fields.parentProfileID } }
+    private var stored: PsmithProfile? { profiles.profile(id: draft.profileID) }
+    private var parent: PsmithProfile? { profiles.profile(id: draft.fields.parentProfileID) }
 
     var body: some View {
         IKSettingsPage(title: draft.fields.name.isEmpty ? (draft.profileID == nil ? "New profile" : "Profile") : draft.fields.name) {
@@ -87,7 +106,7 @@ struct SettingsProfileScreen: View {
                         .foregroundStyle(IK.text)
                         .accessibilityLabel("System prompt")
                     HStack {
-                        Text(parent.map { "Added after \($0.name)’s prompt" } ?? "Sent at the top of every conversation")
+                        Text(parent.map { "Replaces \($0.name)’s prompt" } ?? "Sent at the top of every conversation")
                         Spacer(minLength: 8)
                         Text("\(draft.fields.systemMessage.count) characters").monospacedDigit()
                     }

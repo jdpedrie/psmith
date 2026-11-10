@@ -1,6 +1,8 @@
 package web
 
 import (
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -88,5 +90,38 @@ func TestElicitRespond_OwnershipNotFound(t *testing.T) {
 	rec := do(h.handleElicitRespond, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status=%d want 404", rec.Code)
+	}
+}
+
+// The card names who is asking when the stream says.
+func TestElicitCard_NamesTheSource(t *testing.T) {
+	t.Parallel()
+	payload := []byte(`{"elicitation_id":"e","message":"Which repo?","requested_schema":{"properties":{"repo":{"type":"string"}}},"source":"GitHub","tool":"create_issue"}`)
+	out := elicitEvent(context.Background(), "c", payload, "")
+	if !strings.Contains(out, "GitHub needs input") || !strings.Contains(out, "create_issue") {
+		t.Errorf("card doesn't name the source and tool:\n%s", out)
+	}
+}
+
+// A plugin action in a reply only works when the fragment names its plugin;
+// without one, the row shows but does nothing.
+func TestFragments_PluginActionsNeedAnAuthor(t *testing.T) {
+	t.Parallel()
+	props := []byte(`{"items":[{"label":"Arm it","value":"A","action":"plugin:arm?id=x"}]}`)
+	cards := []byte(`{"items":[{"title":"Runbook","action":"plugin:arm?id=runbook"}]}`)
+	owned := fragmentsOf([]*psmithv1.UIFragment{{Component: "choice_list", Props: props, Plugin: "context_packs"}, {Component: "card_list", Props: cards, Plugin: "context_packs"}})
+	if owned[0].Choices[0].Action != "plugin:arm?id=x" || owned[1].Cards[0].Action != "plugin:arm?id=runbook" {
+		t.Fatalf("owned fragment lost its actions: %+v", owned)
+	}
+	orphan := fragmentsOf([]*psmithv1.UIFragment{{Component: "choice_list", Props: props}, {Component: "card_list", Props: cards}})
+	if orphan[0].Choices[0].Action != "" || orphan[1].Cards[0].Action != "" {
+		t.Errorf("orphan fragment kept a plugin action: %+v", orphan)
+	}
+
+	out := renderString(t, fragment(msgItem{ConvID: "c1"}, owned[1]))
+	for _, want := range []string{`<input type="hidden" name="plugin" value="context_packs">`, `<button class="card card-act" type="submit" name="choice" value="plugin:arm?id=runbook">`, `hx-post="/c/c1/choice"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("card missing %q\n%s", want, out)
+		}
 	}
 }

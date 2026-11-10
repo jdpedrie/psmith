@@ -87,6 +87,12 @@ struct MainWindowSnapshots {
         assertViewSnapshots(window(messages: Array(BoardProbe.thread.prefix(2)) + [SnapshotFixtures.compressionSummaryMessage(contextID: "context-c-scroll-2", finishReason: "max_tokens")]), sizes: sizes)
     }
 
+    /// A compression the user stopped: the card says so instead of offering
+    /// the partial text as a finished summary.
+    @Test func stoppedSummaryAwaitingReview() {
+        assertViewSnapshots(window(messages: Array(BoardProbe.thread.prefix(2)) + [SnapshotFixtures.compressionSummaryMessage(contextID: "context-c-scroll-2", finishReason: "user_cancelled")]), sizes: sizes)
+    }
+
     @Test func streaming() {
         assertViewSnapshots(window(messages: [BoardProbe.thread[0]], streamingText: "Entry anchors at the newest message. While the view sits at the bottom, any growth re-pins it there."), sizes: sizes)
     }

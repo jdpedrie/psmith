@@ -47,7 +47,24 @@
 		form.addEventListener("input", count);
 		form.addEventListener("change", count);
 		form.addEventListener("seta:changed", count);
-		form.addEventListener("reset", function () { setTimeout(count, 1); });
+		// A field htmx swaps in (Replace's key input) starts from what it
+		// arrived with, so typing into it counts and Cancel uncounts it. The
+		// swap replaces the element that asked, so this listens on document.
+		document.addEventListener("htmx:afterSettle", function () {
+			var known = initial.map(function (s) { return s.el; });
+			snapshot().forEach(function (s) { if (known.indexOf(s.el) < 0) initial.push(s); });
+			count();
+		});
+		// A reset can't bring back a removed stop chip, so the chips come
+		// back from what loaded.
+		var stops = $$("[data-stops]", form).map(function (box) { return { box: box, html: box.innerHTML }; });
+		form.addEventListener("reset", function () {
+			stops.forEach(function (s) { s.box.innerHTML = s.html; });
+			var name = function (el) { return el.name === "stop"; };
+			initial = initial.filter(function (s) { return !name(s.el); }).concat(
+				$$('input[name="stop"]', form).map(function (el) { return { el: el, v: el.value }; }));
+			setTimeout(count, 1);
+		});
 	});
 
 	// --- reset a field to not set --------------------------------------------

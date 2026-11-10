@@ -59,8 +59,8 @@ func (h *Handler) listAt(ctx context.Context, r *http.Request, dest string) list
 		u = &url.URL{Path: "/chats"}
 	}
 	q := u.Query()
-	q.Del("rename")
-	q.Del("confirm")
+	q.Del(renameKey)
+	q.Del(confirmKey)
 	u.RawQuery = q.Encode()
 	rr := r.Clone(ctx)
 	rr.URL = u
@@ -152,7 +152,7 @@ func (h *Handler) handleUnarchive(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleConversationDelete permanently deletes a conversation. The list
-// asks first, in the row (?confirm=).
+// asks first, in the row (?deleting=).
 func (h *Handler) handleConversationDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if _, err := h.convos.DeleteConversation(r.Context(), connect.NewRequest(&psmithv1.DeleteConversationRequest{Id: id})); err != nil {
@@ -234,23 +234,27 @@ func (h *Handler) handleBulk(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Redirect(w, r, back, http.StatusSeeOther)
 	case "confirm", "all":
-		l := h.listAt(ctx, r, selectURL(back))
-		l.Selected = map[string]bool{}
+		// Both land on a select-mode URL with the ticks in it, so the
+		// state survives a reload and Back.
+		u, _ := url.Parse(selectURL(back))
+		q := u.Query()
+		q.Del("id")
 		if r.PostFormValue("action") == "all" {
-			for _, row := range l.Rows {
-				l.Selected[row.ID] = true
+			for _, row := range h.listAt(ctx, r, u.String()).Rows {
+				q.Add("id", row.ID)
 			}
 		} else {
-			for _, id := range ids {
-				l.Selected[id] = true
-			}
 			if len(ids) == 0 {
-				http.Redirect(w, r, selectURL(back), http.StatusSeeOther)
+				http.Redirect(w, r, u.String(), http.StatusSeeOther)
 				return
 			}
-			l.ConfirmBulk = true
+			for _, id := range ids {
+				q.Add("id", id)
+			}
+			q.Set("bulk", "delete")
 		}
-		h.render(w, r, http.StatusOK, welcomeScreen(l, h.loadWelcome(ctx, l)))
+		u.RawQuery = q.Encode()
+		http.Redirect(w, r, u.String(), http.StatusSeeOther)
 	default:
 		http.Redirect(w, r, back, http.StatusSeeOther)
 	}

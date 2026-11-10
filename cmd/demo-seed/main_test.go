@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -66,5 +69,52 @@ func TestLastUserContent(t *testing.T) {
 	multi := []byte(`{"messages":[{"role":"user","content":[{"type":"text","text":"x"}]}]}`)
 	if got := lastUserContent(multi); got != "" {
 		t.Errorf("lastUserContent(multipart) = %q, want empty", got)
+	}
+}
+
+func TestPickResponseEchoNamesTheWord(t *testing.T) {
+	text, chunk, delay := pickResponse("echo Periwinkle and more")
+	if !strings.HasPrefix(text, "Heard periwinkle loud and clear.") {
+		t.Errorf("echo reply = %q, want it to start with the echoed word", text)
+	}
+	if chunk != 0 || delay >= 0 {
+		t.Errorf("echo should stream word by word at the flag delay, got chunk %d delay %v", chunk, delay)
+	}
+	if text2, _, _ := pickResponse("echo marmalade"); strings.Contains(text2, "periwinkle") {
+		t.Error("each echo reply names only its own word")
+	}
+}
+
+func TestPromptBehavior(t *testing.T) {
+	cases := []struct {
+		prompt    string
+		wantDelay time.Duration
+		wantFail  bool
+	}{
+		{"echo slowstart please", 3 * time.Second, false},
+		{"please FailNow", 0, true},
+		{"plain question", 0, false},
+	}
+	for _, c := range cases {
+		d, fail := promptBehavior(c.prompt, 3*time.Second)
+		if d != c.wantDelay || fail != c.wantFail {
+			t.Errorf("promptBehavior(%q) = (%v, %v), want (%v, %v)", c.prompt, d, fail, c.wantDelay, c.wantFail)
+		}
+	}
+}
+
+func TestServeModelsListsTheFakeModels(t *testing.T) {
+	rec := httptest.NewRecorder()
+	serveModels(rec, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
+	var body struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Data) != 2 || body.Data[0].ID != "fake-alpha" || body.Data[1].ID != "fake-beta" {
+		t.Errorf("models = %+v, want fake-alpha and fake-beta", body.Data)
 	}
 }

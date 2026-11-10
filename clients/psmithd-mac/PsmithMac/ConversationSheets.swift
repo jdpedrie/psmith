@@ -9,6 +9,7 @@ struct DraftStartView: View {
     let profiles: [PsmithProfile]
     @Environment(\.theme) private var theme
     @Environment(Navigator.self) private var navigator
+    @State private var visibleHeight: CGFloat = 0
 
     private var choices: [PsmithProfile] {
         profiles
@@ -21,6 +22,9 @@ struct DraftStartView: View {
     }
 
     var body: some View {
+        // Centered when the profiles fit, scrolling when they don't: the
+        // column is at least the visible height (inside the title bar's
+        // inset), never exactly it.
         ScrollView {
             MKColumn {
                 VStack(spacing: 0) {
@@ -49,7 +53,12 @@ struct DraftStartView: View {
                 }
             }
             .padding(.vertical, 24)
-            .containerRelativeFrame(.vertical, alignment: .center) { h, _ in h }
+            .frame(minHeight: visibleHeight, alignment: .center)
+        }
+        .onScrollGeometryChange(for: CGFloat.self) { g in
+            g.containerSize.height - g.contentInsets.top - g.contentInsets.bottom
+        } action: { _, h in
+            visibleHeight = max(0, h)
         }
         .scrollBounceBehavior(.basedOnSize)
         .scrollEdgeEffectHidden(true, for: .top)

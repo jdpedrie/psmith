@@ -54,6 +54,15 @@ public enum PsmithError: Error, LocalizedError {
         return ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled
     }
 
+    /// The server says the row isn't there, or isn't this user's.
+    public static func isNotFound(_ error: Error) -> Bool {
+        if let pe = error as? PsmithError, case let .rpc(code, _) = pe {
+            return code == .notFound || code == .permissionDenied
+        }
+        if let ce = error as? ConnectError { return ce.code == .notFound || ce.code == .permissionDenied }
+        return false
+    }
+
     /// Best-effort human-friendly rendering of an RPC failure. The
     /// server's Internal errors often wrap a provider's JSON envelope —
     /// `{"error":{"message":"…"}}` — and we'd rather show "…" than the

@@ -137,7 +137,7 @@ func TestProfilesList_TreeDefaultAndMenu(t *testing.T) {
 	}
 
 	// A parent with children can't go; the list explains in place.
-	body = wantStatus(t, e.post(e.h.handleProfileDelete, "/", map[string]string{"id": chief}, url.Values{"from": {"list"}}), http.StatusOK)
+	body = e.shown(t, e.post(e.h.handleProfileDelete, "/", map[string]string{"id": chief}, url.Values{"from": {"list"}}))
 	if !strings.Contains(body, `role="alert"`) {
 		t.Errorf("delete refusal not shown")
 	}
@@ -175,7 +175,7 @@ func TestProfileGeneral_SavesEveryField(t *testing.T) {
 		t.Fatalf("not cleared: %+v", p)
 	}
 
-	body = wantStatus(t, e.post(e.h.handleProfileUpdate, "/", map[string]string{"id": id}, url.Values{"name": {" "}}), http.StatusBadRequest)
+	body = e.shown(t, e.post(e.h.handleProfileUpdate, "/", map[string]string{"id": id}, url.Values{"name": {" "}}))
 	if !strings.Contains(body, "A profile needs a name.") {
 		t.Error("empty name not explained")
 	}
@@ -189,7 +189,7 @@ func TestProfileCreate_WithParentAndDefault(t *testing.T) {
 	if !strings.Contains(body, "Create profile") || !strings.Contains(body, `value="`+parent+`" selected`) {
 		t.Fatalf("new form wrong:\n%s", body)
 	}
-	wantStatus(t, e.post(e.h.handleProfileCreate, "/", nil, url.Values{"name": {"Bad"}, "default": {"true"}, "parent_only": {"true"}}), http.StatusBadRequest)
+	e.shown(t, e.post(e.h.handleProfileCreate, "/", nil, url.Values{"name": {"Bad"}, "default": {"true"}, "parent_only": {"true"}}))
 	wantStatus(t, e.post(e.h.handleProfileCreate, "/", nil, url.Values{"name": {"Kid"}, "parent": {parent}, "default": {"true"}, "favorite": {"true"}}), http.StatusSeeOther)
 	resp, _ := e.prof.ListProfiles(e.ctx, connect.NewRequest(&psmithv1.ListProfilesRequest{}))
 	for _, p := range resp.Msg.GetProfiles() {
@@ -229,7 +229,7 @@ func TestProfileModels_CallSettingsLayer(t *testing.T) {
 		t.Fatalf("not cleared: %+v", cs)
 	}
 
-	body = wantStatus(t, e.post(e.h.handleProfileModelsSave, "/", map[string]string{"id": id}, url.Values{"temperature": {"hot"}}), http.StatusBadRequest)
+	body = e.shown(t, e.post(e.h.handleProfileModelsSave, "/", map[string]string{"id": id}, url.Values{"temperature": {"hot"}}))
 	if !strings.Contains(body, "Temperature is a number") {
 		t.Error("bad temperature not explained")
 	}
@@ -310,7 +310,7 @@ func TestProfileShare_ExportImportDelete(t *testing.T) {
 	_ = mw.Close()
 	req := httptest.NewRequest("POST", "/settings/profiles/import", &buf).WithContext(e.ctx)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
-	body = wantStatus(t, do(e.h.handleProfileImport, req), http.StatusOK)
+	body = e.shown(t, do(e.h.handleProfileImport, req))
 	for _, want := range []string{"pirate.psmithprofile", "1 profile · exported by u", "Renamed to <strong>Pirate (2)</strong>", "Nothing is created until you import."} {
 		if !strings.Contains(body, want) {
 			t.Errorf("review missing %q", want)
@@ -321,7 +321,7 @@ func TestProfileShare_ExportImportDelete(t *testing.T) {
 	}
 
 	// Commit posts the payload back.
-	enc := between(body, `name="payload" value="`, `"`)
+	enc := setbBetween(body, `name="payload" value="`, `"`)
 	rec = e.post(e.h.handleProfileImport, "/", nil, url.Values{"payload": {enc}})
 	wantStatus(t, rec, http.StatusSeeOther)
 	if n := countProfiles(t, e); n != 2 {
@@ -329,7 +329,7 @@ func TestProfileShare_ExportImportDelete(t *testing.T) {
 	}
 
 	// Garbage is refused with a reason, on the import page.
-	body = wantStatus(t, e.post(e.h.handleProfileImport, "/", nil, url.Values{"payload": {"!!!"}}), http.StatusOK)
+	body = e.shown(t, e.post(e.h.handleProfileImport, "/", nil, url.Values{"payload": {"!!!"}}))
 	if !strings.Contains(body, "Choose it again") {
 		t.Error("bad payload not explained")
 	}
@@ -346,7 +346,7 @@ func countProfiles(t *testing.T, e setbEnv) int {
 	return len(resp.Msg.GetProfiles())
 }
 
-func between(s, a, b string) string {
+func setbBetween(s, a, b string) string {
 	i := strings.Index(s, a)
 	if i < 0 {
 		return ""
@@ -396,7 +396,7 @@ func TestMCPServers_StatusDetailAndConfirm(t *testing.T) {
 		t.Fatalf("list status wrong")
 	}
 	body = wantStatus(t, e.get(e.h.handleMCPServerDetail, "/", map[string]string{"id": id}), http.StatusOK)
-	for _, want := range []string{"Stored encrypted", "Tools · 0", `class="result bad"`, "Delete Dead"} {
+	for _, want := range []string{"Stored encrypted", "Tools · 0", `class="result sb-result2 bad"`, "Delete Dead"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("detail missing %q", want)
 		}
@@ -405,7 +405,7 @@ func TestMCPServers_StatusDetailAndConfirm(t *testing.T) {
 	if !strings.Contains(frag, "Delete Dead?") {
 		t.Error("confirm fragment wrong")
 	}
-	body = wantStatus(t, e.post(e.h.handleMCPServerSave, "/", nil, url.Values{"name": {""}, "transport": {"http"}, "headers": {"K: v"}}), http.StatusBadRequest)
+	body = e.shown(t, e.post(e.h.handleMCPServerSave, "/", nil, url.Values{"name": {""}, "transport": {"http"}, "headers": {"K: v"}}))
 	if !strings.Contains(body, "name is required") || !strings.Contains(body, "K: v") {
 		t.Error("failed save should explain and keep what was typed")
 	}

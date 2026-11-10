@@ -60,6 +60,17 @@ func boardThinking() convVM {
 	return fxConv(fxUser("u1", "What does the eager stack cost at 500 rows? Give me numbers."), r)
 }
 
+// boardTurnDetails is Thinking with "Show turn details" on: who and when
+// above each turn, and the reply's tokens split in and out.
+func boardTurnDetails() convVM {
+	c := boardThinking()
+	c.Items[0].When = "10:41"
+	r := &c.Items[1]
+	r.When, r.Took = "10:42", "8.6s"
+	r.Usage.ModelName, r.Usage.Provider, r.Usage.Split = "Claude Opus 4.7", "Anthropic", "980 in · 224 out"
+	return c
+}
+
 func boardMessageMenu() convVM {
 	r1 := fxFirstReply()
 	r1.State = "regen"

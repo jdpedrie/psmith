@@ -276,13 +276,17 @@ type UserLangfuseConfig struct {
 }
 
 type UserMcpServer struct {
-	ID              uuid.UUID
-	UserID          uuid.UUID
-	Name            string
-	Config          []byte
-	ConfigEncrypted []byte
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID                uuid.UUID
+	UserID            uuid.UUID
+	Name              string
+	Config            []byte
+	ConfigEncrypted   []byte
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	LastTestAt        *time.Time
+	LastTestOk        bool
+	LastTestMessage   string
+	LastTestToolCount int32
 }
 
 type UserModel struct {
@@ -304,18 +308,24 @@ type UserModel struct {
 	EnabledAt             time.Time
 	Favorite              bool
 	PricingTiers          []byte
+	Enabled               bool
 }
 
 type UserModelProvider struct {
-	ID              uuid.UUID
-	UserID          uuid.UUID
-	Type            string
-	Label           string
-	Config          []byte
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	DefaultSettings []byte
-	ConfigEncrypted []byte
+	ID                     uuid.UUID
+	UserID                 uuid.UUID
+	Type                   string
+	Label                  string
+	Config                 []byte
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+	DefaultSettings        []byte
+	ConfigEncrypted        []byte
+	LastTestAt             *time.Time
+	LastTestOk             bool
+	LastTestLatencyMs      int64
+	LastTestMessage        string
+	LastDiscoveredModelIds []string
 }
 
 type UserPluginSetting struct {

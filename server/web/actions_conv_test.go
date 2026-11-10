@@ -15,6 +15,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 	"github.com/jdpedrie/psmith/server/auth"
@@ -31,6 +32,7 @@ import (
 // convFixture is a handler with files wired, a sendable conversation, and the
 // caller's context.
 type convFixture struct {
+	pool   *pgxpool.Pool
 	h      *Handler
 	q      *store.Queries
 	fx     sendFixture
@@ -59,7 +61,7 @@ func newConvFixture(t *testing.T) convFixture {
 	})); err != nil {
 		t.Fatalf("UpdateConversation: %v", err)
 	}
-	return convFixture{h: h, q: q, fx: fx, ctx: ctx, ctxID: activeContextID(t, convos, ctx, fx.convID.String()), convID: fx.convID.String()}
+	return convFixture{pool: pool, h: h, q: q, fx: fx, ctx: ctx, ctxID: activeContextID(t, convos, ctx, fx.convID.String()), convID: fx.convID.String()}
 }
 
 // msg stores a message under parent ("" for the root) and returns its id.

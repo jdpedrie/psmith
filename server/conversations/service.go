@@ -1864,6 +1864,14 @@ func (s *Service) prepareTurn(ctx context.Context, req *connect.Request[psmithv1
 		}
 		return ctx, t, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%s requires parent_message_id", verb))
 	}
+	if req.Msg.ForkAtRoot {
+		if extendsTurn {
+			return ctx, t, connect.NewError(connect.CodeInvalidArgument, errors.New("fork_at_root can't be combined with regenerate or continue_discussion"))
+		}
+		if req.Msg.ParentMessageId != nil && *req.Msg.ParentMessageId != "" {
+			return ctx, t, connect.NewError(connect.CodeInvalidArgument, errors.New("fork_at_root takes no parent_message_id"))
+		}
+	}
 	user := auth.MustFromContext(ctx)
 
 	convID, err := uuid.Parse(req.Msg.ConversationId)
@@ -1928,6 +1936,10 @@ func (s *Service) prepareTurn(ctx context.Context, req *connect.Request[psmithv1
 	if err != nil {
 		return ctx, t, err
 	}
+	if req.Msg.ForkAtRoot {
+		// A new root has no branch behind it yet.
+		routeLeaf = uuid.Nil
+	}
 	route, routed := pipeline.RouteTurn(ctx, func(c context.Context, pluginName string) context.Context {
 		c = host.WithPluginStateStore(c, s.newPluginStateStore(pluginName, conv.UserID, conv.ID, routeLeaf))
 		// A router may want to ask a cheap model who should speak. Scoped to
@@ -1953,7 +1965,7 @@ func (s *Service) prepareTurn(ctx context.Context, req *connect.Request[psmithv1
 	if provRow.UserID != user.ID {
 		return ctx, t, connect.NewError(connect.CodeInvalidArgument, errors.New("provider not found"))
 	}
-	enabledModel, err := s.queries.GetUserModel(ctx, store.GetUserModelParams{
+	enabledModel, err := s.queries.GetEnabledUserModel(ctx, store.GetEnabledUserModelParams{
 		UserModelProviderID: providerID,
 		ModelID:             modelID,
 	})
@@ -1965,12 +1977,12 @@ func (s *Service) prepareTurn(ctx context.Context, req *connect.Request[psmithv1
 	}
 
 	// Capability gate: reject the send before doing any expensive work
-	// when the resolved model can't drive the profile's plugin pipeline
-	// (e.g. an `mcp` plugin attached to a profile pointing at a non-tool-
-	// using model). The error is FailedPrecondition so clients can
-	// surface the mismatch and prompt the user to either change models or
-	// drop the offending plugin.
-	if err := s.validateModelCapabilities(ctx, conv.ProfileID, modelID, enabledModel.Capabilities); err != nil {
+	// when the resolved model can't drive the turn's plugin pipeline
+	// (e.g. an `mcp` plugin, on the profile or on this conversation, with
+	// a model that can't call tools). The error is FailedPrecondition so
+	// clients can surface the mismatch and prompt the user to either
+	// change models or drop the offending plugin.
+	if err := validateModelCapabilities(pipeline, modelID, enabledModel.Capabilities); err != nil {
 		return ctx, t, err
 	}
 	t.user = user
@@ -2087,9 +2099,12 @@ func (s *Service) commitUserMessage(
 		//   1. caller-specified parent_message_id (explicit fork or continue)
 		//   2. context.current_leaf_message_id (server-tracked cursor)
 		//   3. latest message in the active context (fallback for fresh contexts)
-		parentMessageID, err := s.resolveParent(ctx, qtx, lockedCtx, req.Msg.ParentMessageId)
-		if err != nil {
-			return store.Message{}, err
+		var parentMessageID *uuid.UUID
+		if !req.Msg.ForkAtRoot {
+			parentMessageID, err = s.resolveParent(ctx, qtx, lockedCtx, req.Msg.ParentMessageId)
+			if err != nil {
+				return store.Message{}, err
+			}
 		}
 
 		// Collect MessageEnvelope plugin contributions (basic_grounding,
@@ -3189,7 +3204,7 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[psmithv1.Com
 	if err != nil || provRow.UserID != user.ID {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("compression provider not found"))
 	}
-	modelRow, err := s.queries.GetUserModel(ctx, store.GetUserModelParams{
+	modelRow, err := s.queries.GetEnabledUserModel(ctx, store.GetEnabledUserModelParams{
 		UserModelProviderID: provRow.ID,
 		ModelID:             *modelID,
 	})
@@ -3416,7 +3431,7 @@ func (s *Service) CountContextTokens(ctx context.Context, req *connect.Request[p
 	if err != nil || provRow.UserID != user.ID {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("provider not found"))
 	}
-	enabled, err := s.queries.GetUserModel(ctx, store.GetUserModelParams{
+	enabled, err := s.queries.GetEnabledUserModel(ctx, store.GetEnabledUserModelParams{
 		UserModelProviderID: provRow.ID,
 		ModelID:             req.Msg.ModelId,
 	})

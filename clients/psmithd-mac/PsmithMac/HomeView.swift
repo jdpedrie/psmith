@@ -32,6 +32,11 @@ struct HomeView: View {
         }
         .ignoresSafeArea()
         .background(theme.chrome.ignoresSafeArea())
+        // The reading pane's header draws the conversation's title. Its
+        // .navigationTitle still names the window (Window menu, Mission
+        // Control), but SwiftUI turns the title bar's own title back on
+        // whenever that title changes, over the list's header buttons.
+        .toolbar(removing: .title)
         .onAppear { navigator.openSettingsWindow = { openSettings() } }
         .task {
             await convos.refresh()
@@ -50,6 +55,33 @@ struct HomeView: View {
             if key != nil, navigator.draft?.createdID == nil {
                 convos.selectedID = nil
             }
+        }
+        // A clicked "reply ready" notification.
+        .onChange(of: navigator.pendingConversationSelection, initial: true) { _, id in
+            consumePending(id)
+        }
+    }
+
+    /// Opens a notification's conversation. One the list hasn't loaded
+    /// (made on another device, or past the first page) gets one refresh.
+    private func consumePending(_ id: String?) {
+        guard let id else { return }
+        navigator.pendingConversationSelection = nil
+        func open() -> Bool {
+            if convos.conversations.contains(where: { $0.id == id }) {
+                showingArchived = false
+            } else if !convos.archivedConversations.contains(where: { $0.id == id }) {
+                return false
+            }
+            navigator.draft = nil
+            navigator.page = nil
+            convos.selectedID = id
+            return true
+        }
+        if open() { return }
+        Task {
+            await convos.refresh()
+            _ = open()
         }
     }
 

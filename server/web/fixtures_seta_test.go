@@ -77,7 +77,36 @@ func saBoardModel() modelPageVM {
 		MetaLine: "From the models.dev catalog, Nov 2", Ctx: "200,000", Out: "32,000", In: "15.00", OutP: "75.00", CR: "1.50", CW: "18.75",
 		Caps: caps, Mods: saModToggles([]string{"text", "image", "pdf"}),
 		TempHint: "Model default", MaxInherit: "16,384", MaxHint: "Inherits 16,384 from Anthropic",
-		Effort: "high", EffortInherit: "Medium", EffortPrev: "Inherit (Medium)", Dirty: 1}
+		Effort: "high", EffortInherit: "Medium", EffortPrev: "Inherit (Medium)", Dirty: 1,
+		TempLock: "1", Cutoff: "2025-03-01"}
+}
+
+// saBoardProviderCompat is board SettingsProviderCompat: an OpenAI-compatible
+// provider with a moved base URL, an off hand-added row and one asking before
+// Delete.
+func saBoardProviderCompat() providerPageVM {
+	return providerPageVM{
+		ID: "ollama", Type: "openai-compatible", Name: "Home Ollama", KeyMasked: "none",
+		Test:       &testVM{OK: true, Message: "Connected in 48 ms, just now"},
+		Compatible: true, BaseURL: "http://10.0.0.12:11434/v1",
+		Catalogs: []saOpt{{"groq", "Groq"}, {"togetherai", "Together AI"}, {"openrouter", "OpenRouter"}},
+		Models: []providerModelVM{
+			{Name: "Llama 3.3 70B", ID: "llama3.3:70b", Context: "128k", Caps: []string{"Tools"}, On: true},
+			{Name: "Qwen 3 32B", ID: "qwen3:32b", Context: "40k", Caps: []string{"Tools", "Thinking"}, On: true},
+			{Name: "Support tune", ID: "support-ft:v2", Context: "32k", Caps: []string{"Tools"}},
+			{Name: "Draft tune", ID: "draft-ft:v1", Confirming: true},
+		},
+		NoCache: true, Dirty: 1,
+	}
+}
+
+// saBoardModelManual is board SettingsModelManual: a model added by hand,
+// scrolled to its Delete, which is asking.
+func saBoardModelManual() modelPageVM {
+	return modelPageVM{ProvID: "ollama", ProvName: "Home Ollama", ProvType: "openai-compatible", ID: "support-ft:v2", Name: "Support tune",
+		MetaLine: "Entered by hand, Nov 4", Ctx: "32,768", Out: "4,096", Cutoff: "2025-01-15",
+		Caps: saCapToggles(&psmithv1.ModelCapabilities{Streaming: true, Thinking: true, ToolUse: true, Vision: true, PromptCaching: true}),
+		Mods: saModToggles([]string{"text", "image", "pdf"}), TempHint: "Model default", Manual: true, Deleting: true}
 }
 
 func saBoardDefaults() defaultsPageVM {

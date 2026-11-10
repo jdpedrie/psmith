@@ -92,7 +92,6 @@ func (h *Handler) handleGlobalPlugins(w http.ResponseWriter, r *http.Request) {
 		vm.MCP = append(vm.MCP, row)
 	}
 	n := h.loadSnav(r.Context(), r, "plugins")
-	n.ServersBad = failing(tests)
 	h.render(w, r, http.StatusOK, globalPluginsScreen(n, vm))
 }
 
@@ -185,7 +184,7 @@ func (h *Handler) handleGlobalPluginConfigSave(w http.ResponseWriter, r *http.Re
 	}
 	if err != nil {
 		vm.Error = errMessage(err)
-		h.render(w, r, http.StatusBadRequest, pluginConfigScreen(h.loadSnav(r.Context(), r, "plugins"), vm))
+		h.showAfterPost(w, r, "/settings/plugins/"+name, pluginConfigScreen(h.loadSnav(r.Context(), r, "plugins"), vm))
 		return
 	}
 	http.Redirect(w, r, "/settings/plugins/"+name, http.StatusSeeOther)

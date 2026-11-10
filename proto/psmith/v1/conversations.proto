@@ -468,6 +468,13 @@ message SendMessageRequest {
   // send if the leaf has already moved, so two clients tapping continue at the
   // same moment cannot produce two speakers on one turn.
   bool continue_discussion = 10;
+
+  // fork_at_root starts the new user message as another root of the active
+  // context, a sibling of its first message. An unset parent_message_id
+  // means "continue from the leaf", so a fork of a context's first message
+  // can't be said with the parent alone. parent_message_id must be unset,
+  // and regenerate and continue_discussion can't be combined with it.
+  bool fork_at_root = 11;
 }
 message SendMessageResponse {
   // Echo of the user message that anchors this turn. When `regenerate`

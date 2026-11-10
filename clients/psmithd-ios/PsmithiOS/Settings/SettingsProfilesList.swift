@@ -159,7 +159,7 @@ struct SettingsProfilesListScreen: View {
                 .padding(8)
             } else {
                 IKSInsetConfirm(question: "Delete \(p.name)?",
-                                detail: "Conversations that use it can’t send until you pick another profile for them.",
+                                detail: "This can’t be undone. Its prompt, models and plugins go with it.",
                                 onCancel: { confirmingDelete = nil },
                                 onConfirm: { confirmingDelete = nil; onDelete(p) })
             }
@@ -220,7 +220,7 @@ struct SettingsProfilesListScreen: View {
                 : children.dropLast().joined(separator: ", ") + " and " + children.last!
             return "Template for \(list)"
         }
-        let chain = ProfileLookup.ancestors(of: p.parentProfileID, in: profiles.profiles).map(\.name)
+        let chain = ProfileLookup.ancestors(of: p.parentProfileID, in: profiles.known).map(\.name)
         return chain.isEmpty ? "Standalone" : ([p.name] + chain).joined(separator: " ‹ ")
     }
 }

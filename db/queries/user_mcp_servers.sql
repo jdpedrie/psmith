@@ -24,3 +24,8 @@ RETURNING *;
 -- name: DeleteUserMCPServer :execrows
 DELETE FROM user_mcp_servers
 WHERE id = $1 AND user_id = $2;
+
+-- name: RecordUserMCPServerTest :exec
+UPDATE user_mcp_servers
+SET last_test_at = now(), last_test_ok = $2, last_test_message = $3, last_test_tool_count = $4
+WHERE id = $1;

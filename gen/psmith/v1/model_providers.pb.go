@@ -478,8 +478,12 @@ type GetUserModelProviderResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Provider      *UserModelProvider     `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
 	EnabledModels []*UserModel           `protobuf:"bytes,2,rep,name=enabled_models,json=enabledModels,proto3" json:"enabled_models,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Hand-added models that are turned off. They keep their metadata so they
+	// can be turned back on with EnableModels; nothing else lists them, and
+	// they can't be sent to.
+	DisabledModels []*UserModel `protobuf:"bytes,3,rep,name=disabled_models,json=disabledModels,proto3" json:"disabled_models,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GetUserModelProviderResponse) Reset() {
@@ -522,6 +526,13 @@ func (x *GetUserModelProviderResponse) GetProvider() *UserModelProvider {
 func (x *GetUserModelProviderResponse) GetEnabledModels() []*UserModel {
 	if x != nil {
 		return x.EnabledModels
+	}
+	return nil
+}
+
+func (x *GetUserModelProviderResponse) GetDisabledModels() []*UserModel {
+	if x != nil {
+		return x.DisabledModels
 	}
 	return nil
 }
@@ -1023,10 +1034,15 @@ func (x *EnableModelsResponse) GetEnabled() []*UserModel {
 	return nil
 }
 
+// Turning a model off deletes its row, except for a model added by hand
+// (AddManualModel): that row is kept, turned off, so EnableModels can bring
+// it back with the metadata the user typed. delete_manual deletes those rows
+// too, for a client's explicit "Delete Model".
 type DisableModelsRequest struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	UserModelProviderId string                 `protobuf:"bytes,1,opt,name=user_model_provider_id,json=userModelProviderId,proto3" json:"user_model_provider_id,omitempty"`
 	ModelIds            []string               `protobuf:"bytes,2,rep,name=model_ids,json=modelIds,proto3" json:"model_ids,omitempty"`
+	DeleteManual        bool                   `protobuf:"varint,3,opt,name=delete_manual,json=deleteManual,proto3" json:"delete_manual,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -1073,6 +1089,13 @@ func (x *DisableModelsRequest) GetModelIds() []string {
 		return x.ModelIds
 	}
 	return nil
+}
+
+func (x *DisableModelsRequest) GetDeleteManual() bool {
+	if x != nil {
+		return x.DeleteManual
+	}
+	return false
 }
 
 type DisableModelsResponse struct {
@@ -2785,10 +2808,11 @@ const file_psmith_v1_model_providers_proto_rawDesc = "" +
 	"\x1eListUserModelProvidersResponse\x12:\n" +
 	"\tproviders\x18\x01 \x03(\v2\x1c.psmith.v1.UserModelProviderR\tproviders\"-\n" +
 	"\x1bGetUserModelProviderRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\x95\x01\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\xd4\x01\n" +
 	"\x1cGetUserModelProviderResponse\x128\n" +
 	"\bprovider\x18\x01 \x01(\v2\x1c.psmith.v1.UserModelProviderR\bprovider\x12;\n" +
-	"\x0eenabled_models\x18\x02 \x03(\v2\x14.psmith.v1.UserModelR\renabledModels\"\xdb\x01\n" +
+	"\x0eenabled_models\x18\x02 \x03(\v2\x14.psmith.v1.UserModelR\renabledModels\x12=\n" +
+	"\x0fdisabled_models\x18\x03 \x03(\v2\x14.psmith.v1.UserModelR\x0edisabledModels\"\xdb\x01\n" +
 	"\x1eUpdateUserModelProviderRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\x05label\x18\x02 \x01(\tH\x00R\x05label\x88\x01\x01\x12\x1b\n" +
@@ -2830,10 +2854,11 @@ const file_psmith_v1_model_providers_proto_rawDesc = "" +
 	"\x16user_model_provider_id\x18\x01 \x01(\tR\x13userModelProviderId\x12\x1b\n" +
 	"\tmodel_ids\x18\x02 \x03(\tR\bmodelIds\"F\n" +
 	"\x14EnableModelsResponse\x12.\n" +
-	"\aenabled\x18\x01 \x03(\v2\x14.psmith.v1.UserModelR\aenabled\"h\n" +
+	"\aenabled\x18\x01 \x03(\v2\x14.psmith.v1.UserModelR\aenabled\"\x8d\x01\n" +
 	"\x14DisableModelsRequest\x123\n" +
 	"\x16user_model_provider_id\x18\x01 \x01(\tR\x13userModelProviderId\x12\x1b\n" +
-	"\tmodel_ids\x18\x02 \x03(\tR\bmodelIds\"\x17\n" +
+	"\tmodel_ids\x18\x02 \x03(\tR\bmodelIds\x12#\n" +
+	"\rdelete_manual\x18\x03 \x01(\bR\fdeleteManual\"\x17\n" +
 	"\x15DisableModelsResponse\"L\n" +
 	"\x15ListUserModelsRequest\x123\n" +
 	"\x16user_model_provider_id\x18\x01 \x01(\tR\x13userModelProviderId\"F\n" +
@@ -3090,85 +3115,86 @@ var file_psmith_v1_model_providers_proto_depIdxs = []int32{
 	51, // 3: psmith.v1.ListUserModelProvidersResponse.providers:type_name -> psmith.v1.UserModelProvider
 	51, // 4: psmith.v1.GetUserModelProviderResponse.provider:type_name -> psmith.v1.UserModelProvider
 	52, // 5: psmith.v1.GetUserModelProviderResponse.enabled_models:type_name -> psmith.v1.UserModel
-	53, // 6: psmith.v1.UpdateUserModelProviderRequest.default_settings:type_name -> psmith.v1.CallSettings
-	51, // 7: psmith.v1.UpdateUserModelProviderResponse.provider:type_name -> psmith.v1.UserModelProvider
-	17, // 8: psmith.v1.DiscoverModelsResponse.models:type_name -> psmith.v1.DiscoveredModel
-	54, // 9: psmith.v1.DiscoveredModel.pricing:type_name -> psmith.v1.ModelPricing
-	55, // 10: psmith.v1.DiscoveredModel.capabilities:type_name -> psmith.v1.ModelCapabilities
-	56, // 11: psmith.v1.DiscoveredModel.metadata_source:type_name -> psmith.v1.MetadataSource
-	52, // 12: psmith.v1.EnableModelsResponse.enabled:type_name -> psmith.v1.UserModel
-	52, // 13: psmith.v1.ListUserModelsResponse.models:type_name -> psmith.v1.UserModel
-	51, // 14: psmith.v1.UserModelEntry.provider:type_name -> psmith.v1.UserModelProvider
-	52, // 15: psmith.v1.UserModelEntry.model:type_name -> psmith.v1.UserModel
-	25, // 16: psmith.v1.ListAllUserModelsResponse.entries:type_name -> psmith.v1.UserModelEntry
-	52, // 17: psmith.v1.ToggleUserModelFavoriteResponse.model:type_name -> psmith.v1.UserModel
-	53, // 18: psmith.v1.UpdateUserModelRequest.default_settings:type_name -> psmith.v1.CallSettings
-	54, // 19: psmith.v1.UpdateUserModelRequest.pricing:type_name -> psmith.v1.ModelPricing
-	55, // 20: psmith.v1.UpdateUserModelRequest.capabilities:type_name -> psmith.v1.ModelCapabilities
-	52, // 21: psmith.v1.UpdateUserModelResponse.user_model:type_name -> psmith.v1.UserModel
-	52, // 22: psmith.v1.RefreshUserModelMetadataResponse.user_model:type_name -> psmith.v1.UserModel
-	54, // 23: psmith.v1.AddManualModelRequest.pricing:type_name -> psmith.v1.ModelPricing
-	55, // 24: psmith.v1.AddManualModelRequest.capabilities:type_name -> psmith.v1.ModelCapabilities
-	53, // 25: psmith.v1.AddManualModelRequest.default_settings:type_name -> psmith.v1.CallSettings
-	52, // 26: psmith.v1.AddManualModelResponse.user_model:type_name -> psmith.v1.UserModel
-	53, // 27: psmith.v1.TestUserModelRequest.call_settings:type_name -> psmith.v1.CallSettings
-	57, // 28: psmith.v1.RefreshModelCatalogResponse.fetched_at:type_name -> google.protobuf.Timestamp
-	57, // 29: psmith.v1.GetCatalogStatusResponse.last_refresh_at:type_name -> google.protobuf.Timestamp
-	57, // 30: psmith.v1.ListProviderCostsRequest.since:type_name -> google.protobuf.Timestamp
-	57, // 31: psmith.v1.ListProviderCostsRequest.until:type_name -> google.protobuf.Timestamp
-	45, // 32: psmith.v1.ListProviderCostsResponse.providers:type_name -> psmith.v1.ProviderCost
-	0,  // 33: psmith.v1.CapabilityProbeResult.outcome:type_name -> psmith.v1.ProbeOutcome
-	46, // 34: psmith.v1.ProbeUserModelResponse.results:type_name -> psmith.v1.CapabilityProbeResult
-	55, // 35: psmith.v1.ProbeUserModelResponse.capabilities:type_name -> psmith.v1.ModelCapabilities
-	1,  // 36: psmith.v1.ModelProvidersService.ListProviderTypes:input_type -> psmith.v1.ListProviderTypesRequest
-	3,  // 37: psmith.v1.ModelProvidersService.ListProviderTemplates:input_type -> psmith.v1.ListProviderTemplatesRequest
-	5,  // 38: psmith.v1.ModelProvidersService.CreateUserModelProvider:input_type -> psmith.v1.CreateUserModelProviderRequest
-	7,  // 39: psmith.v1.ModelProvidersService.ListUserModelProviders:input_type -> psmith.v1.ListUserModelProvidersRequest
-	9,  // 40: psmith.v1.ModelProvidersService.GetUserModelProvider:input_type -> psmith.v1.GetUserModelProviderRequest
-	11, // 41: psmith.v1.ModelProvidersService.UpdateUserModelProvider:input_type -> psmith.v1.UpdateUserModelProviderRequest
-	13, // 42: psmith.v1.ModelProvidersService.DeleteUserModelProvider:input_type -> psmith.v1.DeleteUserModelProviderRequest
-	15, // 43: psmith.v1.ModelProvidersService.DiscoverModels:input_type -> psmith.v1.DiscoverModelsRequest
-	18, // 44: psmith.v1.ModelProvidersService.EnableModels:input_type -> psmith.v1.EnableModelsRequest
-	20, // 45: psmith.v1.ModelProvidersService.DisableModels:input_type -> psmith.v1.DisableModelsRequest
-	22, // 46: psmith.v1.ModelProvidersService.ListUserModels:input_type -> psmith.v1.ListUserModelsRequest
-	24, // 47: psmith.v1.ModelProvidersService.ListAllUserModels:input_type -> psmith.v1.ListAllUserModelsRequest
-	27, // 48: psmith.v1.ModelProvidersService.ToggleUserModelFavorite:input_type -> psmith.v1.ToggleUserModelFavoriteRequest
-	29, // 49: psmith.v1.ModelProvidersService.UpdateUserModel:input_type -> psmith.v1.UpdateUserModelRequest
-	31, // 50: psmith.v1.ModelProvidersService.RefreshUserModelMetadata:input_type -> psmith.v1.RefreshUserModelMetadataRequest
-	33, // 51: psmith.v1.ModelProvidersService.AddManualModel:input_type -> psmith.v1.AddManualModelRequest
-	35, // 52: psmith.v1.ModelProvidersService.TestUserModelProvider:input_type -> psmith.v1.TestUserModelProviderRequest
-	37, // 53: psmith.v1.ModelProvidersService.TestUserModel:input_type -> psmith.v1.TestUserModelRequest
-	47, // 54: psmith.v1.ModelProvidersService.ProbeUserModel:input_type -> psmith.v1.ProbeUserModelRequest
-	39, // 55: psmith.v1.ModelProvidersService.RefreshModelCatalog:input_type -> psmith.v1.RefreshModelCatalogRequest
-	41, // 56: psmith.v1.ModelProvidersService.GetCatalogStatus:input_type -> psmith.v1.GetCatalogStatusRequest
-	43, // 57: psmith.v1.ModelProvidersService.ListProviderCosts:input_type -> psmith.v1.ListProviderCostsRequest
-	2,  // 58: psmith.v1.ModelProvidersService.ListProviderTypes:output_type -> psmith.v1.ListProviderTypesResponse
-	4,  // 59: psmith.v1.ModelProvidersService.ListProviderTemplates:output_type -> psmith.v1.ListProviderTemplatesResponse
-	6,  // 60: psmith.v1.ModelProvidersService.CreateUserModelProvider:output_type -> psmith.v1.CreateUserModelProviderResponse
-	8,  // 61: psmith.v1.ModelProvidersService.ListUserModelProviders:output_type -> psmith.v1.ListUserModelProvidersResponse
-	10, // 62: psmith.v1.ModelProvidersService.GetUserModelProvider:output_type -> psmith.v1.GetUserModelProviderResponse
-	12, // 63: psmith.v1.ModelProvidersService.UpdateUserModelProvider:output_type -> psmith.v1.UpdateUserModelProviderResponse
-	14, // 64: psmith.v1.ModelProvidersService.DeleteUserModelProvider:output_type -> psmith.v1.DeleteUserModelProviderResponse
-	16, // 65: psmith.v1.ModelProvidersService.DiscoverModels:output_type -> psmith.v1.DiscoverModelsResponse
-	19, // 66: psmith.v1.ModelProvidersService.EnableModels:output_type -> psmith.v1.EnableModelsResponse
-	21, // 67: psmith.v1.ModelProvidersService.DisableModels:output_type -> psmith.v1.DisableModelsResponse
-	23, // 68: psmith.v1.ModelProvidersService.ListUserModels:output_type -> psmith.v1.ListUserModelsResponse
-	26, // 69: psmith.v1.ModelProvidersService.ListAllUserModels:output_type -> psmith.v1.ListAllUserModelsResponse
-	28, // 70: psmith.v1.ModelProvidersService.ToggleUserModelFavorite:output_type -> psmith.v1.ToggleUserModelFavoriteResponse
-	30, // 71: psmith.v1.ModelProvidersService.UpdateUserModel:output_type -> psmith.v1.UpdateUserModelResponse
-	32, // 72: psmith.v1.ModelProvidersService.RefreshUserModelMetadata:output_type -> psmith.v1.RefreshUserModelMetadataResponse
-	34, // 73: psmith.v1.ModelProvidersService.AddManualModel:output_type -> psmith.v1.AddManualModelResponse
-	36, // 74: psmith.v1.ModelProvidersService.TestUserModelProvider:output_type -> psmith.v1.TestUserModelProviderResponse
-	38, // 75: psmith.v1.ModelProvidersService.TestUserModel:output_type -> psmith.v1.TestUserModelResponse
-	48, // 76: psmith.v1.ModelProvidersService.ProbeUserModel:output_type -> psmith.v1.ProbeUserModelResponse
-	40, // 77: psmith.v1.ModelProvidersService.RefreshModelCatalog:output_type -> psmith.v1.RefreshModelCatalogResponse
-	42, // 78: psmith.v1.ModelProvidersService.GetCatalogStatus:output_type -> psmith.v1.GetCatalogStatusResponse
-	44, // 79: psmith.v1.ModelProvidersService.ListProviderCosts:output_type -> psmith.v1.ListProviderCostsResponse
-	58, // [58:80] is the sub-list for method output_type
-	36, // [36:58] is the sub-list for method input_type
-	36, // [36:36] is the sub-list for extension type_name
-	36, // [36:36] is the sub-list for extension extendee
-	0,  // [0:36] is the sub-list for field type_name
+	52, // 6: psmith.v1.GetUserModelProviderResponse.disabled_models:type_name -> psmith.v1.UserModel
+	53, // 7: psmith.v1.UpdateUserModelProviderRequest.default_settings:type_name -> psmith.v1.CallSettings
+	51, // 8: psmith.v1.UpdateUserModelProviderResponse.provider:type_name -> psmith.v1.UserModelProvider
+	17, // 9: psmith.v1.DiscoverModelsResponse.models:type_name -> psmith.v1.DiscoveredModel
+	54, // 10: psmith.v1.DiscoveredModel.pricing:type_name -> psmith.v1.ModelPricing
+	55, // 11: psmith.v1.DiscoveredModel.capabilities:type_name -> psmith.v1.ModelCapabilities
+	56, // 12: psmith.v1.DiscoveredModel.metadata_source:type_name -> psmith.v1.MetadataSource
+	52, // 13: psmith.v1.EnableModelsResponse.enabled:type_name -> psmith.v1.UserModel
+	52, // 14: psmith.v1.ListUserModelsResponse.models:type_name -> psmith.v1.UserModel
+	51, // 15: psmith.v1.UserModelEntry.provider:type_name -> psmith.v1.UserModelProvider
+	52, // 16: psmith.v1.UserModelEntry.model:type_name -> psmith.v1.UserModel
+	25, // 17: psmith.v1.ListAllUserModelsResponse.entries:type_name -> psmith.v1.UserModelEntry
+	52, // 18: psmith.v1.ToggleUserModelFavoriteResponse.model:type_name -> psmith.v1.UserModel
+	53, // 19: psmith.v1.UpdateUserModelRequest.default_settings:type_name -> psmith.v1.CallSettings
+	54, // 20: psmith.v1.UpdateUserModelRequest.pricing:type_name -> psmith.v1.ModelPricing
+	55, // 21: psmith.v1.UpdateUserModelRequest.capabilities:type_name -> psmith.v1.ModelCapabilities
+	52, // 22: psmith.v1.UpdateUserModelResponse.user_model:type_name -> psmith.v1.UserModel
+	52, // 23: psmith.v1.RefreshUserModelMetadataResponse.user_model:type_name -> psmith.v1.UserModel
+	54, // 24: psmith.v1.AddManualModelRequest.pricing:type_name -> psmith.v1.ModelPricing
+	55, // 25: psmith.v1.AddManualModelRequest.capabilities:type_name -> psmith.v1.ModelCapabilities
+	53, // 26: psmith.v1.AddManualModelRequest.default_settings:type_name -> psmith.v1.CallSettings
+	52, // 27: psmith.v1.AddManualModelResponse.user_model:type_name -> psmith.v1.UserModel
+	53, // 28: psmith.v1.TestUserModelRequest.call_settings:type_name -> psmith.v1.CallSettings
+	57, // 29: psmith.v1.RefreshModelCatalogResponse.fetched_at:type_name -> google.protobuf.Timestamp
+	57, // 30: psmith.v1.GetCatalogStatusResponse.last_refresh_at:type_name -> google.protobuf.Timestamp
+	57, // 31: psmith.v1.ListProviderCostsRequest.since:type_name -> google.protobuf.Timestamp
+	57, // 32: psmith.v1.ListProviderCostsRequest.until:type_name -> google.protobuf.Timestamp
+	45, // 33: psmith.v1.ListProviderCostsResponse.providers:type_name -> psmith.v1.ProviderCost
+	0,  // 34: psmith.v1.CapabilityProbeResult.outcome:type_name -> psmith.v1.ProbeOutcome
+	46, // 35: psmith.v1.ProbeUserModelResponse.results:type_name -> psmith.v1.CapabilityProbeResult
+	55, // 36: psmith.v1.ProbeUserModelResponse.capabilities:type_name -> psmith.v1.ModelCapabilities
+	1,  // 37: psmith.v1.ModelProvidersService.ListProviderTypes:input_type -> psmith.v1.ListProviderTypesRequest
+	3,  // 38: psmith.v1.ModelProvidersService.ListProviderTemplates:input_type -> psmith.v1.ListProviderTemplatesRequest
+	5,  // 39: psmith.v1.ModelProvidersService.CreateUserModelProvider:input_type -> psmith.v1.CreateUserModelProviderRequest
+	7,  // 40: psmith.v1.ModelProvidersService.ListUserModelProviders:input_type -> psmith.v1.ListUserModelProvidersRequest
+	9,  // 41: psmith.v1.ModelProvidersService.GetUserModelProvider:input_type -> psmith.v1.GetUserModelProviderRequest
+	11, // 42: psmith.v1.ModelProvidersService.UpdateUserModelProvider:input_type -> psmith.v1.UpdateUserModelProviderRequest
+	13, // 43: psmith.v1.ModelProvidersService.DeleteUserModelProvider:input_type -> psmith.v1.DeleteUserModelProviderRequest
+	15, // 44: psmith.v1.ModelProvidersService.DiscoverModels:input_type -> psmith.v1.DiscoverModelsRequest
+	18, // 45: psmith.v1.ModelProvidersService.EnableModels:input_type -> psmith.v1.EnableModelsRequest
+	20, // 46: psmith.v1.ModelProvidersService.DisableModels:input_type -> psmith.v1.DisableModelsRequest
+	22, // 47: psmith.v1.ModelProvidersService.ListUserModels:input_type -> psmith.v1.ListUserModelsRequest
+	24, // 48: psmith.v1.ModelProvidersService.ListAllUserModels:input_type -> psmith.v1.ListAllUserModelsRequest
+	27, // 49: psmith.v1.ModelProvidersService.ToggleUserModelFavorite:input_type -> psmith.v1.ToggleUserModelFavoriteRequest
+	29, // 50: psmith.v1.ModelProvidersService.UpdateUserModel:input_type -> psmith.v1.UpdateUserModelRequest
+	31, // 51: psmith.v1.ModelProvidersService.RefreshUserModelMetadata:input_type -> psmith.v1.RefreshUserModelMetadataRequest
+	33, // 52: psmith.v1.ModelProvidersService.AddManualModel:input_type -> psmith.v1.AddManualModelRequest
+	35, // 53: psmith.v1.ModelProvidersService.TestUserModelProvider:input_type -> psmith.v1.TestUserModelProviderRequest
+	37, // 54: psmith.v1.ModelProvidersService.TestUserModel:input_type -> psmith.v1.TestUserModelRequest
+	47, // 55: psmith.v1.ModelProvidersService.ProbeUserModel:input_type -> psmith.v1.ProbeUserModelRequest
+	39, // 56: psmith.v1.ModelProvidersService.RefreshModelCatalog:input_type -> psmith.v1.RefreshModelCatalogRequest
+	41, // 57: psmith.v1.ModelProvidersService.GetCatalogStatus:input_type -> psmith.v1.GetCatalogStatusRequest
+	43, // 58: psmith.v1.ModelProvidersService.ListProviderCosts:input_type -> psmith.v1.ListProviderCostsRequest
+	2,  // 59: psmith.v1.ModelProvidersService.ListProviderTypes:output_type -> psmith.v1.ListProviderTypesResponse
+	4,  // 60: psmith.v1.ModelProvidersService.ListProviderTemplates:output_type -> psmith.v1.ListProviderTemplatesResponse
+	6,  // 61: psmith.v1.ModelProvidersService.CreateUserModelProvider:output_type -> psmith.v1.CreateUserModelProviderResponse
+	8,  // 62: psmith.v1.ModelProvidersService.ListUserModelProviders:output_type -> psmith.v1.ListUserModelProvidersResponse
+	10, // 63: psmith.v1.ModelProvidersService.GetUserModelProvider:output_type -> psmith.v1.GetUserModelProviderResponse
+	12, // 64: psmith.v1.ModelProvidersService.UpdateUserModelProvider:output_type -> psmith.v1.UpdateUserModelProviderResponse
+	14, // 65: psmith.v1.ModelProvidersService.DeleteUserModelProvider:output_type -> psmith.v1.DeleteUserModelProviderResponse
+	16, // 66: psmith.v1.ModelProvidersService.DiscoverModels:output_type -> psmith.v1.DiscoverModelsResponse
+	19, // 67: psmith.v1.ModelProvidersService.EnableModels:output_type -> psmith.v1.EnableModelsResponse
+	21, // 68: psmith.v1.ModelProvidersService.DisableModels:output_type -> psmith.v1.DisableModelsResponse
+	23, // 69: psmith.v1.ModelProvidersService.ListUserModels:output_type -> psmith.v1.ListUserModelsResponse
+	26, // 70: psmith.v1.ModelProvidersService.ListAllUserModels:output_type -> psmith.v1.ListAllUserModelsResponse
+	28, // 71: psmith.v1.ModelProvidersService.ToggleUserModelFavorite:output_type -> psmith.v1.ToggleUserModelFavoriteResponse
+	30, // 72: psmith.v1.ModelProvidersService.UpdateUserModel:output_type -> psmith.v1.UpdateUserModelResponse
+	32, // 73: psmith.v1.ModelProvidersService.RefreshUserModelMetadata:output_type -> psmith.v1.RefreshUserModelMetadataResponse
+	34, // 74: psmith.v1.ModelProvidersService.AddManualModel:output_type -> psmith.v1.AddManualModelResponse
+	36, // 75: psmith.v1.ModelProvidersService.TestUserModelProvider:output_type -> psmith.v1.TestUserModelProviderResponse
+	38, // 76: psmith.v1.ModelProvidersService.TestUserModel:output_type -> psmith.v1.TestUserModelResponse
+	48, // 77: psmith.v1.ModelProvidersService.ProbeUserModel:output_type -> psmith.v1.ProbeUserModelResponse
+	40, // 78: psmith.v1.ModelProvidersService.RefreshModelCatalog:output_type -> psmith.v1.RefreshModelCatalogResponse
+	42, // 79: psmith.v1.ModelProvidersService.GetCatalogStatus:output_type -> psmith.v1.GetCatalogStatusResponse
+	44, // 80: psmith.v1.ModelProvidersService.ListProviderCosts:output_type -> psmith.v1.ListProviderCostsResponse
+	59, // [59:81] is the sub-list for method output_type
+	37, // [37:59] is the sub-list for method input_type
+	37, // [37:37] is the sub-list for extension type_name
+	37, // [37:37] is the sub-list for extension extendee
+	0,  // [0:37] is the sub-list for field type_name
 }
 
 func init() { file_psmith_v1_model_providers_proto_init() }

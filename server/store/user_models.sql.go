@@ -28,8 +28,45 @@ func (q *Queries) DeleteUserModel(ctx context.Context, arg DeleteUserModelParams
 	return err
 }
 
+const getEnabledUserModel = `-- name: GetEnabledUserModel :one
+SELECT user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at, favorite, pricing_tiers, enabled FROM user_models
+WHERE user_model_provider_id = $1 AND model_id = $2 AND enabled
+`
+
+type GetEnabledUserModelParams struct {
+	UserModelProviderID uuid.UUID
+	ModelID             string
+}
+
+func (q *Queries) GetEnabledUserModel(ctx context.Context, arg GetEnabledUserModelParams) (UserModel, error) {
+	row := q.db.QueryRow(ctx, getEnabledUserModel, arg.UserModelProviderID, arg.ModelID)
+	var i UserModel
+	err := row.Scan(
+		&i.UserModelProviderID,
+		&i.ModelID,
+		&i.DisplayName,
+		&i.ContextWindow,
+		&i.MaxOutputTokens,
+		&i.InputPricePerMillion,
+		&i.OutputPricePerMillion,
+		&i.CacheReadPerMillion,
+		&i.CacheWritePerMillion,
+		&i.KnowledgeCutoff,
+		&i.Modalities,
+		&i.Capabilities,
+		&i.DefaultSettings,
+		&i.MetadataSource,
+		&i.MetadataSnapshotAt,
+		&i.EnabledAt,
+		&i.Favorite,
+		&i.PricingTiers,
+		&i.Enabled,
+	)
+	return i, err
+}
+
 const getUserModel = `-- name: GetUserModel :one
-SELECT user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at, favorite, pricing_tiers FROM user_models
+SELECT user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at, favorite, pricing_tiers, enabled FROM user_models
 WHERE user_model_provider_id = $1 AND model_id = $2
 `
 
@@ -38,6 +75,9 @@ type GetUserModelParams struct {
 	ModelID             string
 }
 
+// Returns the row whether or not it is enabled. Settings edits and cost
+// accounting want a hand-added model that is off; anything that decides
+// whether a model can be sent to uses GetEnabledUserModel.
 func (q *Queries) GetUserModel(ctx context.Context, arg GetUserModelParams) (UserModel, error) {
 	row := q.db.QueryRow(ctx, getUserModel, arg.UserModelProviderID, arg.ModelID)
 	var i UserModel
@@ -60,16 +100,20 @@ func (q *Queries) GetUserModel(ctx context.Context, arg GetUserModelParams) (Use
 		&i.EnabledAt,
 		&i.Favorite,
 		&i.PricingTiers,
+		&i.Enabled,
 	)
 	return i, err
 }
 
 const listUserModelsByProvider = `-- name: ListUserModelsByProvider :many
-SELECT user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at, favorite, pricing_tiers FROM user_models
+SELECT user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at, favorite, pricing_tiers, enabled FROM user_models
 WHERE user_model_provider_id = $1
 ORDER BY model_id
 `
 
+// Enabled and disabled rows both: the provider's settings page lists the
+// disabled hand-added ones so they can be turned back on. Callers split on
+// the enabled column.
 func (q *Queries) ListUserModelsByProvider(ctx context.Context, userModelProviderID uuid.UUID) ([]UserModel, error) {
 	rows, err := q.db.Query(ctx, listUserModelsByProvider, userModelProviderID)
 	if err != nil {
@@ -98,6 +142,7 @@ func (q *Queries) ListUserModelsByProvider(ctx context.Context, userModelProvide
 			&i.EnabledAt,
 			&i.Favorite,
 			&i.PricingTiers,
+			&i.Enabled,
 		); err != nil {
 			return nil, err
 		}
@@ -110,10 +155,10 @@ func (q *Queries) ListUserModelsByProvider(ctx context.Context, userModelProvide
 }
 
 const listUserModelsByUser = `-- name: ListUserModelsByUser :many
-SELECT um.user_model_provider_id, um.model_id, um.display_name, um.context_window, um.max_output_tokens, um.input_price_per_million, um.output_price_per_million, um.cache_read_per_million, um.cache_write_per_million, um.knowledge_cutoff, um.modalities, um.capabilities, um.default_settings, um.metadata_source, um.metadata_snapshot_at, um.enabled_at, um.favorite, um.pricing_tiers
+SELECT um.user_model_provider_id, um.model_id, um.display_name, um.context_window, um.max_output_tokens, um.input_price_per_million, um.output_price_per_million, um.cache_read_per_million, um.cache_write_per_million, um.knowledge_cutoff, um.modalities, um.capabilities, um.default_settings, um.metadata_source, um.metadata_snapshot_at, um.enabled_at, um.favorite, um.pricing_tiers, um.enabled
 FROM user_models um
 JOIN user_model_providers ump ON ump.id = um.user_model_provider_id
-WHERE ump.user_id = $1
+WHERE ump.user_id = $1 AND um.enabled
 ORDER BY ump.created_at, um.model_id
 `
 
@@ -145,6 +190,7 @@ func (q *Queries) ListUserModelsByUser(ctx context.Context, userID uuid.UUID) ([
 			&i.EnabledAt,
 			&i.Favorite,
 			&i.PricingTiers,
+			&i.Enabled,
 		); err != nil {
 			return nil, err
 		}
@@ -154,6 +200,48 @@ func (q *Queries) ListUserModelsByUser(ctx context.Context, userID uuid.UUID) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const setUserModelEnabled = `-- name: SetUserModelEnabled :one
+UPDATE user_models
+SET enabled = $3
+WHERE user_model_provider_id = $1 AND model_id = $2
+RETURNING user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at, favorite, pricing_tiers, enabled
+`
+
+type SetUserModelEnabledParams struct {
+	UserModelProviderID uuid.UUID
+	ModelID             string
+	Enabled             bool
+}
+
+// Upserts leave enabled alone (it is not in UpsertUserModel's update set), so
+// this is the only way a row's enabled flag changes.
+func (q *Queries) SetUserModelEnabled(ctx context.Context, arg SetUserModelEnabledParams) (UserModel, error) {
+	row := q.db.QueryRow(ctx, setUserModelEnabled, arg.UserModelProviderID, arg.ModelID, arg.Enabled)
+	var i UserModel
+	err := row.Scan(
+		&i.UserModelProviderID,
+		&i.ModelID,
+		&i.DisplayName,
+		&i.ContextWindow,
+		&i.MaxOutputTokens,
+		&i.InputPricePerMillion,
+		&i.OutputPricePerMillion,
+		&i.CacheReadPerMillion,
+		&i.CacheWritePerMillion,
+		&i.KnowledgeCutoff,
+		&i.Modalities,
+		&i.Capabilities,
+		&i.DefaultSettings,
+		&i.MetadataSource,
+		&i.MetadataSnapshotAt,
+		&i.EnabledAt,
+		&i.Favorite,
+		&i.PricingTiers,
+		&i.Enabled,
+	)
+	return i, err
 }
 
 const setUserModelFavorite = `-- name: SetUserModelFavorite :exec
@@ -177,7 +265,7 @@ const updateUserModelCapabilities = `-- name: UpdateUserModelCapabilities :one
 UPDATE user_models
 SET capabilities = $3
 WHERE user_model_provider_id = $1 AND model_id = $2
-RETURNING user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at, favorite, pricing_tiers
+RETURNING user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at, favorite, pricing_tiers, enabled
 `
 
 type UpdateUserModelCapabilitiesParams struct {
@@ -211,6 +299,7 @@ func (q *Queries) UpdateUserModelCapabilities(ctx context.Context, arg UpdateUse
 		&i.EnabledAt,
 		&i.Favorite,
 		&i.PricingTiers,
+		&i.Enabled,
 	)
 	return i, err
 }
@@ -260,7 +349,7 @@ ON CONFLICT (user_model_provider_id, model_id) DO UPDATE SET
     metadata_source           = EXCLUDED.metadata_source,
     metadata_snapshot_at      = EXCLUDED.metadata_snapshot_at,
     pricing_tiers             = EXCLUDED.pricing_tiers
-RETURNING user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at, favorite, pricing_tiers
+RETURNING user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at, favorite, pricing_tiers, enabled
 `
 
 type UpsertUserModelParams struct {
@@ -321,6 +410,7 @@ func (q *Queries) UpsertUserModel(ctx context.Context, arg UpsertUserModelParams
 		&i.EnabledAt,
 		&i.Favorite,
 		&i.PricingTiers,
+		&i.Enabled,
 	)
 	return i, err
 }

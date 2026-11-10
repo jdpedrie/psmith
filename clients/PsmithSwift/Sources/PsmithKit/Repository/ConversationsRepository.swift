@@ -121,6 +121,13 @@ public final class ConversationsRepository: Sendable {
             }
             return (conv, ctx)
         }
+        // The cache stands in for a server we can't reach, not for one
+        // that answered: a conversation deleted (here or on another
+        // device) must read as gone, not as its last cached snapshot.
+        if let err = resp.error, err.code == .notFound || err.code == .permissionDenied {
+            await forgetCached(id: id)
+            throw PsmithError.from(err)
+        }
         if let cache,
            let conv: PsmithConversation = await cache.get(PsmithConversation.self, kind: "conversation", id: id),
            let ctx: PsmithContext = await cache.get(PsmithContext.self, kind: "activeContext", id: id) {
@@ -180,6 +187,13 @@ public final class ConversationsRepository: Sendable {
         req.id = id
         let resp = await client.deleteConversation(request: req, headers: [:])
         if resp.message == nil, let err = resp.error { throw PsmithError.from(err) }
+        await forgetCached(id: id)
+    }
+
+    private func forgetCached(id: String) async {
+        guard let cache else { return }
+        await cache.remove(kind: "conversation", id: id)
+        await cache.remove(kind: "activeContext", id: id)
     }
 
     /// Updates the conversation's title. Pass `nil` to leave it unchanged;
@@ -236,12 +250,15 @@ public final class ConversationsRepository: Sendable {
         providerID: String? = nil,
         modelID: String? = nil,
         attachmentFileIDs: [String] = [],
-        deviceFacts: [PsmithDeviceFact] = []
+        deviceFacts: [PsmithDeviceFact] = [],
+        forkAtRoot: Bool = false
     ) async throws -> (userMessage: PsmithMessage, streamRun: PsmithStreamRun) {
         var req = Psmith_V1_SendMessageRequest()
         req.conversationID = conversationID
         req.content = content
         if let parentMessageID { req.parentMessageID = parentMessageID }
+        // A nil parent means "continue from the leaf"; a new root is asked for.
+        req.forkAtRoot = forkAtRoot
         if let providerID { req.providerID = providerID }
         if let modelID { req.modelID = modelID }
         if !attachmentFileIDs.isEmpty { req.attachmentFileIds = attachmentFileIDs }

@@ -1,5 +1,5 @@
 // Progressive enhancement for the web client. Every page works without this
-// file; it adds keyboard shortcuts, search-as-command, copy buttons,
+// file; it adds keyboard shortcuts, copy buttons,
 // disclosure toggles, composer behavior, drafts kept in this browser, the
 // explicit-save bar and the connection indicator. Server-rendered markup
 // carries the hooks as data- attributes, so behavior follows the HTML.
@@ -87,7 +87,7 @@
 	});
 
 	// --- keyboard -----------------------------------------------------------
-	function rows() { return $$("#rows .row"); }
+	function rows() { return $$("#rows a.row"); }
 
 	function moveConversation(step) {
 		var all = rows();
@@ -95,6 +95,17 @@
 		var cur = all.findIndex(function (r) { return r.hasAttribute("aria-current"); });
 		var next = all[Math.max(0, Math.min(all.length - 1, cur < 0 ? 0 : cur + step))];
 		if (next) next.click();
+	}
+
+	// Opens your last message's editor in place, through its own Edit
+	// control. False when there's no message of yours to edit.
+	function editLastMessage() {
+		var mine = $$("#messages .turn-user[id]");
+		var last = mine[mine.length - 1];
+		var edit = last && $('a[aria-label="Edit message"]', last);
+		if (!edit) return false;
+		edit.click();
+		return true;
 	}
 
 	document.addEventListener("keydown", function (e) {
@@ -116,18 +127,21 @@
 			$$("[data-menu][open]").forEach(function (d) { d.removeAttribute("open"); });
 			return;
 		}
+		// Up in an empty composer edits your last message, as it does in the
+		// apps: the composer is where your hands are when you spot the typo.
+		var held = document.activeElement;
+		if (e.key === "ArrowUp" && held && held.id === "composer-text" && !held.value &&
+			!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+			if (editLastMessage()) e.preventDefault();
+			return;
+		}
 		if (e.metaKey || e.ctrlKey || e.altKey || typing(document.activeElement)) return;
 		switch (e.key) {
 			case "/": e.preventDefault(); var s = $("#search"); if (s) { s.focus(); s.select(); } break;
 			case "j": moveConversation(1); break;
 			case "k": moveConversation(-1); break;
 			case "ArrowUp": {
-				var mine = $$("#messages .bubble[id]");
-				var last = mine[mine.length - 1];
-				if (last) {
-					e.preventDefault();
-					location.href = "/c/" + $("#main").getAttribute("data-conv") + "/message/" + last.id.slice(2) + "/edit";
-				}
+				if (editLastMessage()) e.preventDefault();
 				break;
 			}
 			default: {
@@ -136,55 +150,6 @@
 			}
 		}
 	});
-
-	// --- search as a command line -------------------------------------------
-	// Typing in the list's search box asks the server for matching commands,
-	// conversations and settings, and shows them in place of the rows.
-	var search = $("#search");
-	if (search) {
-		var body = $("#list-body"), timer = null, results = null;
-		var showResults = function (html) {
-			if (!results) {
-				results = document.createElement("div");
-				results.id = "command-results";
-				body.parentNode.insertBefore(results, body);
-			}
-			results.innerHTML = html;
-			body.hidden = true;
-		};
-		var clear = function () {
-			if (results) { results.remove(); results = null; }
-			body.hidden = false;
-		};
-		search.addEventListener("input", function () {
-			clearTimeout(timer);
-			var q = search.value.trim();
-			if (!q) { clear(); return; }
-			timer = setTimeout(function () {
-				var conv = $("#main") ? $("#main").getAttribute("data-conv") || "" : "";
-				fetch("/partials/command?q=" + encodeURIComponent(q) + "&conv=" + encodeURIComponent(conv), { credentials: "same-origin" })
-					.then(function (r) { return r.ok ? r.text() : ""; })
-					.then(function (html) { if (search.value.trim() === q) showResults(html); });
-			}, 120);
-		});
-		search.addEventListener("keydown", function (e) {
-			var opts = results ? $$('[role="option"]', results) : [];
-			var cur = opts.findIndex(function (o) { return o.getAttribute("aria-selected") === "true"; });
-			if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-				if (!opts.length) return;
-				e.preventDefault();
-				var n = Math.max(0, Math.min(opts.length - 1, cur + (e.key === "ArrowDown" ? 1 : -1)));
-				opts.forEach(function (o, i) { o.setAttribute("aria-selected", String(i === n)); });
-			} else if (e.key === "Enter" && opts.length) {
-				e.preventDefault();
-				(opts[cur < 0 ? 0 : cur]).click();
-			} else if (e.key === "Escape") {
-				search.value = "";
-				clear();
-				search.blur();
-			}
-		});
-	}
 
 	// --- composer ------------------------------------------------------------
 	var form = $("#composer");
@@ -228,16 +193,6 @@
 		if (form && !$("#messages [aria-busy=true]")) form.removeAttribute("data-live");
 	});
 
-	// Rows show this browser's unsent drafts.
-	rows().forEach(function (r) {
-		var d = store("psmith.draft." + r.getAttribute("data-id"));
-		var sub = $(".row-sub", r);
-		if (d && sub && !sub.classList.contains("live")) {
-			sub.innerHTML = '<span class="draft">Draft:</span> ';
-			sub.appendChild(document.createTextNode(d));
-		}
-	});
-
 	// --- follow the stream ---------------------------------------------------
 	var scroller = $("#transcript");
 	if (scroller) {
@@ -277,6 +232,9 @@
 		f.addEventListener("change", count);
 		f.addEventListener("reset", function () {
 			setTimeout(function () {
+				// A hidden input's value is its attribute, so reset can't
+				// restore what a switch wrote there.
+				fields.forEach(function (el, i) { if (el.type === "hidden") el.value = initial[i]; });
 				$$("[role=switch][data-switch]", f).forEach(function (s) {
 					var h = f.querySelector('input[type=hidden][name="' + s.getAttribute("data-switch") + '"]');
 					if (h) s.setAttribute("aria-checked", h.value);

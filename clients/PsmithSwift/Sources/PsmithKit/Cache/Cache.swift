@@ -103,6 +103,17 @@ public actor PsmithCache {
         return value
     }
 
+    /// Drops the entry at `(kind, id)`, if any.
+    public func remove(kind: String, id: String) {
+        let key = CacheEntry.makeKey(kind: kind, id: id)
+        let descriptor = FetchDescriptor<CacheEntry>(
+            predicate: #Predicate { $0.compositeKey == key }
+        )
+        guard let rows = try? context.fetch(descriptor), !rows.isEmpty else { return }
+        for r in rows { context.delete(r) }
+        try? context.save()
+    }
+
     // MARK: - Eviction + size
 
     public func totalBytes() -> Int {

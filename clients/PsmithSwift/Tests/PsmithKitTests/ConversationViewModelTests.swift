@@ -520,6 +520,100 @@ struct ConversationViewModelTests {
         #expect(r.vm.loadError == nil)
     }
 
+    @Test("a load that read the server before a delete doesn't put the row back")
+    func loadInFlightDuringDeleteIsDropped() async throws {
+        let r = try await makeReadyVM(usernamePrefix: "vm-del-race")
+        await r.vm.load()
+        await sendAndAwait(r.vm, text: "doomed")
+        await r.vm.load()
+        guard let asst = r.vm.messages.last(where: { $0.role == .assistant }) else {
+            Issue.record("no assistant to delete")
+            return
+        }
+        // The load has fetched the chain with the row in it; the delete
+        // lands before it applies, as a compression's closing reload can.
+        let vm = r.vm
+        vm.loadFetchedHook = {
+            vm.loadFetchedHook = nil
+            await vm.deleteMessage(id: asst.id, cascade: false)
+        }
+        await vm.load()
+        #expect(!vm.messages.contains(where: { $0.id == asst.id }))
+        #expect(!vm.loading)
+        // A later load still applies.
+        await vm.load()
+        #expect(!vm.messages.isEmpty)
+        #expect(!vm.messages.contains(where: { $0.id == asst.id }))
+    }
+
+    @Test("a load that read the server before a send doesn't drop the sent message")
+    func loadInFlightDuringSendIsDropped() async throws {
+        let r = try await makeReadyVM(usernamePrefix: "vm-send-race")
+        await r.vm.load()
+        await sendAndAwait(r.vm, text: "first")
+        await r.vm.load()
+        // The screen's first load has its fetch; the user sends before it applies.
+        let vm = r.vm
+        vm.loadFetchedHook = {
+            vm.loadFetchedHook = nil
+            vm.draft = "second"
+            await vm.send()
+        }
+        await vm.load()
+        #expect(vm.messages.contains { $0.role == .user && $0.content == "second" },
+                "the load put back the transcript from before the send")
+        await waitFor(deadlineSeconds: 15) { vm.streamRunID == nil && !vm.sending }
+    }
+
+    @Test("a saved draft comes back in a new view model")
+    func savedDraftIsRestored() async throws {
+        let r = try await makeReadyVM(usernamePrefix: "vm-draft-restored")
+        defer { DraftStore.clear(conversationID: r.conversation.id) }
+        DraftStore.save(conversationID: r.conversation.id, text: "half a thought")
+        let reopened = ConversationViewModel(
+            conversation: r.conversation, client: r.client,
+            hub: StreamHub(subscriber: r.client.streams), onTerminal: { }, localTitler: nil)
+        #expect(reopened.draft == "half a thought")
+    }
+
+    @Test("useProfileModel drops the conversation's own model and shows the profile's")
+    func useProfileModelClearsThePin() async throws {
+        let r = try await makeReadyVM(usernamePrefix: "vm-use-profile-model")
+        let vm = r.vm
+        await vm.load()
+        await vm.loadAvailableModels()
+        #expect(vm.selectionIsInferredDefault && !vm.pinsModel)
+        await vm.selectModel(providerID: r.provider.id, modelID: r.model.modelID)
+        #expect(vm.pinsModel)
+        let pinned = try await r.client.conversations.get(id: r.conversation.id).0
+        #expect(pinned.settings?.defaultModelID == r.model.modelID)
+
+        await vm.useProfileModel()
+        #expect(vm.loadError == nil)
+        #expect(!vm.pinsModel)
+        #expect(vm.selectionIsInferredDefault)
+        #expect(vm.selectedModelID == r.model.modelID, "the chip should show the profile's model")
+        let live = try await r.client.conversations.get(id: r.conversation.id).0
+        #expect((live.settings?.defaultModelID ?? "").isEmpty, "the pin is still on the server")
+    }
+
+    @Test("compactFormReady needs instructions and a model")
+    func compactFormReadyGate() async throws {
+        let r = try await makeReadyVM(usernamePrefix: "vm-compact-gate")
+        let vm = r.vm
+        vm.compactPromptDraft = "  "
+        vm.compactProviderID = "p"
+        vm.compactModelID = "m"
+        #expect(!vm.compactFormReady)
+        vm.compactPromptDraft = "Keep the decisions."
+        #expect(vm.compactFormReady)
+        vm.compactModelID = ""
+        #expect(!vm.compactFormReady)
+        vm.compactModelID = "m"
+        vm.compactProviderID = nil
+        #expect(!vm.compactFormReady)
+    }
+
     @Test("stitch delete is in-place: survivors keep identity and order, no reload")
     func deleteMessageInPlace() async throws {
         let r = try await makeReadyVM(usernamePrefix: "vm-del-inplace")
@@ -640,6 +734,30 @@ struct ConversationViewModelTests {
         await vm2.load()
         #expect(vm2.selectedProviderID == m.providerID)
         #expect(vm2.selectedModelID == m.modelID)
+    }
+
+    @Test("resendBeside a context's first message forks a new root instead of appending")
+    func resendBesideTheFirstMessageForksAtTheRoot() async throws {
+        let r = try await makeReadyVM(usernamePrefix: "vm-fork-root")
+        await r.vm.load()
+        await sendAndAwait(r.vm, text: "first")
+        await sendAndAwait(r.vm, text: "second")
+        guard let first = r.vm.messages.first(where: { $0.role == .user && $0.content == "first" }) else {
+            Issue.record("no first message")
+            return
+        }
+        #expect(first.parentID == nil, "the fixture's context should start at the user's first message")
+
+        await r.vm.resendBeside(first, content: "first, edited")
+        await waitFor { r.vm.streamRunID == nil && !r.vm.sending }
+        await r.vm.load()
+
+        // The new branch starts at the edited text, and doesn't carry the old turns.
+        #expect(r.vm.messages.first?.content == "first, edited")
+        #expect(r.vm.messages.first?.parentID == nil)
+        #expect(!r.vm.messages.contains { $0.content == "second" })
+        await r.vm.loadTree()
+        #expect(r.vm.treeMessages.filter { $0.parentID == nil }.count == 2)
     }
 
     @Test("sendForking under an existing parent creates a sibling user message")

@@ -85,6 +85,8 @@ func (h *Handler) modelPageVM(prov *psmithv1.UserModelProvider, m *psmithv1.User
 		ProvID: prov.GetId(), ProvName: prov.GetLabel(), ProvType: prov.GetType(),
 		ID: m.GetModelId(), Name: saModelName(m.GetDisplayName(), m.GetModelId()), Favorite: m.GetFavorite(),
 		MetaLine: saMetaLine(m), Caps: saCapToggles(m.GetCapabilities()), Mods: saModToggles(m.GetModalities()),
+		Cutoff: m.GetKnowledgeCutoff(), Manual: m.GetMetadataSource() == psmithv1.MetadataSource_METADATA_SOURCE_MANUAL,
+		TempLock: saTempLock(m),
 	}
 	if m.ContextWindow != nil {
 		vm.Ctx = saGroupInt(int64(m.GetContextWindow()))
@@ -112,6 +114,34 @@ func (h *Handler) modelPageVM(prov *psmithv1.UserModelProvider, m *psmithv1.User
 	return vm
 }
 
+// saTempLock is the one temperature the model's constraints allow, or "".
+func saTempLock(m *psmithv1.UserModel) string {
+	if t := m.GetConstraints().GetTemperature(); t != nil && t.LockedAt != nil {
+		return saFloat(t.GetLockedAt())
+	}
+	return ""
+}
+
+// saTempRange checks a temperature against the model's accepted range, when
+// it has one.
+func saTempRange(m *psmithv1.UserModel, t *float64) error {
+	rg := m.GetConstraints().GetTemperature()
+	if t == nil || rg == nil || rg.LockedAt != nil {
+		return nil
+	}
+	lo, hi := 0.0, 2.0
+	if rg.Min != nil {
+		lo = rg.GetMin()
+	}
+	if rg.Max != nil {
+		hi = rg.GetMax()
+	}
+	if *t < lo || *t > hi {
+		return fmt.Errorf("%s takes a temperature from %s to %s", saModelName(m.GetDisplayName(), m.GetModelId()), saFloat(lo), saFloat(hi))
+	}
+	return nil
+}
+
 func (h *Handler) handleModel(w http.ResponseWriter, r *http.Request) {
 	h.renderModel(w, r, http.StatusOK, nil, nil, "")
 }
@@ -124,6 +154,7 @@ func (h *Handler) renderModel(w http.ResponseWriter, r *http.Request, status int
 	}
 	vm := h.modelPageVM(prov, m)
 	vm.Result, vm.Probe, vm.Error = res, probe, errMsg
+	vm.Deleting = vm.Manual && r.Method == http.MethodGet && r.URL.Query().Get("delete") != ""
 	h.render(w, r, status, modelScreen(h.loadSnav(r.Context(), r, "providers"), vm))
 }
 
@@ -156,6 +187,7 @@ func (h *Handler) handleModelSave(w http.ResponseWriter, r *http.Request) {
 
 type saLimitsForm struct {
 	ctx, out         *int32
+	cutoff           *string
 	in, outp, cr, cw *float64
 	caps             *psmithv1.ModelCapabilities
 	mods             []string
@@ -164,18 +196,33 @@ type saLimitsForm struct {
 func saReadLimits(r *http.Request) (saLimitsForm, error) {
 	var l saLimitsForm
 	var err error
-	if l.ctx, err = saParseInt(r.PostFormValue("context_window")); err != nil {
+	if l.ctx, err = saParseInt("Context window", r.PostFormValue("context_window")); err != nil {
 		return l, err
 	}
-	if l.out, err = saParseInt(r.PostFormValue("max_output")); err != nil {
+	if l.out, err = saParseInt("Max output", r.PostFormValue("max_output")); err != nil {
 		return l, err
 	}
 	for _, f := range []struct {
-		dst  **float64
-		name string
-	}{{&l.in, "price_in"}, {&l.outp, "price_out"}, {&l.cr, "price_cache_read"}, {&l.cw, "price_cache_write"}} {
-		if *f.dst, err = saParseFloat(r.PostFormValue(f.name)); err != nil {
+		dst         **float64
+		name, label string
+	}{{&l.in, "price_in", "Input price"}, {&l.outp, "price_out", "Output price"}, {&l.cr, "price_cache_read", "Cache read price"}, {&l.cw, "price_cache_write", "Cache write price"}} {
+		if *f.dst, err = saParseFloat(f.label, r.PostFormValue(f.name)); err != nil {
 			return l, err
+		}
+	}
+	if v := strings.TrimSpace(r.PostFormValue("knowledge_cutoff")); v != "" {
+		if _, err := time.Parse(time.DateOnly, v); err != nil {
+			return l, fmt.Errorf("Knowledge cutoff must be a date like 2025-03-01, not %q", v)
+		}
+		l.cutoff = &v
+	}
+	for _, c := range []error{
+		saInRange("Context window", l.ctx, 1, 1<<30), saInRange("Max output", l.out, 1, 1<<30),
+		saInRange("Input price", l.in, 0, 1e6), saInRange("Output price", l.outp, 0, 1e6),
+		saInRange("Cache read price", l.cr, 0, 1e6), saInRange("Cache write price", l.cw, 0, 1e6),
+	} {
+		if c != nil {
+			return l, c
 		}
 	}
 	l.caps = saCapsFromForm(r.PostForm["cap"])
@@ -209,6 +256,7 @@ func modelUpdateFromForm(r *http.Request, m *psmithv1.UserModel) (*psmithv1.Upda
 	}
 	req.ContextWindow, req.ClearContextWindow = l.ctx, l.ctx == nil
 	req.MaxOutputTokens, req.ClearMaxOutputTokens = l.out, l.out == nil
+	req.KnowledgeCutoff, req.ClearKnowledgeCutoff = l.cutoff, l.cutoff == nil
 	// Pricing replaces wholesale; tiers aren't on this page, so carry them.
 	if p := l.pricing(m.GetPricing().GetTiers()); p != nil {
 		req.Pricing = p
@@ -220,13 +268,22 @@ func modelUpdateFromForm(r *http.Request, m *psmithv1.UserModel) (*psmithv1.Upda
 	if ds == nil {
 		ds = &psmithv1.CallSettings{}
 	}
-	if ds.Temperature, err = saParseFloat(r.PostFormValue("temperature")); err != nil {
+	// A locked temperature has no field, so the stored value stays.
+	if saTempLock(m) == "" {
+		if ds.Temperature, err = saParseFloat("Temperature", r.PostFormValue("temperature")); err != nil {
+			return nil, err
+		}
+		if err = saInRange("Temperature", ds.Temperature, 0, 2); err != nil {
+			return nil, err
+		}
+		if err = saTempRange(m, ds.Temperature); err != nil {
+			return nil, err
+		}
+	}
+	if ds.MaxOutputTokens, err = saParseInt("Max output tokens", r.PostFormValue("max_output_tokens")); err != nil {
 		return nil, err
 	}
-	if err = saInRange("Temperature", ds.Temperature, 0, 2); err != nil {
-		return nil, err
-	}
-	if ds.MaxOutputTokens, err = saParseInt(r.PostFormValue("max_output_tokens")); err != nil {
+	if err = saInRange("Max output tokens", ds.MaxOutputTokens, 1, 1<<30); err != nil {
 		return nil, err
 	}
 	if e, ok := effortByName[r.PostFormValue("effort")]; ok {
@@ -417,7 +474,8 @@ func (h *Handler) renderModelDefaults(w http.ResponseWriter, r *http.Request, st
 		Action: base + "/model-defaults/" + saModelPath(m.GetModelId()),
 		Level:  "model", ProvName: prov.GetLabel(), ProvType: prov.GetType(),
 		F: csFromProto(m.GetDefaultSettings()), Inh: csFromProto(prov.GetDefaultSettings()),
-		Error: errMsg,
+		TempLock: saTempLock(m),
+		Error:    errMsg,
 	}
 	if f != nil {
 		d.F = *f
@@ -431,8 +489,20 @@ func (h *Handler) handleModelDefaultsSave(w http.ResponseWriter, r *http.Request
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	_, m, err := h.loadModel(r, provID, modelID)
+	if err != nil {
+		http.Error(w, "model not found", http.StatusNotFound)
+		return
+	}
 	f := csFormFromValues(r.PostForm)
 	cs, err := f.toProto()
+	if err == nil {
+		if saTempLock(m) != "" {
+			cs.Temperature = m.GetDefaultSettings().Temperature
+		} else {
+			err = saTempRange(m, cs.Temperature)
+		}
+	}
 	if err != nil {
 		h.renderModelDefaults(w, r, http.StatusUnprocessableEntity, &f, err.Error())
 		return
@@ -484,7 +554,8 @@ func (h *Handler) handleAddModelSave(w http.ResponseWriter, r *http.Request) {
 		ModelID: strings.TrimSpace(v.Get("model_id")), Name: strings.TrimSpace(v.Get("display_name")),
 		Ctx: v.Get("context_window"), Out: v.Get("max_output"),
 		In: v.Get("price_in"), OutP: v.Get("price_out"), CR: v.Get("price_cache_read"), CW: v.Get("price_cache_write"),
-		Caps: saCapToggles(saCapsFromForm(v["cap"])), Mods: saModToggles(v["modality"]),
+		Cutoff: v.Get("knowledge_cutoff"),
+		Caps:   saCapToggles(saCapsFromForm(v["cap"])), Mods: saModToggles(v["modality"]),
 	}
 	form.Calls.F = csFormFromValues(v)
 	form.CallsOpen = !reflect.ValueOf(form.Calls.F).IsZero()
@@ -500,7 +571,7 @@ func (h *Handler) handleAddModelSave(w http.ResponseWriter, r *http.Request) {
 	}
 	req := &psmithv1.AddManualModelRequest{
 		UserModelProviderId: provID, ModelId: form.ModelID, DisplayName: form.Name,
-		ContextWindow: l.ctx, MaxOutputTokens: l.out, Pricing: l.pricing(nil),
+		ContextWindow: l.ctx, MaxOutputTokens: l.out, Pricing: l.pricing(nil), KnowledgeCutoff: l.cutoff,
 		Modalities: l.mods, Capabilities: l.caps,
 	}
 	if form.CallsOpen {
@@ -512,8 +583,54 @@ func (h *Handler) handleAddModelSave(w http.ResponseWriter, r *http.Request) {
 		req.DefaultSettings = cs
 	}
 	if _, err := h.models.AddManualModel(r.Context(), connect.NewRequest(req)); err != nil {
-		fail(saErrMsg(err))
-		return
+		if connect.CodeOf(err) != connect.CodeAlreadyExists || !h.isOffModel(r, provID, form.ModelID) {
+			fail(saErrMsg(err))
+			return
+		}
+		if err := h.turnBackOn(r, req); err != nil {
+			fail(saErrMsg(err))
+			return
+		}
 	}
 	http.Redirect(w, r, "/settings/providers/"+provID+"/models/"+saModelPath(form.ModelID), http.StatusSeeOther)
+}
+
+// isOffModel reports whether modelID is a hand-added model that is turned
+// off: its row is kept, so adding it again collides with it.
+func (h *Handler) isOffModel(r *http.Request, provID, modelID string) bool {
+	resp, err := h.models.GetUserModelProvider(r.Context(), connect.NewRequest(&psmithv1.GetUserModelProviderRequest{Id: provID}))
+	if err != nil {
+		return false
+	}
+	for _, m := range resp.Msg.GetDisabledModels() {
+		if m.GetModelId() == modelID {
+			return true
+		}
+	}
+	return false
+}
+
+// turnBackOn enables an off hand-added model and writes what the add form
+// carried over its kept metadata.
+func (h *Handler) turnBackOn(r *http.Request, add *psmithv1.AddManualModelRequest) error {
+	ctx := r.Context()
+	if _, err := h.models.EnableModels(ctx, connect.NewRequest(&psmithv1.EnableModelsRequest{
+		UserModelProviderId: add.GetUserModelProviderId(), ModelIds: []string{add.GetModelId()},
+	})); err != nil {
+		return err
+	}
+	name := add.GetDisplayName()
+	up := &psmithv1.UpdateUserModelRequest{
+		UserModelProviderId: add.GetUserModelProviderId(), ModelId: add.GetModelId(),
+		DisplayName: &name, Capabilities: add.GetCapabilities(), UpdateModalities: true, Modalities: add.GetModalities(),
+		ContextWindow: add.ContextWindow, ClearContextWindow: add.ContextWindow == nil,
+		MaxOutputTokens: add.MaxOutputTokens, ClearMaxOutputTokens: add.MaxOutputTokens == nil,
+		KnowledgeCutoff: add.KnowledgeCutoff, ClearKnowledgeCutoff: add.KnowledgeCutoff == nil,
+		Pricing: add.GetPricing(), DefaultSettings: add.GetDefaultSettings(),
+	}
+	if up.Pricing == nil {
+		up.Pricing = &psmithv1.ModelPricing{}
+	}
+	_, err := h.models.UpdateUserModel(ctx, connect.NewRequest(up))
+	return err
 }

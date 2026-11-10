@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -32,6 +33,9 @@ type Service struct {
 	cipher  crypto.Cipher
 	emitter *langfuse.Emitter
 	logger  *slog.Logger
+	// probeClient carries TestLangfuseConfig's POST; nil is
+	// http.DefaultClient. Tests point it at a local server.
+	probeClient *http.Client
 }
 
 // NewService wires the dependencies. emitter is the process-wide
@@ -172,10 +176,9 @@ func (s *Service) DeleteLangfuseConfig(ctx context.Context, _ *connect.Request[p
 // RPC error — the settings page renders the result inline next to
 // the test button.
 //
-// This call deliberately does NOT use the batched Emitter — it
-// needs synchronous success/failure for the UI's test affordance.
-// A throwaway one-shot Emitter is constructed, fired, and torn
-// down within the call.
+// It posts directly rather than through the Emitter, which logs a
+// failed POST instead of returning it: the answer here is the host's
+// own status, so a wrong host or key reports ok=false.
 func (s *Service) TestLangfuseConfig(ctx context.Context, _ *connect.Request[psmithv1.TestLangfuseConfigRequest]) (*connect.Response[psmithv1.TestLangfuseConfigResponse], error) {
 	user := auth.MustFromContext(ctx)
 	row, err := s.queries.GetUserLangfuseConfig(ctx, user.ID)
@@ -199,20 +202,15 @@ func (s *Service) TestLangfuseConfig(ctx context.Context, _ *connect.Request[psm
 		}), nil
 	}
 
-	// Spin up a one-shot emitter, fire one trace, stop. The Stop
-	// call blocks until the buffer drains, so we get sync success
-	// signal even though the underlying client is async.
-	probeEmitter := langfuse.NewEmitter(s.logger, langfuse.EmitterConfig{
-		FlushInterval:  100 * time.Millisecond,
-		FlushBatchSize: 1,
-	})
-	probeEmitter.SetUserConfig(user.ID.String(), langfuse.Config{
-		Host: cfg.Host, PublicKey: cfg.PublicKey, SecretKey: cfg.SecretKey, Enabled: true,
-	})
 	now := time.Now().UTC()
-	probeEmitter.EmitTurn(user.ID.String(),
+	traceID := fmt.Sprintf("psmith-test-%d", now.UnixNano())
+	probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	start := time.Now()
+	err = langfuse.Probe(probeCtx, s.probeClient,
+		langfuse.Config{Host: cfg.Host, PublicKey: cfg.PublicKey, SecretKey: cfg.SecretKey, Enabled: true},
 		langfuse.Trace{
-			ID:        fmt.Sprintf("psmith-test-%d", now.UnixNano()),
+			ID:        traceID,
 			Name:      "psmith · test trace",
 			SessionID: "psmith-test-session",
 			Output:    "If you're seeing this in Langfuse, your Psmith integration is working.",
@@ -222,25 +220,19 @@ func (s *Service) TestLangfuseConfig(ctx context.Context, _ *connect.Request[psm
 		},
 		langfuse.Generation{
 			ID:        fmt.Sprintf("psmith-test-gen-%d", now.UnixNano()),
-			TraceID:   fmt.Sprintf("psmith-test-%d", now.UnixNano()),
+			TraceID:   traceID,
 			Name:      "test ping",
 			Model:     "synthetic",
 			Output:    "ok",
 			StartTime: now,
 			EndTime:   now,
 		})
-
-	stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	start := time.Now()
-	probeEmitter.Stop(stopCtx)
 	latency := time.Since(start).Milliseconds()
-
-	// The Emitter logs HTTP failures rather than returning them, so
-	// we can't distinguish success from "POST happened but Langfuse
-	// rejected it" here. Treat completion-without-panic as success;
-	// real auth failures show up in server logs and the user can
-	// re-test after fixing.
+	if err != nil {
+		return connect.NewResponse(&psmithv1.TestLangfuseConfigResponse{
+			Ok: false, ErrorMessage: err.Error(), LatencyMs: latency,
+		}), nil
+	}
 	return connect.NewResponse(&psmithv1.TestLangfuseConfigResponse{
 		Ok:        true,
 		LatencyMs: latency,

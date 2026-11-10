@@ -415,17 +415,35 @@ struct SKListFieldGroup: View {
     }
 }
 
-/// The parent choice: None, then every other profile, as cards.
+/// The parent choice: None, then every profile that can be one, as cards.
+/// A profile can't be its own parent, nor inherit from one of its own
+/// descendants (the server refuses the loop on save).
 struct SKParentCards: View {
     let profiles: [PsmithProfile]
     let excluding: String?
     @Binding var parentID: String?
 
+    static func candidates(_ profiles: [PsmithProfile], for id: String?) -> [PsmithProfile] {
+        guard let id else { return profiles }
+        let byID = Dictionary(profiles.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        func descends(_ p: PsmithProfile) -> Bool {
+            var seen: Set<String> = []
+            var cur = p.parentProfileID
+            while let c = cur, !seen.contains(c) {
+                if c == id { return true }
+                seen.insert(c)
+                cur = byID[c]?.parentProfileID
+            }
+            return false
+        }
+        return profiles.filter { $0.id != id && !descends($0) }
+    }
+
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 card("None", "Standalone", selected: parentID == nil, dashed: true) { parentID = nil }
-                ForEach(profiles.filter { $0.id != excluding }) { p in
+                ForEach(Self.candidates(profiles, for: excluding)) { p in
                     card(p.name, p.parentOnly ? "Parent only" : p.description, selected: parentID == p.id, dashed: false) { parentID = p.id }
                 }
             }

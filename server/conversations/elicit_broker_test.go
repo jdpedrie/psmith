@@ -18,7 +18,7 @@ func TestElicitBroker_RoundTrip(t *testing.T) {
 	convoID := uuid.New()
 
 	emitted := make(chan uuid.UUID, 1)
-	c := newElicitClient(b, convoID, func(id uuid.UUID, _ elicit.Request) {
+	c := newElicitClient(b, convoID, func(id uuid.UUID, _ elicit.Request, _ elicit.Origin) {
 		emitted <- id
 	})
 
@@ -62,7 +62,7 @@ func TestElicitBroker_RespondTwiceSecondNotFound(t *testing.T) {
 	convoID := uuid.New()
 
 	emitted := make(chan uuid.UUID, 1)
-	c := newElicitClient(b, convoID, func(id uuid.UUID, _ elicit.Request) {
+	c := newElicitClient(b, convoID, func(id uuid.UUID, _ elicit.Request, _ elicit.Origin) {
 		emitted <- id
 	})
 	done := make(chan struct{})
@@ -89,7 +89,7 @@ func TestElicitBroker_CrossConversationRejected(t *testing.T) {
 	wrongConvo := uuid.New()
 
 	emitted := make(chan uuid.UUID, 1)
-	c := newElicitClient(b, convoID, func(id uuid.UUID, _ elicit.Request) {
+	c := newElicitClient(b, convoID, func(id uuid.UUID, _ elicit.Request, _ elicit.Origin) {
 		emitted <- id
 	})
 	done := make(chan struct{})
@@ -116,7 +116,7 @@ func TestElicitBroker_ContextCancelUnblocks(t *testing.T) {
 	t.Parallel()
 	b := newElicitBroker()
 	convoID := uuid.New()
-	c := newElicitClient(b, convoID, func(_ uuid.UUID, _ elicit.Request) {})
+	c := newElicitClient(b, convoID, func(_ uuid.UUID, _ elicit.Request, _ elicit.Origin) {})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {

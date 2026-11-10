@@ -70,13 +70,28 @@ func hostSuffix(base string) string {
 	return " · " + u.Host
 }
 
-// needsSetup reports an account with no provider at all.
-func (h *Handler) needsSetup(ctx context.Context) bool {
+// setupStep is where an account that can't chat yet resumes setup, or ""
+// when it can: an enabled model is what chatting needs, as on the apps, so
+// a provider made and left before step 3 still lands in setup. With a
+// provider already there it resumes at that provider's models rather than
+// making a second one. An error answers "" so a server hiccup never sends
+// a set-up account back through setup.
+func (h *Handler) setupStep(ctx context.Context) string {
 	if h.models == nil {
-		return false
+		return ""
 	}
-	resp, err := h.models.ListUserModelProviders(ctx, connect.NewRequest(&psmithv1.ListUserModelProvidersRequest{}))
-	return err == nil && len(resp.Msg.GetProviders()) == 0
+	models, err := h.models.ListAllUserModels(ctx, connect.NewRequest(&psmithv1.ListAllUserModelsRequest{}))
+	if err != nil || len(models.Msg.GetEntries()) > 0 {
+		return ""
+	}
+	provs, err := h.models.ListUserModelProviders(ctx, connect.NewRequest(&psmithv1.ListUserModelProvidersRequest{}))
+	if err != nil {
+		return ""
+	}
+	if p := provs.Msg.GetProviders(); len(p) > 0 {
+		return "/setup/models?p=" + url.QueryEscape(p[0].GetId())
+	}
+	return "/setup"
 }
 
 // templates lists the provider templates as choices, plus Custom for any
@@ -138,9 +153,11 @@ func templateFor(all []tplVM, p *psmithv1.UserModelProvider) tplVM {
 }
 
 // GET /setup: step 1.
+// ?p is a provider an earlier pass made: going back here and on again
+// edits it rather than making a second.
 func (h *Handler) handleSetup(w http.ResponseWriter, r *http.Request) {
 	all := h.templates(r.Context())
-	h.render(w, r, http.StatusOK, setupProviderScreen(setupVM{Templates: all, Template: pickTemplate(all, r.URL.Query().Get("t"))}))
+	h.render(w, r, http.StatusOK, setupProviderScreen(setupVM{Templates: all, Template: pickTemplate(all, r.URL.Query().Get("t")), ProviderID: r.URL.Query().Get("p")}))
 }
 
 // GET /setup/key: step 2, for template ?t or the provider ?p already made.
@@ -152,10 +169,12 @@ func (h *Handler) handleSetupKeyForm(w http.ResponseWriter, r *http.Request) {
 	s.BaseURL = s.Template.Base
 	if pid := r.URL.Query().Get("p"); pid != "" && h.models != nil {
 		if resp, err := h.models.GetUserModelProvider(ctx, connect.NewRequest(&psmithv1.GetUserModelProviderRequest{Id: pid})); err == nil {
+			// Only the template the provider was made from edits it;
+			// picking another one on step 1 starts a new provider.
 			p := resp.Msg.GetProvider()
-			s.ProviderID, s.Label = p.GetId(), p.GetLabel()
-			if r.URL.Query().Get("t") == "" {
+			if t := r.URL.Query().Get("t"); t == "" || templateFor(all, p).ID == t {
 				s.Template = templateFor(all, p)
+				s.ProviderID, s.Label = p.GetId(), p.GetLabel()
 			}
 		}
 	}

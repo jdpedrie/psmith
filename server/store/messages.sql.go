@@ -788,11 +788,16 @@ func (q *Queries) GetMessageByID(ctx context.Context, id uuid.UUID) (Message, er
 }
 
 const hasCompressionSummaryInContext = `-- name: HasCompressionSummaryInContext :one
-SELECT EXISTS(
-    SELECT 1 FROM messages
-    WHERE context_id = $1
-      AND role = 'compression_summary'
-      AND error_payload IS NULL
+SELECT (
+    EXISTS(
+        SELECT 1 FROM messages
+        WHERE context_id = $1
+          AND role = 'compression_summary'
+          AND error_payload IS NULL
+    )
+    AND NOT EXISTS(
+        SELECT 1 FROM contexts WHERE parent_context_id = $1
+    )
 )::BOOLEAN AS has_summary
 `
 
@@ -803,6 +808,9 @@ SELECT EXISTS(
 // can land. Errored compression_summary rows are first-class history entries
 // the user can review; they do not gate the conversation — the user retries
 // by either deleting the failed summary or kicking off a fresh compaction.
+// A summary that already started a new context (a context whose parent is
+// this one) isn't pending: switching back to the old context must not hold
+// it hostage to a review that's done.
 func (q *Queries) HasCompressionSummaryInContext(ctx context.Context, contextID uuid.UUID) (bool, error) {
 	row := q.db.QueryRow(ctx, hasCompressionSummaryInContext, contextID)
 	var has_summary bool

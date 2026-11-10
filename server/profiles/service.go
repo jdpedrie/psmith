@@ -668,6 +668,9 @@ func (s *Service) SetDefaultProfile(ctx context.Context, req *connect.Request[ps
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := s.queries.WithTx(tx)
+	if err := qtx.LockProfilesForDefault(ctx, caller.ID); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
 	if err := qtx.ClearDefaultProfile(ctx, caller.ID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

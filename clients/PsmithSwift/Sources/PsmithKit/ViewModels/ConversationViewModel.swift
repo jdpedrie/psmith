@@ -82,6 +82,9 @@ public final class ConversationViewModel {
     public var loading = false
 
     // Send state
+    /// The composer's text. The screens write it to `DraftStore` as it
+    /// changes; the view model only restores it, so a test that sets a
+    /// draft on a fixture id doesn't leave it for the next one.
     public var draft: String = ""
     public var sending = false
 
@@ -350,7 +353,7 @@ public final class ConversationViewModel {
     public var selectedModelID: String?
     /// The selection above came from the profile chain's default, not
     /// from the conversation (its settings or its last assistant turn).
-    private var selectionIsInferredDefault = false
+    public private(set) var selectionIsInferredDefault = false
     /// Active profile's resolved required model capabilities. Populated by
     /// `loadAvailableModels` from a fresh GetProfile call. Drives the model
     /// picker's capability filter — models lacking required caps render
@@ -428,9 +431,14 @@ public final class ConversationViewModel {
     /// the clients swap the composer for the review bar while this is
     /// non-nil (the server rejects sends and compacts in that state
     /// anyway — this is the UI reflecting the contract, not enforcing
-    /// it).
+    /// it). A summary that already started a context (one whose parent is
+    /// this context) is history, not pending: switching back to the old
+    /// context shows its transcript and takes sends.
     public var pendingCompressionSummary: PsmithMessage? {
-        messages.last(where: { $0.role == .compressionSummary && $0.errorText == nil })
+        if let active = activeContext?.id, contexts.contains(where: { $0.parentContextID == active }) {
+            return nil
+        }
+        return messages.last(where: { $0.role == .compressionSummary && $0.errorText == nil })
     }
 
     public var isStreaming: Bool {
@@ -677,25 +685,45 @@ public final class ConversationViewModel {
         messages = cached
     }
 
+    /// Bumped by every load() and by every local edit to `messages` that
+    /// a load already in flight could undo. A load applies its result
+    /// only if no newer load or edit came after it started; otherwise
+    /// it read the server before that edit and would put the old rows
+    /// back (a summary deleted right after a compression, reappearing).
+    private var loadGeneration = 0
+    private var loadsInFlight = 0
+    /// Test seam: runs between a load's fetch and its apply.
+    var loadFetchedHook: (() async -> Void)?
+
     public func load() async {
         // A draft has no row to load; its preview comes from
         // chooseDraftProfile.
         guard !isDraft else { return }
+        loadGeneration += 1
+        let generation = loadGeneration
+        loadsInFlight += 1
         loading = true
         TranscriptTrace.note(conversation.id, "load start \(TranscriptTrace.rows(messages)) streaming=\(isStreaming) sending=\(sending)")
         defer {
-            loading = false
+            loadsInFlight -= 1
+            loading = loadsInFlight > 0
             hasLoadedFromServer = true
         }
         do {
             let (conv, ctx) = try await client.conversations.get(id: conversation.id)
+            let fetched = try await client.conversations.listMessages(contextID: ctx.id)
+            if let loadFetchedHook { await loadFetchedHook() }
+            guard generation == loadGeneration else {
+                TranscriptTrace.note(conversation.id, "load superseded, dropping \(TranscriptTrace.rows(fetched))")
+                return
+            }
             // Refresh the cached conversation snapshot so server-set
             // fields (title overwrites, settings updates, the
             // streamingComponents the pipeline resolves to right now)
             // propagate into the view without a re-open.
             self.conversation = conv
             self.activeContext = ctx
-            self.messages = try await client.conversations.listMessages(contextID: ctx.id)
+            self.messages = fetched
             TranscriptTrace.note(conversation.id, "load done \(TranscriptTrace.rows(messages)) serverLeaf=\(ctx.currentLeafMessageID?.suffix(8) ?? "nil")")
             self.loadError = nil
             // Selection priority:
@@ -830,6 +858,36 @@ public final class ConversationViewModel {
             // if persistence fails. Surface the error so they know.
             loadError = PsmithError.display(error)
         }
+    }
+
+    /// The conversation names its own model rather than following its
+    /// profile's. A draft pins one once the user picks.
+    public var pinsModel: Bool {
+        if isDraft { return selectedModelID != nil && !selectionIsInferredDefault }
+        return !(conversation.settings?.defaultModelID ?? "").isEmpty
+    }
+
+    /// Drops the conversation's own model so it follows its profile's
+    /// default again, including later changes to that default. The chip
+    /// shows the profile's model as soon as it's known.
+    public func useProfileModel() async {
+        guard canChangeProvider else { return }
+        if !isDraft {
+            do {
+                let (live, _) = try await client.conversations.get(id: conversation.id)
+                var s = live.settings ?? PsmithConversationSettings()
+                s.defaultProviderID = nil
+                s.defaultModelID = nil
+                conversation = try await client.conversations.updateSettings(id: live.id, settings: s)
+            } catch {
+                loadError = PsmithError.display(error)
+                return
+            }
+        }
+        selectedProviderID = nil
+        selectedModelID = nil
+        selectionIsInferredDefault = false
+        await loadAvailableModels()
     }
 
     // MARK: Local (on-device) title generation
@@ -1116,6 +1174,7 @@ public final class ConversationViewModel {
                 deviceFacts: deviceFacts
             )
             pendingUserText = nil
+            loadGeneration += 1
             messages.append(userMsg)
             TranscriptTrace.note(conversation.id, "send ok: appended user \(userMsg.id.suffix(8)) run \(run.id.suffix(8)) \(TranscriptTrace.rows(messages))")
             await persistTranscriptToCache()
@@ -1601,6 +1660,17 @@ public final class ConversationViewModel {
     /// and (provider, model). The Compact page passes its current draft
     /// values; the toolbar's old "compact directly" path can call with
     /// no arguments to use the profile's resolved settings.
+    /// The Compress card can start: it has instructions and a model.
+    /// The server refuses a compression without either, so the card's
+    /// start button and its start action both wait on this.
+    public var compactFormReady: Bool {
+        let guide = compactPromptDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !guide.isEmpty,
+              let p = compactProviderID, !p.isEmpty,
+              let m = compactModelID, !m.isEmpty else { return false }
+        return !isCompacting
+    }
+
     public func compact(
         guide: String? = nil,
         providerID: String? = nil,
@@ -1724,6 +1794,7 @@ public final class ConversationViewModel {
         do {
             let updated = try await client.conversations.editMessage(id: id, content: content, role: role)
             if let idx = messages.firstIndex(where: { $0.id == id }) {
+                loadGeneration += 1
                 messages[idx] = updated
             }
             await persistTranscriptToCache()
@@ -1751,7 +1822,7 @@ public final class ConversationViewModel {
         guard let target = messages.first(where: { $0.id == id }) else { return }
         switch target.role {
         case .user:
-            await sendForking(content: target.content, parentMessageID: target.parentID)
+            await resendBeside(target, content: target.content)
         case .assistant:
             guard let pid = target.parentID,
                   let parent = messages.first(where: { $0.id == pid }),
@@ -1856,7 +1927,16 @@ public final class ConversationViewModel {
     /// Keeps the streaming/teardown machinery in one place — both call
     /// sites benefit from the same chunk routing, terminal hand-off, and
     /// error resilience. Empty content short-circuits silently.
-    public func sendForking(content: String, parentMessageID: String?) async {
+    /// Save and Resend on a user message: the new text goes in beside it,
+    /// as a sibling under the same parent. A context's first message has no
+    /// parent, and a nil parent alone means "continue from the leaf", so
+    /// that case asks the server for a new root.
+    public func resendBeside(_ message: PsmithMessage, content: String) async {
+        await sendForking(content: content, parentMessageID: message.parentID,
+                          forkAtRoot: message.parentID == nil)
+    }
+
+    public func sendForking(content: String, parentMessageID: String?, forkAtRoot: Bool = false) async {
         let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !sending, !isStreaming, !isCompacting, !hasPendingCompression else { return }
         sending = true
@@ -1872,7 +1952,8 @@ public final class ConversationViewModel {
                 parentMessageID: parentMessageID,
                 providerID: selectedProviderID,
                 modelID: selectedModelID,
-                deviceFacts: deviceFacts
+                deviceFacts: deviceFacts,
+                forkAtRoot: forkAtRoot
             )
             pendingUserText = nil
             // Reload so the new sibling appears alongside the old branch
@@ -1882,6 +1963,7 @@ public final class ConversationViewModel {
             // local list even if `load()` somehow misses it (ordering
             // race).
             if !messages.contains(where: { $0.id == userMsg.id }) {
+                loadGeneration += 1
                 messages.append(userMsg)
                 await persistTranscriptToCache()
             }
@@ -1919,6 +2001,7 @@ public final class ConversationViewModel {
             // every row, and on heavy conversations that estimate flap
             // is what armed the scroll machinery's clamp storm (the
             // "deleting a compression message locks the app" report).
+            loadGeneration += 1
             messages.removeAll { $0.id == id }
             await persistTranscriptToCache()
             // Advisory refreshes, same set load() runs: token count +
@@ -1989,6 +2072,7 @@ public final class ConversationViewModel {
            let parentID = settled.parentID,
            messages.last?.id == parentID,
            !messages.contains(where: { $0.id == settled.id }) {
+            loadGeneration += 1
             messages.append(settled)
             TranscriptTrace.note(conversation.id, "terminal: appended reply in place \(TranscriptTrace.rows(messages))")
             await persistTranscriptToCache()
@@ -2294,6 +2378,14 @@ extension ConversationViewModel {
         async let models: Void = loadAvailableModels()
         async let panels: Void = loadPanels()
         _ = await (contexts, models, panels)
+    }
+
+    /// Sends a `plugin:` action from a reply's fragment to the plugin that
+    /// drew it, then reloads the transcript, which is where its effect shows.
+    public func invokeFragmentAction(plugin: String, action: String, params: [String: String]) async throws {
+        _ = try await client.conversations.invokePluginAction(
+            conversationID: conversation.id, pluginName: plugin, action: action, params: params)
+        await load()
     }
 
     public func loadPanels() async {

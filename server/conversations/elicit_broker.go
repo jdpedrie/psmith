@@ -166,14 +166,14 @@ var ErrElicitationCrossConversation = errors.New("elicitation: conversation mism
 type elicitClientImpl struct {
 	broker    *elicitBroker
 	convoID   uuid.UUID
-	emitChunk func(elicitID uuid.UUID, req elicit.Request)
+	emitChunk func(elicitID uuid.UUID, req elicit.Request, origin elicit.Origin)
 }
 
 // newElicitClient binds a client to one run. `emitChunk` is the hook
 // the conversations side passes in so Elicit can deliver an "ask the
 // user" chunk into the assistant message stream the same goroutine is
 // already writing to.
-func newElicitClient(broker *elicitBroker, convoID uuid.UUID, emitChunk func(uuid.UUID, elicit.Request)) elicit.Client {
+func newElicitClient(broker *elicitBroker, convoID uuid.UUID, emitChunk func(uuid.UUID, elicit.Request, elicit.Origin)) elicit.Client {
 	return &elicitClientImpl{broker: broker, convoID: convoID, emitChunk: emitChunk}
 }
 
@@ -190,7 +190,7 @@ func (c *elicitClientImpl) Elicit(ctx context.Context, req elicit.Request) (elic
 	// order flipped, but ordering this way avoids a tiny race
 	// window in tests.)
 	if c.emitChunk != nil {
-		c.emitChunk(id, req)
+		c.emitChunk(id, req, elicit.OriginFrom(ctx))
 	}
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, elicitTimeout)

@@ -157,7 +157,7 @@ private struct ProviderPage: View {
 
     private var head: some View {
         let on = model.enabledModels.count
-        let total = max(discovered.count, on)
+        let total = ModelsTab.allCount(model: model, discovered: discovered)
         let counts = discovered.isEmpty ? "\(on) model\(on == 1 ? "" : "s") on" : "\(on) of \(total) models on"
         return SKPageHead(title: provider.label, subtitle: "\(ModelsPane.driverLabel(provider.type)) · \(counts)") {
             TestChip(status: model.providerTestStatus[provider.id] ?? .idle) {
@@ -352,17 +352,27 @@ private struct ModelsTab: View {
         let id: String
         let name: String
         let enabled: PsmithUserModel?
+        /// A hand-added model that is turned off: the server kept its
+        /// metadata, and it shows here because no listing offers it.
+        var off: PsmithUserModel? = nil
         let discovered: PsmithDiscoveredModel?
-        var contextWindow: Int32? { enabled?.contextWindow ?? discovered?.contextWindow }
-        var pricing: PsmithModelPricing? { enabled?.pricing ?? discovered?.pricing }
-        var capabilities: PsmithModelCapabilities? { enabled?.capabilities ?? discovered?.capabilities }
+        var contextWindow: Int32? { enabled?.contextWindow ?? off?.contextWindow ?? discovered?.contextWindow }
+        var pricing: PsmithModelPricing? { enabled?.pricing ?? off?.pricing ?? discovered?.pricing }
+        var capabilities: PsmithModelCapabilities? { enabled?.capabilities ?? off?.capabilities ?? discovered?.capabilities }
+    }
+
+    /// Everything the All list shows: on, hand-added but off, and listed.
+    static func allCount(model: ProvidersViewModel, discovered: [PsmithDiscoveredModel]) -> Int {
+        Set(model.enabledModels.map(\.modelID) + model.disabledModels.map(\.modelID) + discovered.map(\.modelID)).count
     }
 
     private var rows: [Row] {
         var out = model.enabledModels.map { Row(id: $0.modelID, name: $0.displayName, enabled: $0, discovered: nil) }
         if showAll {
-            let on = Set(out.map(\.id))
-            out += discovered.filter { !on.contains($0.modelID) }.map { Row(id: $0.modelID, name: $0.displayName, enabled: nil, discovered: $0) }
+            var seen = Set(out.map(\.id))
+            out += model.disabledModels.filter { !seen.contains($0.modelID) }.map { Row(id: $0.modelID, name: $0.displayName, enabled: nil, off: $0, discovered: nil) }
+            seen.formUnion(model.disabledModels.map(\.modelID))
+            out += discovered.filter { !seen.contains($0.modelID) }.map { Row(id: $0.modelID, name: $0.displayName, enabled: nil, discovered: $0) }
         }
         let q = filter.lowercased()
         return out
@@ -374,7 +384,7 @@ private struct ModelsTab: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
                 SKSearchField(placeholder: "Filter models", text: $filter).frame(width: 240)
-                SKSegmented(options: [(false, "On"), (true, discovered.isEmpty ? "All" : "All \(max(discovered.count, model.enabledModels.count))")], selection: $showAll)
+                SKSegmented(options: [(false, "On"), (true, discovered.isEmpty && model.disabledModels.isEmpty ? "All" : "All \(Self.allCount(model: model, discovered: discovered))")], selection: $showAll)
                 Spacer(minLength: 0)
                 Button("Add Custom Model…") { model.detailMode = .addingManualModel }.skButton()
             }
@@ -458,6 +468,11 @@ private struct ModelsTab: View {
                     Text(r.name).sk(13, on ? SK.text : SK.secondary, weight: .semibold).skOneLine(13)
                     Text(subtitle(r)).sk(11.5, SK.tertiary).skOneLine(11.5)
                 }
+                // The row opens on a click; this gives the keyboard and
+                // VoiceOver the same way in.
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(on ? .isButton : [])
+                .accessibilityAction { if on { withAnimation(.easeOut(duration: 0.15)) { expanded = open ? nil : r.id } } }
             }, {
                 Text(r.contextWindow.map(Self.compact) ?? "—").sk(13, on ? SK.text : SK.secondary).monospacedDigit()
             }, {
@@ -492,7 +507,7 @@ private struct ModelsTab: View {
                 fact("Takes", m.modalities.isEmpty ? "—" : m.modalities.map(Self.modality).joined(separator: ", "))
             }
             HStack(spacing: 8) {
-                testLine(model.modelTestStatus[ModelTestKey(providerID: provider.id, modelID: m.modelID)] ?? .idle)
+                ModelTestLine(status: model.modelTestStatus[ModelTestKey(providerID: provider.id, modelID: m.modelID)] ?? .idle)
                 Spacer(minLength: 0)
                 Button("Test Model") { Task { await model.testModel(providerID: provider.id, modelID: m.modelID) } }.skButton(small: true)
                 Button { model.detailMode = .editingModel(m.modelID) } label: {
@@ -505,25 +520,6 @@ private struct ModelsTab: View {
         .padding(.bottom, 12)
         .padding(.leading, 44)
         .padding(.trailing, 12)
-    }
-
-    @ViewBuilder
-    private func testLine(_ status: ModelTestStatus) -> some View {
-        switch status {
-        case .success(let r) where r.ok:
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(SK.green)
-                Text("Answered in \(r.latencyMs) ms · \(r.outputTokens) tokens").sk(12, SK.green)
-            }
-        case .success(let r):
-            Text(r.errorMessage.isEmpty ? "Test failed" : r.errorMessage).sk(12, SK.red).lineLimit(1)
-        case .failure(let m):
-            Text(m).sk(12, SK.red).lineLimit(1)
-        case .testing:
-            ProgressView().controlSize(.mini)
-        case .idle:
-            EmptyView()
-        }
     }
 
     private func fact(_ label: String, _ value: String) -> some View {
@@ -587,11 +583,41 @@ private struct ModelsTab: View {
 
 /// One model, drilled into (board "Models · one model"), or a new one
 /// described by hand (board "Models · adding a model by hand").
+/// A model test's outcome: latency and tokens, the error, or a spinner.
+/// The Models tab's expanded row and the model's own page both draw it.
+private extension ModelTestStatus {
+    var isIdle: Bool { if case .idle = self { return true }; return false }
+}
+
+private struct ModelTestLine: View {
+    let status: ModelTestStatus
+
+    @ViewBuilder
+    var body: some View {
+        switch status {
+        case .success(let r) where r.ok:
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(SK.green)
+                Text("Answered in \(r.latencyMs) ms · \(r.outputTokens) tokens").sk(12, SK.green)
+            }
+        case .success(let r):
+            Text(r.errorMessage.isEmpty ? "Test failed" : r.errorMessage).sk(12, SK.red).lineLimit(1)
+        case .failure(let m):
+            Text(m).sk(12, SK.red).lineLimit(1)
+        case .testing:
+            ProgressView().controlSize(.mini)
+        case .idle:
+            EmptyView()
+        }
+    }
+}
+
 private struct ModelPage: View {
     @Bindable var model: ProvidersViewModel
     let provider: PsmithUserModelProvider
     let existing: PsmithUserModel?
 
+    @State private var confirmingDelete = false
     @State private var name = ""
     @State private var modelID = ""
     @State private var context = ""
@@ -625,6 +651,13 @@ private struct ModelPage: View {
                         })).skSwitch()
                     }
                 }
+                // Board SettingsModelDetail: the result sits under the head.
+                if let status = model.modelTestStatus[key], !status.isIdle {
+                    ModelTestLine(status: status)
+                        .padding(.horizontal, 2)
+                        .padding(.top, -10)
+                        .padding(.bottom, 12)
+                }
             }
             if let error { SKBanner(.error, adding ? "Couldn't add the model" : "Couldn't save", message: error) }
             identity
@@ -645,6 +678,9 @@ private struct ModelPage: View {
                     .sk(11.5, SK.tertiary).padding(.horizontal, 2).padding(.bottom, 10)
                 SKCallSettings(settings: $defaults, inherited: provider.defaultSettings, inheritedFrom: provider.label,
                                driver: provider.type, constraints: existing?.constraints)
+                if let m = existing, m.metadataSource == "manual" {
+                    deleteSection(m)
+                }
             }
         } bottom: {
             if !adding, !changes.isEmpty {
@@ -652,6 +688,35 @@ private struct ModelPage: View {
             }
         }
         .onAppear(perform: seed)
+    }
+
+    /// Board SettingsModelDetail, "Added by hand": only a hand-added model can
+    /// be deleted; the provider's listing brings any other back, so it's
+    /// turned off with the switch instead.
+    private func deleteSection(_ m: PsmithUserModel) -> some View {
+        SKGroup("Added by hand") {
+            if confirmingDelete {
+                SKRawRow(vertical: 8, horizontal: 8) {
+                    SKConfirmStrip(
+                        question: "Delete \(m.displayName)?",
+                        detail: "You added it by hand, so Find New Models won’t bring it back. Conversations using it can’t send until they switch.",
+                        confirmLabel: "Delete Model",
+                        onCancel: { confirmingDelete = false },
+                        onConfirm: {
+                            confirmingDelete = false
+                            Task {
+                                await model.deleteModel(m.modelID)
+                                if model.error == nil { model.detailMode = .viewing }
+                            }
+                        }
+                    )
+                }
+            } else {
+                SKRow("Delete model", detail: "You added it by hand, so Find New Models won’t bring it back. Conversations using it can’t send until they switch.") {
+                    Button("Delete…") { confirmingDelete = true }.skButton(.destructive)
+                }
+            }
+        }
     }
 
     private var identity: some View {

@@ -73,6 +73,11 @@ public final class ProvidersViewModel {
     public var providers: [PsmithUserModelProvider] = []
     public var selectedID: String?
     public var enabledModels: [PsmithUserModel] = []
+    /// The selected provider's hand-added models that are turned off.
+    /// Turning one off keeps its metadata on the server (no listing could
+    /// bring it back), so the settings screens list these with their switch
+    /// off. Never offered in pickers.
+    public var disabledModels: [PsmithUserModel] = []
     public var isLoadingProviders = false
     public var isLoadingDetail = false
     public var error: String?
@@ -262,18 +267,20 @@ public final class ProvidersViewModel {
         // `needsOnboarding`, which a transient empty list can't move.)
         if selectedID != id {
             enabledModels = []
+            disabledModels = []
         }
         selectedID = id
         detailMode = .viewing
         isLoadingDetail = true
         defer { if selectedID == id { isLoadingDetail = false } }
         do {
-            let (_, models) = try await client.modelProviders.get(id: id)
+            let detail = try await client.modelProviders.getDetail(id: id)
             // A later selection replaced this one while the fetch was in
             // flight: these models belong to a provider no longer shown,
             // and actions on them would be sent against the new one.
             guard selectedID == id else { return }
-            enabledModels = models.sorted { $0.displayName < $1.displayName }
+            enabledModels = detail.enabled.sorted { $0.displayName < $1.displayName }
+            disabledModels = detail.disabled.sorted { $0.displayName < $1.displayName }
             error = nil
         } catch {
             guard selectedID == id else { return }
@@ -294,6 +301,7 @@ public final class ProvidersViewModel {
             }
             selectedID = nil
             enabledModels = []
+            disabledModels = []
             detailMode = .viewing
             if let first = providers.first { await selectProvider(first.id) }
         } catch {
@@ -305,7 +313,26 @@ public final class ProvidersViewModel {
         guard let providerID = selectedID else { return }
         do {
             try await client.modelProviders.disableModels(providerID: providerID, modelIDs: [modelID])
+            // The server keeps a hand-added row (turned off) and deletes the rest.
+            if let gone = enabledModels.first(where: { $0.modelID == modelID }), gone.metadataSource == "manual" {
+                disabledModels.removeAll { $0.modelID == modelID }
+                disabledModels.append(gone)
+                disabledModels.sort { $0.displayName < $1.displayName }
+            }
             enabledModels.removeAll { $0.modelID == modelID }
+        } catch {
+            self.error = PsmithError.display(error)
+        }
+    }
+
+    /// Deletes a model outright, a hand-added one included: unlike
+    /// `disableModel`, nothing is kept to turn back on.
+    public func deleteModel(_ modelID: String) async {
+        guard let providerID = selectedID else { return }
+        do {
+            try await client.modelProviders.disableModels(providerID: providerID, modelIDs: [modelID], deleteManual: true)
+            enabledModels.removeAll { $0.modelID == modelID }
+            disabledModels.removeAll { $0.modelID == modelID }
         } catch {
             self.error = PsmithError.display(error)
         }
@@ -455,6 +482,8 @@ public final class ProvidersViewModel {
     public func enableModels(providerID: String, modelIDs: [String]) async throws -> [PsmithUserModel] {
         let enabled = try await client.modelProviders.enableModels(providerID: providerID, modelIDs: modelIDs)
         if !enabled.isEmpty { hasAnyEnabledModel = true }
+        let turnedOn = Set(enabled.map(\.modelID))
+        disabledModels.removeAll { turnedOn.contains($0.modelID) }
         let existing = Set(enabledModels.map(\.modelID))
         let fresh = enabled.filter { !existing.contains($0.modelID) }
         enabledModels.append(contentsOf: fresh)

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -34,9 +35,18 @@ type convVM struct {
 	Inspector   inspVM
 	ShowInsp    bool
 	Placeholder string
-	Draft       string     // composer text the page opens with
-	Pending     []attachVM // attachments waiting to send
-	Live        liveInit   // what a streaming reply has shown so far
+	Draft       string // composer text the page opens with
+	SendFailed  bool   // a draft's first send failed; Draft holds it
+	ActionError string // a transcript action the server refused, and why
+	RenameError string // why the header's rename or title generation failed
+	// Offline draws the lost-connection state server-side (fixtures);
+	// app.js draws it live. LostAt is when it dropped ("10:44"); Host
+	// names the server the composer waits for.
+	Offline bool
+	LostAt  string
+	Host    string
+	Pending []attachVM // attachments waiting to send
+	Live    liveInit   // what a streaming reply has shown so far
 
 	Personas   string // "Skeptic, Optimist, Economist" for a council
 	ContinueID string // the leaf a "Continue the discussion" extends
@@ -72,6 +82,9 @@ type gaugeVM struct {
 
 // msgItem is one row of the transcript.
 type msgItem struct {
+	// HasAfter: messages follow this one in the transcript, so the menu
+	// offers deleting from here.
+	HasAfter  bool
 	ID        string
 	ConvID    string
 	ParentID  string
@@ -99,6 +112,12 @@ type msgItem struct {
 	Start       *startVM
 	Regen       []providerGroupVM // the "Regenerate with" menu, when open
 	Harness     *harnessVM
+
+	// Drawn only with "Show turn details" on (board TurnDetails): when the
+	// turn was sent ("10:41") and, for a reply, how long it took from its
+	// message ("8.6s").
+	When string
+	Took string
 }
 
 type attachVM struct {
@@ -126,6 +145,7 @@ type toolVM struct {
 type usageVM struct {
 	Model  string
 	Tokens string
+	Split  string // "980 in · 224 out", what turn details show for Tokens
 	Cached string // "94% cached", or ""
 	Cost   string
 	Input  string
@@ -171,7 +191,7 @@ type startVM struct {
 
 // loadConversation builds the conversation screen's view model.
 func (h *Handler) loadConversation(ctx context.Context, r *http.Request, id string) (convVM, error) {
-	vm := convVM{ID: id, ShowInsp: inspectorOpen(r)}
+	vm := convVM{ID: id, ShowInsp: inspectorOpen(r), Host: r.Host}
 	getResp, err := h.convos.GetConversation(ctx, connect.NewRequest(&psmithv1.GetConversationRequest{Id: id}))
 	if err != nil {
 		return vm, err
@@ -219,15 +239,23 @@ func (h *Handler) loadConversation(ctx context.Context, r *http.Request, id stri
 		start.SummaryTitle = "Summary of context " + ordinalOf(contexts, active.GetParentContextId())
 		label := "Context " + ordinalOf(contexts, active.GetId()) + " · started from a summary"
 		if n := h.turnsIn(ctx, active.GetParentContextId()); n > 0 {
-			label += fmt.Sprintf(" of %d turns", n)
-			start.SummaryMeta = fmt.Sprintf("%d turns · %s", n, start.SummaryMeta)
+			label += " of " + turnCount(n)
+			start.SummaryMeta = turnCount(n) + " · " + start.SummaryMeta
 		}
 		lead = append(lead, msgItem{Role: "start", ConvID: id, Strip: label, Start: start})
 	}
 	vm.Items = append(lead, vm.Items...)
 
+	// A summary that already started a context is history once its own
+	// context is active again, not a review to redo.
+	promoted := false
+	for _, cx := range contexts {
+		if cx.Parent == active.GetId() {
+			promoted = true
+		}
+	}
 	for _, m := range msgs {
-		if m.GetRole() == psmithv1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY && m.GetErrorText() == "" && vm.Slot == "" {
+		if !promoted && m.GetRole() == psmithv1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY && m.GetErrorText() == "" && vm.Slot == "" {
 			vm.Slot, vm.ReviewID, vm.Truncated = "review", m.GetId(), isTruncatedFinish(m.GetFinishReason())
 		}
 	}
@@ -434,6 +462,12 @@ func newestLeaf(tree map[string][]string, id string) string {
 
 func (h *Handler) buildItems(ctx context.Context, convID string, msgs []*psmithv1.Message, tree map[string][]string, names map[string][2]string) []msgItem {
 	out := make([]msgItem, 0, len(msgs))
+	sentAt := make(map[string]time.Time, len(msgs))
+	for _, m := range msgs {
+		if ts := m.GetCreatedAt(); ts != nil {
+			sentAt[m.GetId()] = ts.AsTime()
+		}
+	}
 	for _, m := range msgs {
 		role := roleClass(m.GetRole())
 		if role == "system" || m.GetIsWelcome() && m.GetContent() == "" {
@@ -449,6 +483,14 @@ func (h *Handler) buildItems(ctx context.Context, convID string, msgs []*psmithv
 		it := msgItem{ID: m.GetId(), ConvID: convID, ParentID: m.GetParentId(), Role: role, Text: content, HTML: renderMarkdown(content),
 			Persona: m.GetPersona(), PersonaN: int(m.GetPersonaIndex()), Error: m.GetErrorText(), Edited: m.GetEditedAt() != nil}
 		it.Images, it.Files = h.attachmentsOf(ctx, m.GetAttachments())
+		if at, ok := sentAt[m.GetId()]; ok {
+			it.When = at.Local().Format("15:04")
+			// A reply is stored when it finishes, so the gap from its
+			// message is how long it took, queueing and tools included.
+			if from, ok := sentAt[m.GetParentId()]; ok && role == "assistant" && at.After(from) {
+				it.Took = fmt.Sprintf("%.1fs", at.Sub(from).Seconds())
+			}
+		}
 		if t := m.GetThinkingRenderedText(); t != "" || len(m.GetThinking()) > 0 {
 			label := "Thought"
 			if d := m.GetThinkingDurationMs(); d > 0 {
@@ -476,6 +518,7 @@ func (h *Handler) buildItems(ctx context.Context, convID string, msgs []*psmithv
 			if role == "assistant" && m.GetUsage() != nil {
 				it.Usage = usageOf(m)
 				it.Usage.ModelName, it.Usage.Provider = n[0], n[1]
+				it.Usage.Model = footerModel(n[0])
 			}
 		}
 		if sibs := tree[m.GetParentId()]; len(sibs) > 1 {
@@ -535,7 +578,7 @@ func kindLabel(mime, name string) string {
 func usageOf(m *psmithv1.Message) *usageVM {
 	u := m.GetUsage()
 	total := u.GetInputTokens() + u.GetOutputTokens() + u.GetCacheReadTokens() + u.GetCacheWriteTokens()
-	vm := &usageVM{Model: shortModel(m.GetModelId()), Tokens: fmt.Sprintf("%s tokens", commas(int64(total)))}
+	vm := &usageVM{Model: m.GetModelId(), Tokens: fmt.Sprintf("%s tokens", commas(int64(total)))}
 	if in := u.GetInputTokens() + u.GetCacheReadTokens() + u.GetCacheWriteTokens(); in > 0 && u.GetCacheReadTokens() > 0 {
 		vm.CachedPct = int(math.Round(float64(u.GetCacheReadTokens()) * 100 / float64(in)))
 		vm.Cached = fmt.Sprintf("%d%% cached", vm.CachedPct)
@@ -545,6 +588,7 @@ func usageOf(m *psmithv1.Message) *usageVM {
 		vm.Total = fmt.Sprintf("$%.4f", u.GetTotalCostUsd())
 	}
 	vm.Input, vm.Output = commas(int64(u.GetInputTokens())), commas(int64(u.GetOutputTokens()))
+	vm.Split = fmt.Sprintf("%s in · %s out", commas(int64(u.GetInputTokens()+u.GetCacheReadTokens()+u.GetCacheWriteTokens())), commas(int64(u.GetOutputTokens())))
 	vm.CacheR, vm.CacheW, vm.Reason = commas(int64(u.GetCacheReadTokens())), commas(int64(u.GetCacheWriteTokens())), commas(int64(u.GetReasoningTokens()))
 	vm.InCost, vm.OutCost = dollars4(u.InputCostUsd), dollars4(u.OutputCostUsd)
 	vm.CacheRC, vm.CacheWC = dollars4(u.CacheReadCostUsd), dollars4(u.CacheWriteCostUsd)
@@ -572,14 +616,11 @@ func dollars4(v *float64) string {
 
 // shortModel drops the family prefix the header already shows:
 // "claude-opus-4-7" reads "Opus 4.7".
-func shortModel(id string) string {
-	s := strings.TrimPrefix(id, "claude-")
-	parts := strings.Split(s, "-")
-	if len(parts) >= 3 {
-		name := strings.ToUpper(parts[0][:1]) + parts[0][1:]
-		return name + " " + strings.Join(parts[1:], ".")
-	}
-	return id
+// footerModel is the model as a reply's footer names it: the display name,
+// less the family word every Anthropic model shares ("Opus 4.7", board
+// MessageUsage). A model with no display name shows its id as it is.
+func footerModel(display string) string {
+	return strings.TrimPrefix(display, "Claude ")
 }
 
 func turnStats(msgs []*psmithv1.Message) (turns int, cache string, changes int) {
@@ -665,4 +706,42 @@ func commas(n int64) string {
 		b.WriteRune(c)
 	}
 	return b.String()
+}
+
+func showsTurnHead(ctx context.Context, m msgItem) bool {
+	return prefsOf(ctx).TurnDetails && m.When != ""
+}
+
+// turnModel is the model a reply's header names: "Claude Opus 4.7".
+func turnModel(m msgItem) string {
+	if m.Usage != nil && m.Usage.ModelName != "" {
+		return m.Usage.ModelName
+	}
+	name, _, _ := strings.Cut(m.ModelLabel, " · ")
+	if name == "" {
+		return "Reply"
+	}
+	return name
+}
+
+// turnMeta follows the model: " · Anthropic · 10:42 · 8.6s".
+func turnMeta(m msgItem) string {
+	var parts []string
+	if m.Usage != nil && m.Usage.Provider != "" {
+		parts = append(parts, m.Usage.Provider)
+	} else if _, prov, ok := strings.Cut(m.ModelLabel, " · "); ok {
+		parts = append(parts, prov)
+	}
+	parts = append(parts, m.When)
+	if m.Took != "" {
+		parts = append(parts, m.Took)
+	}
+	return " · " + strings.Join(parts, " · ")
+}
+
+func turnCount(n int) string {
+	if n == 1 {
+		return "1 turn"
+	}
+	return fmt.Sprintf("%d turns", n)
 }

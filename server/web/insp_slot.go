@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/server/store"
+	"github.com/jdpedrie/psmith/server/stream"
 )
 
 // slotVM is the card that takes the composer's place.
@@ -35,7 +39,10 @@ type slotVM struct {
 	SummaryHTML string
 	SummaryText string
 	Truncated   bool
-	Usage       string
+	// Stopped: Esc stopped the compression, so the summary ends where it
+	// was cut off.
+	Stopped bool
+	Usage   string
 
 	// Failed.
 	Error     string
@@ -109,6 +116,7 @@ func (h *Handler) fillSlot(ctx context.Context, r *http.Request, vm *convVM, con
 			base.Truncated = isTruncatedFinish(m.GetFinishReason())
 			base.ModelName = h.modelName(ctx, m.GetProviderId(), m.GetModelId())
 			base.Usage = summaryUsage(m.GetUsage())
+			base.Stopped = h.summaryStopped(ctx, vm.ID, m.GetId())
 		}
 		base.Kind = "review"
 		if r.URL.Query().Get("summary") == "edit" {
@@ -129,8 +137,68 @@ func (h *Handler) fillSlot(ctx context.Context, r *http.Request, vm *convVM, con
 			card.ErrorHint = card.CtxLabel + " is unchanged. Choose another model, then retry."
 			card.ModelMeta = h.modelMeta(ctx, last.GetProviderId(), last.GetModelId())
 			in.Card, in.Compress = &card, "open"
+			return
 		}
 	}
+
+	// A compression that ended between its start and this page (a short
+	// summary, a fast model) has neither a running run nor its summary on
+	// the chain yet. The start redirect names the run, so the page shows
+	// the streaming card, whose stream replays the run and moves on to the
+	// review when it ends.
+	if run := r.URL.Query().Get("compact"); run != "" && h.recentCompaction(ctx, vm.ID, run) {
+		base.Kind, base.RunID = "compacting", run
+		base.ModelName = h.compressionModelName(ctx, conv)
+		in.Card, in.Compress = &base, "running"
+	}
+}
+
+// compactionRun loads a compression run of this conversation, or reports
+// false for any other run id.
+func (h *Handler) compactionRun(ctx context.Context, convID, runID string) (store.StreamRun, bool) {
+	if h.queries == nil {
+		return store.StreamRun{}, false
+	}
+	rid, err := uuid.Parse(runID)
+	if err != nil {
+		return store.StreamRun{}, false
+	}
+	run, err := h.queries.GetStreamRunByID(ctx, rid)
+	if err != nil || run.ConversationID.String() != convID || run.Purpose != string(stream.PurposeCompression) {
+		return store.StreamRun{}, false
+	}
+	return run, true
+}
+
+// summaryStopped reports whether a summary came from a compression the
+// user stopped. The summary row keeps what streamed before the stop and
+// nothing marks it as cut short; the run that wrote it does.
+func (h *Handler) summaryStopped(ctx context.Context, convID, messageID string) bool {
+	if h.queries == nil {
+		return false
+	}
+	cid, err := uuid.Parse(convID)
+	if err != nil {
+		return false
+	}
+	runs, err := h.queries.ListStreamRunsByConversation(ctx, cid)
+	if err != nil {
+		return false
+	}
+	for _, run := range runs {
+		if run.ResultMessageID != nil && run.ResultMessageID.String() == messageID {
+			return run.Purpose == string(stream.PurposeCompression) && run.Status == "cancelled"
+		}
+	}
+	return false
+}
+
+// recentCompaction reports whether runID is this conversation's compression
+// and is running or ended moments ago. An old ?compact= URL, reloaded later,
+// shows the conversation as it is.
+func (h *Handler) recentCompaction(ctx context.Context, convID, runID string) bool {
+	run, ok := h.compactionRun(ctx, convID, runID)
+	return ok && (run.EndedAt == nil || time.Since(*run.EndedAt) < 15*time.Second)
 }
 
 func activeLabel(rows []ctxRowVM, activeID string) string {

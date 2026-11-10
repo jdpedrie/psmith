@@ -8,30 +8,14 @@ templ fragment(m msgItem, p fragVM) {
 				@templ.Raw(p.HTML)
 			</div>
 		case "card_list":
-			<div class="cards">
-				for _, c := range p.Cards {
-					<article class="card">
-						<div class="card-top">
-							<b>{ c.Title }</b>
-							if c.URL != "" {
-								<a href={ templ.SafeURL(c.URL) } target="_blank" rel="noopener noreferrer" aria-label={ "Open " + c.Host }>
-									@convIcon("external")
-								</a>
-							}
-						</div>
-						if len(c.Badges) > 0 {
-							<div class="card-badges">
-								for _, b := range c.Badges {
-									<span>{ b }</span>
-								}
-							</div>
-						}
-						if c.Description != "" {
-							<p>{ c.Description }</p>
-						}
-					</article>
+			<form class="cards" method="post" action={ templ.SafeURL("/c/" + m.ConvID + "/choice") } hx-post={ "/c/" + m.ConvID + "/choice" } hx-target="#messages" hx-select="#messages" hx-swap="outerHTML">
+				if p.Plugin != "" {
+					<input type="hidden" name="plugin" value={ p.Plugin }/>
 				}
-			</div>
+				for _, c := range p.Cards {
+					@fragCard(c)
+				}
+			</form>
 		case "key_value":
 			<dl class="kv">
 				for _, kv := range p.Pairs {
@@ -41,6 +25,9 @@ templ fragment(m msgItem, p fragVM) {
 			</dl>
 		case "choice_list":
 			<form class="choices" method="post" action={ templ.SafeURL("/c/" + m.ConvID + "/choice") } hx-post={ "/c/" + m.ConvID + "/choice" } hx-target="#messages" hx-select="#messages" hx-swap="outerHTML" aria-label="Choose one">
+				if p.Plugin != "" {
+					<input type="hidden" name="plugin" value={ p.Plugin }/>
+				}
 				for _, c := range p.Choices {
 					if c.Action != "" {
 						<button class={ "choice", templ.KV("chosen", c.Chosen) } type="submit" name="choice" value={ c.Action } data-choice={ c.Action }>
@@ -78,5 +65,40 @@ templ fragment(m msgItem, p fragVM) {
 				<div class="codeblock-head">json<button type="button" data-copy-code>Copy</button></div>
 				<pre><code>{ p.HTML }</code></pre>
 			</div>
+	}
+}
+
+// fragCard is one card of a card_list. A card with a plugin action is a
+// button that sends it; any other card is static, with its link in the corner.
+templ fragCard(c cardVM) {
+	if c.Action != "" {
+		<button class="card card-act" type="submit" name="choice" value={ c.Action }>
+			@fragCardBody(c)
+		</button>
+	} else {
+		<article class="card">
+			@fragCardBody(c)
+		</article>
+	}
+}
+
+templ fragCardBody(c cardVM) {
+	<div class="card-top">
+		<b>{ c.Title }</b>
+		if c.URL != "" {
+			<a href={ templ.SafeURL(c.URL) } target="_blank" rel="noopener noreferrer" aria-label={ "Open " + c.Host }>
+				@convIcon("external")
+			</a>
+		}
+	</div>
+	if len(c.Badges) > 0 {
+		<div class="card-badges">
+			for _, b := range c.Badges {
+				<span>{ b }</span>
+			}
+		</div>
+	}
+	if c.Description != "" {
+		<p>{ c.Description }</p>
 	}
 }

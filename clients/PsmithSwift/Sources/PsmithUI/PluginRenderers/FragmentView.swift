@@ -22,13 +22,33 @@ public struct FragmentView: View {
     /// every action — interactive renderers (`choice_list`)
     /// then render in display-only mode.
     let onAction: ((FragmentAction) -> Void)?
+    /// Receives a `plugin:` action with the plugin that drew its fragment.
+    /// Without it, or for a fragment that names no plugin, the action goes
+    /// to `onAction` as `.plugin`, which only a panel can route.
+    let onPluginAction: ((_ plugin: String, _ action: String, _ params: [String: String]) -> Void)?
 
     public init(
         fragments: [PsmithUIFragment],
-        onAction: ((FragmentAction) -> Void)? = nil
+        onAction: ((FragmentAction) -> Void)? = nil,
+        onPluginAction: ((_ plugin: String, _ action: String, _ params: [String: String]) -> Void)? = nil
     ) {
         self.fragments = fragments
         self.onAction = onAction
+        self.onPluginAction = onPluginAction
+    }
+
+    /// The action handler for one fragment, with plugin actions routed to
+    /// the fragment's author when there is one.
+    func handler(for fragment: PsmithUIFragment) -> ((FragmentAction) -> Void)? {
+        guard let onAction else { return nil }
+        guard let owner = fragment.plugin, let onPluginAction else { return onAction }
+        return { action in
+            if case let .plugin(name, params) = action {
+                onPluginAction(owner, name, params)
+            } else {
+                onAction(action)
+            }
+        }
     }
 
     public var body: some View {
@@ -45,9 +65,9 @@ public struct FragmentView: View {
         case "text":
             TextRenderer(fragment: fragment)
         case "card_list":
-            CardListRenderer(fragment: fragment, onAction: onAction)
+            CardListRenderer(fragment: fragment, onAction: handler(for: fragment))
         case "choice_list":
-            ChoiceListRenderer(fragment: fragment, onAction: onAction)
+            ChoiceListRenderer(fragment: fragment, onAction: handler(for: fragment))
         case "key_value":
             KeyValueRenderer(fragment: fragment)
         case "image":

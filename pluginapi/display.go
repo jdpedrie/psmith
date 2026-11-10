@@ -103,6 +103,10 @@ type UIFragment struct {
 	// "choice_list", "key_value", "image", "image_grid",
 	// "error", "raw_json".
 	Component string
+	// Plugin names the plugin that drew the fragment. RenderContent
+	// stamps it on the fragments each renderer adds, so a plugin never
+	// sets it and a `plugin:` action routes back to its author.
+	Plugin string
 	// Props is the component-specific JSON payload. Schema is
 	// per-Component; the client's renderer is responsible for
 	// validating + falling back to a safe rendering on
@@ -212,6 +216,15 @@ func (p Pipeline) RenderContent(content string, role string) []ContentPart {
 			continue
 		}
 		parts = r.RenderContent(parts, role)
+		for i := range parts {
+			if f := parts[i].Fragment; f != nil && f.Plugin == "" {
+				// Copy rather than write through: a renderer may hand
+				// back a fragment value it shares between calls.
+				stamped := *f
+				stamped.Plugin = pl.Name()
+				parts[i].Fragment = &stamped
+			}
+		}
 	}
 	return parts
 }

@@ -539,3 +539,23 @@ func resetMCPPool() {
 	mcpPool.servers = map[string]*mcpServer{}
 	mcpPool.mu.Unlock()
 }
+
+func TestLabel_NamesTheServer(t *testing.T) {
+	for _, tc := range []struct {
+		cfg  string
+		want string
+	}{
+		{`{"transport":"http","url":"https://x.test","label":"GitHub","tool_prefix":"gh"}`, "GitHub"},
+		{`{"transport":"inproc"}`, "Psmith"},
+		{`{"transport":"http","url":"https://x.test","tool_prefix":"gh"}`, "gh"},
+		{`{"transport":"http","url":"https://x.test"}`, "An MCP server"},
+	} {
+		pl, err := newMCP(json.RawMessage(tc.cfg))
+		if err != nil {
+			t.Fatalf("newMCP(%s): %v", tc.cfg, err)
+		}
+		if got := pluginapi.SourceLabel(pl); got != tc.want {
+			t.Errorf("SourceLabel(%s) = %q want %q", tc.cfg, got, tc.want)
+		}
+	}
+}

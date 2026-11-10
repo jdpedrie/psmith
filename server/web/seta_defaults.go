@@ -203,7 +203,7 @@ func (f csForm) toProto() (*psmithv1.CallSettings, error) {
 			return nil
 		}
 		var p *float64
-		if p, err = saParseFloat(s); err == nil {
+		if p, err = saParseFloat(name, s); err == nil {
 			err = saInRange(name, p, lo, hi)
 		}
 		return p
@@ -213,7 +213,7 @@ func (f csForm) toProto() (*psmithv1.CallSettings, error) {
 			return nil
 		}
 		var p *int32
-		if p, err = saParseInt(s); err == nil {
+		if p, err = saParseInt(name, s); err == nil {
 			err = saInRange(name, p, lo, hi)
 		}
 		return p

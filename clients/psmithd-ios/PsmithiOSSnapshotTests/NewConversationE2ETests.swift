@@ -17,124 +17,7 @@ import PsmithUI
 /// every quarter second, so a message that flickers out mid-stream fails
 /// the test and leaves frames showing when.
 @MainActor
-final class NewConversationE2ETests: XCTestCase {
-    private var window: UIWindow?
-    /// Every view model the screen built, in order.
-    private var built: [(ConversationViewModel, ConversationUIState)] = []
-
-    override func tearDown() {
-        window?.isHidden = true
-        window = nil
-        built = []
-    }
-
-    // MARK: Server and seed
-
-    private struct Server {
-        let url: URL
-        let user: String
-        let password: String
-        let llm: String
-    }
-
-    private func server() throws -> Server {
-        let env = ProcessInfo.processInfo.environment
-        guard let raw = env["PSMITH_E2E_URL"], let url = URL(string: raw) else {
-            throw XCTSkip("PSMITH_E2E_URL not set; run `make ios-e2e`")
-        }
-        return Server(url: url, user: env["PSMITH_E2E_USER"] ?? "admin",
-                      password: env["PSMITH_E2E_PASSWORD"] ?? "admin-password-not-secret",
-                      llm: env["PSMITH_E2E_LLM"] ?? "http://127.0.0.1:9/v1")
-    }
-
-    /// Two models on the fake provider, and two profiles that both default
-    /// to the first, so picking the second is a real change. Alpha is the
-    /// default profile, so a rebuilt draft lands on it.
-    private struct Seed {
-        let provider: PsmithUserModelProvider
-        let alpha: PsmithProfile
-        let beta: PsmithProfile
-    }
-
-    private func seed(_ client: PsmithClient, llm: String) async throws -> Seed {
-        let tag = UUID().uuidString.prefix(6)
-        let config = #"{"api_key":"e2e","base_url":"\#(llm)","use_chat_completions":true}"#
-        let provider = try await client.modelProviders.create(type: "openai-compatible", label: "E2E \(tag)",
-                                                              config: Data(config.utf8))
-        let caps = PsmithModelCapabilities(streaming: true, thinking: false, toolUse: false, vision: false, promptCaching: false)
-        for (id, name) in [("model-one", "Model One"), ("model-two", "Model Two")] {
-            _ = try await client.modelProviders.addManualModel(
-                providerID: provider.id, modelID: id, displayName: name, contextWindow: 32_000, maxOutputTokens: nil,
-                pricing: nil, modalities: ["text"], capabilities: caps, knowledgeCutoff: nil, defaultSettings: nil)
-        }
-        let defaults = PsmithProfileDefaults(defaultProviderID: provider.id, defaultModelID: "model-one")
-        let alpha = try await client.profiles.create(PsmithProfilePatch(name: "Alpha \(tag)", defaultSettings: defaults))
-        let beta = try await client.profiles.create(PsmithProfilePatch(name: "Beta \(tag)", defaultSettings: defaults))
-        try await client.profiles.setDefault(profileID: alpha.id)
-        return Seed(provider: provider, alpha: alpha, beta: beta)
-    }
-
-    private func signedIn() async throws -> (AppModel, ConversationsModel, Seed) {
-        let s = try server()
-        let app = AppModel(host: s.url, tokenStore: InMemoryTokenStore(), connectivityState: .online)
-        _ = try await app.client.auth.login(username: s.user, password: s.password)
-        // The account event stream, as the signed-in app runs it: server
-        // pushes "conversation changed" mid-send, and views refresh on it.
-        await app.bootstrap()
-        let seeded = try await seed(app.client, llm: s.llm)
-        await app.profiles.load()
-        await app.providers.load()
-        let convos = ConversationsModel(client: app.client, profiles: app.profiles, hub: app.streamHub)
-        await convos.refresh()
-        return (app, convos, seeded)
-    }
-
-    /// Mounts the app's chats stack as ChatsRoot builds it: a path-driven
-    /// NavigationStack over the list, with the conversation pushed as a
-    /// `ChatRoute`. Mounting the screen as the stack's root instead hides
-    /// bugs that only happen to a pushed destination.
-    private func mount(_ route: ChatRoute, app: AppModel, convos: ConversationsModel) -> UIWindow {
-        let root = E2EChatsStack(start: route) { [weak self] m, ui in self?.built.append((m, ui)) }
-            .environment(app)
-            .environment(convos)
-            .environment(\.theme, .slate)
-        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first!
-        let w = UIWindow(windowScene: scene)
-        w.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
-        w.rootViewController = UIHostingController(rootView: root)
-        w.isHidden = false
-        window = w
-        return w
-    }
-
-    // MARK: Helpers
-
-    // Waits suspend instead of spinning the run loop. The test runs on the
-    // main actor; spinning it synchronously starves the app's main-actor
-    // continuations, which made setup look like it stalled for seconds.
-
-    private func spin(_ seconds: TimeInterval) async {
-        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-    }
-
-    private func waitFor(_ what: String, timeout: TimeInterval = 10, _ cond: () -> Bool) async {
-        let end = Date().addingTimeInterval(timeout)
-        while !cond() && Date() < end { try? await Task.sleep(nanoseconds: 50_000_000) }
-        XCTAssertTrue(cond(), "\(what). State: \(state())")
-    }
-
-    /// What the screen's view models hold, for the timeline and failures.
-    private func state() -> String {
-        built.enumerated().map { i, b in
-            let m = b.0
-            let rows = m.messages.map { "\(String(describing: $0.role).prefix(1))\($0.content.count)" }.joined(separator: ",")
-            return "#\(i) draft=\(m.isDraft) profile=\(m.draftProfile?.name ?? "-") " +
-                "model=\(m.selectedModelID ?? "nil") loading=\(m.loading) streaming=\(m.isStreaming) " +
-                "pending=\(m.pendingUserText.map { "\($0.count)" } ?? "nil") live=\(m.streamingText.count) " +
-                "rows=[\(rows)] error=\(m.loadError ?? "nil")"
-        }.joined(separator: "; ")
-    }
-
+final class NewConversationE2ETests: E2ETestCase {
     // MARK: Tests
 
     /// Choose a profile, change the model on the pushed model page, come
@@ -142,7 +25,7 @@ final class NewConversationE2ETests: XCTestCase {
     /// conversation on the server with that profile and that model.
     func testChangingTheModelKeepsTheChosenProfileAndModel() async throws {
         let (app, convos, seeded) = try await signedIn()
-        let w = mount(.newConversation(UUID()), app: app, convos: convos)
+        let w = mountStack(.newConversation(UUID()), app: app, convos: convos)
         let tl = E2ETimeline(name: "draft-model-change")
         defer { tl.write() }
 
@@ -191,7 +74,7 @@ final class NewConversationE2ETests: XCTestCase {
             profileID: seeded.alpha.id, title: "Streaming probe",
             settings: PsmithConversationSettings(defaultProviderID: seeded.provider.id, defaultModelID: "model-one"))
         await convos.refresh()
-        let w = mount(.conversation(conv), app: app, convos: convos)
+        let w = mountStack(.conversation(conv), app: app, convos: convos)
         await waitFor("the conversation never loaded", timeout: 20) { built.last.map { !$0.0.loading && !$0.0.conversation.id.isEmpty } ?? false }
         guard !built.isEmpty else { return }
         try await sendAndWatch(w, name: "send-existing")
@@ -218,7 +101,7 @@ final class NewConversationE2ETests: XCTestCase {
             }
         }
         await convos.refresh()
-        let w = mount(.conversation(conv), app: app, convos: convos)
+        let w = mountStack(.conversation(conv), app: app, convos: convos)
         await waitFor("the conversation never loaded", timeout: 20) {
             built.last.map { !$0.0.loading && $0.0.messages.count >= 40 } ?? false
         }
@@ -231,72 +114,10 @@ final class NewConversationE2ETests: XCTestCase {
     /// creates it.
     func testSendShowsBothMessagesThroughoutInANewConversation() async throws {
         let (app, convos, seeded) = try await signedIn()
-        let w = mount(.newConversation(UUID()), app: app, convos: convos)
+        let w = mountStack(.newConversation(UUID()), app: app, convos: convos)
         await waitFor("the draft never opened") { built.last?.0.draftProfile?.id == seeded.alpha.id }
         await waitFor("the draft never resolved its model") { built.last?.0.selectedModelID != nil }
         guard built.last?.0.selectedModelID != nil else { return }
         try await sendAndWatch(w, name: "send-new")
-    }
-
-    private func sendAndWatch(_ w: UIWindow, name: String) async throws {
-        let user = "tidepool", reply = "quick rundown"
-        let tl = E2ETimeline(name: name)
-        defer { tl.write() }
-        tl.sample(w, "before send", needles: [user, reply], state: state())
-
-        let (vm, ui) = built.last!
-        vm.draft = "Tidepool question number seven"
-        Composer(model: vm, ui: ui).send()
-        let sentAt = tl.samples.last!.t
-
-        // Through the stream, then three more seconds after it settles, so
-        // the post-terminal reload is on the record too.
-        var settledAt: Date?
-        await tl.record(w, timeout: 25, needles: [user, reply], state: state) {
-            let m = built.last!.0
-            let done = !m.isStreaming && m.messages.contains { $0.role == .assistant && $0.content.lowercased().contains(reply) }
-            if done && settledAt == nil { settledAt = Date() }
-            return settledAt.map { Date().timeIntervalSince($0) > 3 } ?? false
-        }
-
-        XCTAssertNotNil(settledAt, "the reply never finished. \(state()). Frames: \(tl.dir.path)")
-        // The user's message shows within a second of sending and never
-        // leaves.
-        XCTAssertEqual(tl.gaps(user, from: sentAt + 1).map(\.t), [],
-                       "the user's message was missing from these frames (seconds). Frames: \(tl.dir.path)")
-        // The reply, once it starts showing, never leaves either.
-        if let first = tl.firstSeen(reply) {
-            XCTAssertEqual(tl.gaps(reply, from: first).map(\.t), [],
-                           "the reply disappeared in these frames (seconds). Frames: \(tl.dir.path)")
-        } else {
-            XCTFail("the reply never showed on screen. \(state()). Frames: \(tl.dir.path)")
-        }
-        XCTAssertEqual(built.count, 1, "the screen rebuilt its view model mid-send. \(state())")
-    }
-}
-
-/// ChatsRoot's stack without its list: the same path-driven NavigationStack
-/// and the same destinations, starting with one route pushed.
-private struct E2EChatsStack: View {
-    let onModel: (ConversationViewModel, ConversationUIState) -> Void
-    @State private var path: [ChatRoute]
-
-    init(start: ChatRoute, onModel: @escaping (ConversationViewModel, ConversationUIState) -> Void) {
-        self.onModel = onModel
-        _path = State(initialValue: [start])
-    }
-
-    var body: some View {
-        NavigationStack(path: $path) {
-            Color.clear
-                .toolbar(.hidden, for: .navigationBar)
-                .navigationDestination(for: ChatRoute.self) { route in
-                    switch route {
-                    case .conversation(let c): ConversationView(conversation: c, onModel: onModel)
-                    case .newConversation(let id): ConversationView(newConversation: id, onModel: onModel)
-                    default: EmptyView()
-                    }
-                }
-        }
     }
 }

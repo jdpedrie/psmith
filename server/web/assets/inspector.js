@@ -124,6 +124,15 @@
 		};
 		filter.addEventListener("keydown", function (e) {
 			if (e.key === "ArrowDown") { e.preventDefault(); move(null, 1); }
+			if (e.key === "Escape") {
+				e.preventDefault();
+				if (filter.value !== "") {
+					filter.value = "";
+					filter.dispatchEvent(new Event("input", { bubbles: true }));
+				} else {
+					location.href = "/c/" + $("#main").getAttribute("data-conv");
+				}
+			}
 			if (e.key === "Enter") {
 				e.preventDefault();
 				var first = rows().filter(function (r) { return r.getAttribute("data-pick-name"); })[0];

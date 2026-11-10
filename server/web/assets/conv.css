@@ -11,6 +11,7 @@
 .gen-title{height:34px;padding:0 12px 0 10px;border:0;border-radius:9px;background:var(--fill);color:var(--t1);font-size:13px;font-weight:500;display:flex;align-items:center;gap:7px;flex:none}
 .rename .spacer{flex:1}
 .head-rename-hint{font-size:12px;color:var(--t3);white-space:nowrap}
+.head-rename-hint.err{color:var(--red);white-space:normal;min-width:0}
 .rename-cancel{box-sizing:border-box;height:34px;padding:0 12px;border-radius:9px;color:var(--t1);font-size:13px;flex:none;display:flex;align-items:center;text-decoration:none}
 .rename-save{height:34px;padding:0 14px;border:0;border-radius:9px;background:var(--accent);color:var(--onAccent);font-size:13px;font-weight:600;flex:none}
 
@@ -26,6 +27,9 @@
 .user-acts{position:absolute;right:100%;bottom:0;display:none;gap:2px;padding-right:6px;color:var(--t2)}
 .turn-user:hover .user-acts,.turn-user:focus-within .user-acts{display:flex}
 .user-col{min-width:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+/* Show turn details (board TurnDetails) */
+.turn-head{font-size:12px;line-height:1.3;color:var(--t3)}
+.turn-head b{color:var(--t2);font-weight:600}
 .att-row{display:flex;gap:6px}
 .img-tile{position:relative;display:flex;align-items:flex-end;gap:6px;box-sizing:border-box;width:140px;height:140px;padding:8px 9px;border-radius:10px;background:var(--fill2);box-shadow:inset 0 0 0 1px var(--line);color:var(--t2);font-size:11.5px;text-decoration:none;overflow:hidden;white-space:nowrap}
 .img-tile.one{width:260px;height:160px}
@@ -107,10 +111,11 @@
 .retry-btn{height:32px;padding:0 12px;border:0;border-radius:8px;background:var(--accent);color:var(--onAccent);font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px}
 
 /* small buttons for in-place forms */
-.btn-flat,.btn-fill,.btn-accent,.btn-destructive{box-sizing:border-box;height:32px;padding:0 12px;border:0;border-radius:8px;background:transparent;color:var(--t1);font-size:13px;display:inline-flex;align-items:center;gap:7px;text-decoration:none}
+.btn-flat,.btn-fill,.btn-accent,.btn-destructive,.btn-destructive-quiet{box-sizing:border-box;height:32px;padding:0 12px;border:0;border-radius:8px;background:transparent;color:var(--t1);font-size:13px;display:inline-flex;align-items:center;gap:7px;text-decoration:none}
 .btn-fill{background:var(--fill)}
 .btn-accent{background:var(--accent);color:var(--onAccent);font-weight:600}
 .btn-destructive{background:var(--destructive);color:var(--onAccent);font-weight:600}
+.btn-destructive-quiet{box-shadow:inset 0 0 0 1px var(--red);color:var(--red);font-weight:600}
 
 /* delete confirm and edit, in place of the row */
 .del-confirm{align-self:flex-start;width:440px;max-width:75%;box-sizing:border-box;border-radius:12px;background:var(--redFill);padding:14px 16px;display:flex;flex-direction:column;gap:4px}
@@ -166,6 +171,9 @@
 /* plugin fragments */
 .cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .card{border-radius:12px;background:var(--raise);box-shadow:inset 0 0 0 1px var(--line);padding:12px 12px 12px 14px;display:flex;flex-direction:column;gap:7px}
+.card-act{font:inherit;color:inherit;text-align:left;border:0;width:100%;cursor:pointer}
+.card-act:hover{box-shadow:inset 0 0 0 1px var(--line2,var(--line))}
+.card-act:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .card-top{display:flex;align-items:flex-start;gap:8px}
 .card-top b{flex:1;font-size:14px;font-weight:600;line-height:1.35}
 .card-top a{width:28px;height:28px;margin:-4px -4px 0 0;border-radius:7px;color:var(--t2);display:flex;align-items:center;justify-content:center;flex:none}
@@ -199,6 +207,19 @@ button.choice:hover .letter,.choice.chosen .letter{background:var(--accent);colo
 .composer:has(textarea:placeholder-shown):not(:has(.pend)) .csend,.composer[data-uploading] .csend{background:var(--fill);color:var(--t3)}
 .composer .h-live,.composer[data-live] .h-idle{display:none}
 .composer[data-live] .h-live{display:inline}
+/* Offline (board Offline): app.js sets html[data-offline] while the account
+   stream is down; fixtures set it on the composer and the line. */
+.conn-lost{display:none;align-items:center;gap:10px;font-size:12px;color:var(--t3)}
+.conn-lost .rule{flex:1;height:1px;background:var(--line)}
+.conn-lost .dot{width:6px;height:6px;border-radius:3px;background:var(--orange);flex:none}
+.conn-lost.on,html[data-offline] .conn-lost{display:flex}
+.composer .h-off,.composer .lbl-off{display:none}
+.composer[data-offline] .h-off,html[data-offline] .composer .h-off{display:inline}
+.composer[data-offline] .h-idle,.composer[data-offline] .h-live,html[data-offline] .composer .h-idle,html[data-offline] .composer .h-live{display:none}
+.composer[data-offline] .csend .lbl,html[data-offline] .composer .csend .lbl{display:none}
+.composer[data-offline] .csend .lbl-off,html[data-offline] .composer .csend .lbl-off{display:inline}
+.composer[data-offline] .csend,html[data-offline] .composer .csend{background:var(--fill2);color:var(--t1)}
+.composer[data-offline] .cmodel,html[data-offline] .composer .cmodel{display:none}
 .composer .cmodel{display:none}
 .jump{position:absolute;z-index:5;left:50%;top:-56px;transform:translateX(-50%);height:32px;padding:0 14px 0 11px;border-radius:16px;background:var(--raise);box-shadow:inset 0 0 0 1px var(--line),0 6px 18px var(--shadow);color:var(--t1);font-size:13px;font-weight:500;display:flex;align-items:center;gap:7px;text-decoration:none;white-space:nowrap}
 .jump .dot{--dot:var(--accentInk)}
@@ -226,7 +247,7 @@ button.choice:hover .letter,.choice.chosen .letter{background:var(--accent);colo
   .app:has(#main[data-conv]) > .list{display:none}
   .conv-head{padding:0 8px;gap:6px}
   .conv-head .menu-btn{display:flex;margin-left:0}
-  .conv-head .model-btn,.conv-head .insp-toggle,.ctx-of,.head-rename-hint{display:none}
+  .conv-head .model-btn,.conv-head .insp-toggle,.ctx-of,.head-rename-hint:not(.err){display:none}
   .conv-head .gauge{height:44px;padding:0 10px;border-radius:10px;background:transparent;gap:6px}
   .transcript{padding:0 16px;scrollbar-gutter:auto}
   .transcript-inner{padding-top:18px;gap:16px;font-size:15.5px;line-height:1.55}

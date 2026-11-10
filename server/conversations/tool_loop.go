@@ -148,12 +148,14 @@ func makeToolLoopSendFunc(
 		// response. Built inside the closure so the chunk emitter
 		// can reference `out` directly.
 		if elicitBroker != nil {
-			emit := func(eid uuid.UUID, req elicit.Request) {
+			emit := func(eid uuid.UUID, req elicit.Request, origin elicit.Origin) {
 				payload, err := json.Marshal(struct {
 					ElicitationID   uuid.UUID       `json:"elicitation_id"`
 					Message         string          `json:"message"`
 					RequestedSchema json.RawMessage `json:"requested_schema"`
-				}{eid, req.Message, req.RequestedSchema})
+					Source          string          `json:"source,omitempty"`
+					Tool            string          `json:"tool,omitempty"`
+				}{eid, req.Message, req.RequestedSchema, origin.Source, origin.Tool})
 				if err != nil {
 					return
 				}
@@ -406,6 +408,9 @@ func buildToolDispatch(
 		ctx = host.WithProviderResolver(ctx, resolver)
 		ctx = host.WithSearcher(ctx, searcher)
 		ctx = host.WithCallerInfo(ctx, caller)
+		if pl, ok := owner.(pluginapi.Plugin); ok {
+			ctx = elicit.WithOrigin(ctx, elicit.Origin{Source: pluginapi.SourceLabel(pl), Tool: name})
+		}
 		// Scope the state store to the plugin that owns this tool, so a
 		// pipeline holding two stateful plugins can't cross-read. The
 		// ToolProvider is always also a Plugin; the assertion is

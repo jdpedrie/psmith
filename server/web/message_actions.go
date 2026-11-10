@@ -29,7 +29,7 @@ func (h *Handler) handleEditSave(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := h.convos.EditMessage(r.Context(), connect.NewRequest(req))
 	if err != nil {
-		http.Error(w, friendlyError(err), http.StatusBadRequest)
+		failBack(w, r, convID, err)
 		return
 	}
 	if r.PostFormValue("resend") != "" && resp.Msg.GetMessage().GetRole() == psmithv1.MessageRole_MESSAGE_ROLE_USER {
@@ -37,7 +37,7 @@ func (h *Handler) handleEditSave(w http.ResponseWriter, r *http.Request) {
 			ConversationId: convID, ParentMessageId: &mid, Regenerate: true,
 		}))
 		if err != nil {
-			http.Error(w, friendlyError(err), http.StatusBadRequest)
+			failBack(w, r, convID, err)
 			return
 		}
 		backToConv(w, r, convID, "run="+send.Msg.GetStreamRun().GetId())
@@ -66,23 +66,24 @@ func (h *Handler) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := h.convos.SendMessage(r.Context(), connect.NewRequest(req))
 	if err != nil {
-		http.Error(w, friendlyError(err), http.StatusBadRequest)
+		failBack(w, r, convID, err)
 		return
 	}
 	backToConv(w, r, convID, "run="+resp.Msg.GetStreamRun().GetId())
 }
 
-// handleMessageDelete removes a message (non-cascading: children stitch to
-// the deleted row's parent, mirroring the native clients' default). The
-// confirm is the row itself, drawn in its delete state; the compression
-// review bar's Discard posts here too.
+// handleMessageDelete removes a message. By default its children stitch to
+// the deleted row's parent; with cascade=1 (Delete from here) the message's
+// whole subtree goes. The confirm is the row itself, drawn in its delete
+// state; the compression review bar's Discard posts here too.
 func (h *Handler) handleMessageDelete(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
 	mid := r.PathValue("mid")
 	if _, err := h.convos.DeleteMessage(r.Context(), connect.NewRequest(&psmithv1.DeleteMessageRequest{
-		Id: mid,
+		Id:      mid,
+		Cascade: r.FormValue("cascade") == "1",
 	})); err != nil {
-		http.Error(w, friendlyError(err), http.StatusBadRequest)
+		failBack(w, r, convID, err)
 		return
 	}
 	backToConv(w, r, convID, "")

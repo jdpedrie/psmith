@@ -25,10 +25,20 @@ ON CONFLICT (user_model_provider_id, model_id) DO UPDATE SET
 RETURNING *;
 
 -- name: GetUserModel :one
+-- Returns the row whether or not it is enabled. Settings edits and cost
+-- accounting want a hand-added model that is off; anything that decides
+-- whether a model can be sent to uses GetEnabledUserModel.
 SELECT * FROM user_models
 WHERE user_model_provider_id = $1 AND model_id = $2;
 
+-- name: GetEnabledUserModel :one
+SELECT * FROM user_models
+WHERE user_model_provider_id = $1 AND model_id = $2 AND enabled;
+
 -- name: ListUserModelsByProvider :many
+-- Enabled and disabled rows both: the provider's settings page lists the
+-- disabled hand-added ones so they can be turned back on. Callers split on
+-- the enabled column.
 SELECT * FROM user_models
 WHERE user_model_provider_id = $1
 ORDER BY model_id;
@@ -37,12 +47,20 @@ ORDER BY model_id;
 SELECT um.*
 FROM user_models um
 JOIN user_model_providers ump ON ump.id = um.user_model_provider_id
-WHERE ump.user_id = $1
+WHERE ump.user_id = $1 AND um.enabled
 ORDER BY ump.created_at, um.model_id;
 
 -- name: DeleteUserModel :exec
 DELETE FROM user_models
 WHERE user_model_provider_id = $1 AND model_id = $2;
+
+-- name: SetUserModelEnabled :one
+-- Upserts leave enabled alone (it is not in UpsertUserModel's update set), so
+-- this is the only way a row's enabled flag changes.
+UPDATE user_models
+SET enabled = $3
+WHERE user_model_provider_id = $1 AND model_id = $2
+RETURNING *;
 
 -- name: SetUserModelFavorite :exec
 UPDATE user_models

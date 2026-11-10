@@ -96,3 +96,24 @@ func FromContext(ctx context.Context) (Client, bool) {
 	v, ok := ctx.Value(ctxKey{}).(Client)
 	return v, ok
 }
+
+// Origin names who is asking: the plugin or MCP server (Source, as the user
+// knows it, e.g. "GitHub") and the tool the model called. The tool loop
+// attaches it before dispatching a call, so a client can title its prompt.
+type Origin struct {
+	Source string
+	Tool   string
+}
+
+type originKey struct{}
+
+// WithOrigin attaches the asking tool's origin to ctx.
+func WithOrigin(ctx context.Context, o Origin) context.Context {
+	return context.WithValue(ctx, originKey{}, o)
+}
+
+// OriginFrom returns the origin attached to ctx, or the zero Origin.
+func OriginFrom(ctx context.Context) Origin {
+	o, _ := ctx.Value(originKey{}).(Origin)
+	return o
+}

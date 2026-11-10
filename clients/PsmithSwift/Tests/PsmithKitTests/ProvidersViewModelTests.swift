@@ -336,6 +336,81 @@ struct ProvidersViewModelTests {
         #expect(vm.enabledModels.contains(where: { $0.modelID == "manual-model-x" }))
     }
 
+    @Test("a hand-added model turned off stays listed as off and comes back with its metadata")
+    func manualModelOffThenOn() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "pvw-mof")
+        let (provider, fake) = try await Fixtures.seedFakeProvider(client: client)
+        _ = fake
+
+        let vm = ProvidersViewModel(client: client)
+        await vm.load()
+        await vm.selectProvider(provider.id)
+        _ = try await vm.addManualModel(
+            providerID: provider.id,
+            modelID: "manual-off-on",
+            displayName: "Manual Off On",
+            contextWindow: 96_000,
+            maxOutputTokens: 2_048,
+            pricing: PsmithModelPricing(inputPerMillion: 3, outputPerMillion: 12, cacheReadPerMillion: nil, cacheWritePerMillion: nil),
+            modalities: ["text"],
+            capabilities: PsmithModelCapabilities(streaming: true, thinking: false, toolUse: true, vision: false, promptCaching: false),
+            knowledgeCutoff: nil,
+            defaultSettings: nil
+        )
+
+        await vm.disableModel("manual-off-on")
+        #expect(vm.error == nil)
+        #expect(!vm.enabledModels.contains(where: { $0.modelID == "manual-off-on" }))
+        #expect(vm.disabledModels.map(\.modelID) == ["manual-off-on"])
+
+        // A fresh view-model sees the same thing from the server, and the
+        // model is gone from what pickers read.
+        let reloaded = ProvidersViewModel(client: client)
+        await reloaded.load()
+        await reloaded.selectProvider(provider.id)
+        #expect(reloaded.enabledModels.isEmpty)
+        let off = try #require(reloaded.disabledModels.first { $0.modelID == "manual-off-on" })
+        #expect(off.contextWindow == 96_000)
+        #expect(off.pricing?.inputPerMillion == 3)
+        let pickable = try await client.modelProviders.listModels(providerID: provider.id)
+        #expect(!pickable.contains(where: { $0.modelID == "manual-off-on" }))
+
+        // The fake provider's listing doesn't offer this id; turning it on
+        // must still work, and bring the hand-typed metadata back.
+        let back = try await reloaded.enableModels(providerID: provider.id, modelIDs: ["manual-off-on"])
+        #expect(back.first?.contextWindow == 96_000)
+        #expect(back.first?.maxOutputTokens == 2_048)
+        #expect(back.first?.pricing?.outputPerMillion == 12)
+        #expect(back.first?.capabilities?.toolUse == true)
+        #expect(back.first?.metadataSource == "manual")
+        #expect(reloaded.disabledModels.isEmpty)
+        #expect(reloaded.enabledModels.contains(where: { $0.modelID == "manual-off-on" }))
+    }
+
+    @Test("deleteModel removes a hand-added model for good")
+    func deleteManualModel() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "pvw-mdel")
+        let (provider, fake) = try await Fixtures.seedFakeProvider(client: client)
+        _ = fake
+
+        let vm = ProvidersViewModel(client: client)
+        await vm.load()
+        await vm.selectProvider(provider.id)
+        _ = try await vm.addManualModel(
+            providerID: provider.id, modelID: "manual-del", displayName: "Manual Del",
+            contextWindow: nil, maxOutputTokens: nil, pricing: nil, modalities: ["text"],
+            capabilities: nil, knowledgeCutoff: nil, defaultSettings: nil
+        )
+        await vm.deleteModel("manual-del")
+        #expect(vm.error == nil)
+        #expect(vm.enabledModels.isEmpty)
+        #expect(vm.disabledModels.isEmpty)
+
+        let detail = try await client.modelProviders.getDetail(id: provider.id)
+        #expect(detail.enabled.isEmpty)
+        #expect(detail.disabled.isEmpty)
+    }
+
     @Test("refreshModelMetadata reports no-op for non-catalog rows and leaves state intact")
     func refreshModelMetadataNoCatalog() async throws {
         let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "pvw-rmm")

@@ -26,6 +26,14 @@ func boardListIdle() listVM {
 	})
 }
 
+// boardEmptyList is the column with no rows, for the empty and error
+// boards; f sets which.
+func boardEmptyList(f func(*listVM)) listVM {
+	l := listVM{Filter: "all", Sort: "used", UserName: "John", Initial: "J", Server: "psmith.home", IsAdmin: true}
+	f(&l)
+	return l
+}
+
 func boardCards() []profileCardVM {
 	return []profileCardVM{
 		{ID: fxDemo, Name: "Demo", Color: 2, Desc: "Shows off tools and fragments. Good for testing a new model.", Model: "Claude Opus 4.7 · Anthropic", ModelValue: "anthropic|claude-opus-4-7"},
@@ -112,6 +120,7 @@ func boardOfflineConv() convVM {
 	c.Items = c.Items[:3]
 	c.RunID, c.Live, c.Pending = "", liveInit{}, nil
 	c.Draft = "And the compression summary card: same problem?"
+	c.Offline, c.LostAt, c.Host = true, "10:44", "psmith.home"
 	return c
 }
 

@@ -296,10 +296,24 @@ struct IntegrationFlowTests {
         #expect(!vm.isCompacting)
 
         // Promote resolves the gate.
+        let original = try #require(vm.activeContext?.id)
         await vm.promoteCompaction(messageID: pending.id)
         await vm.load()
         #expect(vm.pendingCompressionSummary == nil)
         #expect(!vm.hasPendingCompression)
+
+        // Switching back to the original context: its summary already
+        // started the new one, so it's history. The transcript is there and
+        // the context takes sends.
+        await vm.activateContext(original)
+        await vm.load()
+        #expect(vm.activeContext?.id == original)
+        #expect(vm.messages.contains { $0.content == "turn-1" })
+        #expect(vm.pendingCompressionSummary == nil, "the old context shows the review again")
+        await sendAndAwait(vm, text: "back in the first context")
+        await vm.load()
+        #expect(vm.loadError == nil, "\(vm.loadError ?? "")")
+        #expect(vm.messages.contains { $0.role == .user && $0.content == "back in the first context" })
     }
 
     // MARK: - 5. Compact append

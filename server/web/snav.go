@@ -38,6 +38,15 @@ func (h *Handler) loadSnav(ctx context.Context, r *http.Request, active string) 
 		if resp, err := h.profiles.ListProfiles(ctx, connect.NewRequest(&psmithv1.ListProfilesRequest{})); err == nil {
 			n.Profiles = len(resp.Msg.GetProfiles())
 		}
+		// The servers' recorded tests, not fresh probes: probing every
+		// server on every Settings page would hold each page for seconds.
+		if servers, err := h.listMCPServers(ctx); err == nil {
+			for _, s := range servers {
+				if t := s.GetLastTest(); t != nil && !t.GetOk() {
+					n.ServersBad++
+				}
+			}
+		}
 	}
 	if n.IsAdmin && h.auth != nil {
 		if resp, err := h.auth.ListUsers(ctx, connect.NewRequest(&psmithv1.ListUsersRequest{})); err == nil {

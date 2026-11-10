@@ -20,6 +20,7 @@ type defaultsPageVM struct {
 	ProvType string
 	F        csForm
 	Inh      csForm            // what an unset field inherits (model level)
+	TempLock string            // the only temperature the model takes (model level)
 	Prev     map[string]string // field name -> value it had, for fields arriving dirty
 	Dirty    int
 	Error    string
@@ -94,7 +95,7 @@ func saRowTail(d defaultsPageVM, name, label, val, hint string) templ.Component 
 			var templ_7745c5c3_Var2 string
 			templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs("Changed from " + prev)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 62, Col: 48}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 63, Col: 48}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 			if templ_7745c5c3_Err != nil {
@@ -112,7 +113,7 @@ func saRowTail(d defaultsPageVM, name, label, val, hint string) templ.Component 
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.ResolveAttributeValue(name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 64, Col: 55}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 65, Col: 55}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
 			if templ_7745c5c3_Err != nil {
@@ -125,7 +126,7 @@ func saRowTail(d defaultsPageVM, name, label, val, hint string) templ.Component 
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue("Reset " + label + " to not set")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 64, Col: 103}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 65, Col: 103}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 			if templ_7745c5c3_Err != nil {
@@ -151,7 +152,7 @@ func saRowTail(d defaultsPageVM, name, label, val, hint string) templ.Component 
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(hint)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 68, Col: 27}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 69, Col: 27}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -194,7 +195,7 @@ func saNumRow(d defaultsPageVM, id, name, label, val, hint, help string) templ.C
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 74, Col: 17}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 75, Col: 17}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 		if templ_7745c5c3_Err != nil {
@@ -207,7 +208,7 @@ func saNumRow(d defaultsPageVM, id, name, label, val, hint, help string) templ.C
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 74, Col: 39}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 75, Col: 39}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
@@ -220,7 +221,7 @@ func saNumRow(d defaultsPageVM, id, name, label, val, hint, help string) templ.C
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 75, Col: 16}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 76, Col: 16}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 		if templ_7745c5c3_Err != nil {
@@ -233,7 +234,7 @@ func saNumRow(d defaultsPageVM, id, name, label, val, hint, help string) templ.C
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 75, Col: 30}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 76, Col: 30}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 		if templ_7745c5c3_Err != nil {
@@ -246,7 +247,7 @@ func saNumRow(d defaultsPageVM, id, name, label, val, hint, help string) templ.C
 		var templ_7745c5c3_Var11 string
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.ResolveAttributeValue(val)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 75, Col: 104}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 76, Col: 104}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var11)
 		if templ_7745c5c3_Err != nil {
@@ -268,7 +269,7 @@ func saNumRow(d defaultsPageVM, id, name, label, val, hint, help string) templ.C
 			var templ_7745c5c3_Var12 string
 			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(help)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 78, Col: 25}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 79, Col: 25}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
@@ -315,7 +316,7 @@ func saSegRow(d defaultsPageVM, id, name, label, val string, opts []saOpt, help 
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 85, Col: 15}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 86, Col: 15}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var14)
 		if templ_7745c5c3_Err != nil {
@@ -328,7 +329,7 @@ func saSegRow(d defaultsPageVM, id, name, label, val string, opts []saOpt, help 
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 85, Col: 37}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 86, Col: 37}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {
@@ -354,7 +355,7 @@ func saSegRow(d defaultsPageVM, id, name, label, val string, opts []saOpt, help 
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(help)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 89, Col: 25}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 90, Col: 25}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
@@ -401,7 +402,7 @@ func saSelRow(d defaultsPageVM, id, name, label, val string, opts []saOpt) templ
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 96, Col: 17}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 97, Col: 17}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var18)
 		if templ_7745c5c3_Err != nil {
@@ -414,7 +415,7 @@ func saSelRow(d defaultsPageVM, id, name, label, val string, opts []saOpt) templ
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 96, Col: 39}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 97, Col: 39}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 		if templ_7745c5c3_Err != nil {
@@ -427,7 +428,7 @@ func saSelRow(d defaultsPageVM, id, name, label, val string, opts []saOpt) templ
 		var templ_7745c5c3_Var20 string
 		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 97, Col: 17}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 98, Col: 17}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 		if templ_7745c5c3_Err != nil {
@@ -440,7 +441,7 @@ func saSelRow(d defaultsPageVM, id, name, label, val string, opts []saOpt) templ
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 97, Col: 31}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 98, Col: 31}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 		if templ_7745c5c3_Err != nil {
@@ -458,7 +459,7 @@ func saSelRow(d defaultsPageVM, id, name, label, val string, opts []saOpt) templ
 			var templ_7745c5c3_Var22 string
 			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue(o.Value)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 99, Col: 27}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 100, Col: 27}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 			if templ_7745c5c3_Err != nil {
@@ -481,7 +482,7 @@ func saSelRow(d defaultsPageVM, id, name, label, val string, opts []saOpt) templ
 			var templ_7745c5c3_Var23 string
 			templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(o.Label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 99, Col: 68}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 100, Col: 68}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 			if templ_7745c5c3_Err != nil {
@@ -550,7 +551,7 @@ func saLineage(d defaultsPageVM) templ.Component {
 		var templ_7745c5c3_Var27 string
 		templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(d.ProvName + " defaults")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 107, Col: 80}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 108, Col: 80}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 		if templ_7745c5c3_Err != nil {
@@ -639,7 +640,7 @@ func extrasBlock(d defaultsPageVM, block, id, title string) templ.Component {
 			var templ_7745c5c3_Var31 string
 			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 125, Col: 31}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 126, Col: 31}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
 			if templ_7745c5c3_Err != nil {
@@ -662,7 +663,7 @@ func extrasBlock(d defaultsPageVM, block, id, title string) templ.Component {
 			var templ_7745c5c3_Var32 string
 			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 127, Col: 20}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 128, Col: 20}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 			if templ_7745c5c3_Err != nil {
@@ -683,7 +684,7 @@ func extrasBlock(d defaultsPageVM, block, id, title string) templ.Component {
 			var templ_7745c5c3_Var33 string
 			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 131, Col: 29}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 132, Col: 29}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 			if templ_7745c5c3_Err != nil {
@@ -696,7 +697,7 @@ func extrasBlock(d defaultsPageVM, block, id, title string) templ.Component {
 			var templ_7745c5c3_Var34 string
 			templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs("Not used by " + d.ProvName + " models")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 132, Col: 65}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 133, Col: 65}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 			if templ_7745c5c3_Err != nil {
@@ -722,7 +723,7 @@ func extrasBlock(d defaultsPageVM, block, id, title string) templ.Component {
 			var templ_7745c5c3_Var35 string
 			templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 140, Col: 31}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 141, Col: 31}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var35)
 			if templ_7745c5c3_Err != nil {
@@ -735,7 +736,7 @@ func extrasBlock(d defaultsPageVM, block, id, title string) templ.Component {
 			var templ_7745c5c3_Var36 string
 			templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 141, Col: 14}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 142, Col: 14}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var36)
 			if templ_7745c5c3_Err != nil {
@@ -748,7 +749,7 @@ func extrasBlock(d defaultsPageVM, block, id, title string) templ.Component {
 			var templ_7745c5c3_Var37 string
 			templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 141, Col: 42}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 142, Col: 42}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 			if templ_7745c5c3_Err != nil {
@@ -876,7 +877,7 @@ func extrasRows(d defaultsPageVM, block string) templ.Component {
 			var templ_7745c5c3_Var39 string
 			templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.ResolveAttributeValue(d.F.SchemaName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 165, Col: 83}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 166, Col: 83}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var39)
 			if templ_7745c5c3_Err != nil {
@@ -889,7 +890,7 @@ func extrasRows(d defaultsPageVM, block string) templ.Component {
 			var templ_7745c5c3_Var40 string
 			templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.ResolveAttributeValue(d.F.SchemaDesc)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 169, Col: 90}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 170, Col: 90}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var40)
 			if templ_7745c5c3_Err != nil {
@@ -902,7 +903,7 @@ func extrasRows(d defaultsPageVM, block string) templ.Component {
 			var templ_7745c5c3_Var41 string
 			templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(d.F.Schema)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 173, Col: 71}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 174, Col: 71}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 			if templ_7745c5c3_Err != nil {
@@ -925,7 +926,7 @@ func extrasRows(d defaultsPageVM, block string) templ.Component {
 			var templ_7745c5c3_Var42 string
 			templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.ResolveAttributeValue(`{ "50256": -100 }`)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 182, Col: 94}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 183, Col: 94}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var42)
 			if templ_7745c5c3_Err != nil {
@@ -938,7 +939,7 @@ func extrasRows(d defaultsPageVM, block string) templ.Component {
 			var templ_7745c5c3_Var43 string
 			templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinStringErrs(d.F.Bias)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 182, Col: 107}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 183, Col: 107}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
 			if templ_7745c5c3_Err != nil {
@@ -984,7 +985,7 @@ func extrasRows(d defaultsPageVM, block string) templ.Component {
 			var templ_7745c5c3_Var44 string
 			templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.ResolveAttributeValue(d.F.Mime)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 192, Col: 109}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 193, Col: 109}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var44)
 			if templ_7745c5c3_Err != nil {
@@ -997,7 +998,7 @@ func extrasRows(d defaultsPageVM, block string) templ.Component {
 			var templ_7745c5c3_Var45 string
 			templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinStringErrs(d.F.RSchema)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 197, Col: 108}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 198, Col: 108}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
 			if templ_7745c5c3_Err != nil {
@@ -1055,9 +1056,16 @@ func callSettingsFields(d defaultsPageVM) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = saNumRow(d, "temp", "temperature", "Temperature", d.F.Temp, d.hint(d.Inh.Temp, d.tempHint()), "Sampling temperature. "+d.ProvName+" clamps it to "+d.tempHint()+".").Render(ctx, templ_7745c5c3_Buffer)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
+		if d.TempLock != "" {
+			templ_7745c5c3_Err = saLockedRow("temp", "Temperature", d.TempLock, "This model locks temperature at "+d.TempLock+".").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		} else {
+			templ_7745c5c3_Err = saNumRow(d, "temp", "temperature", "Temperature", d.F.Temp, d.hint(d.Inh.Temp, d.tempHint()), "Sampling temperature. "+d.ProvName+" clamps it to "+d.tempHint()+".").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 		}
 		templ_7745c5c3_Err = saNumRow(d, "topp", "top_p", "Top P", d.F.TopP, d.hint(d.Inh.TopP, "0 to 1"), "Nucleus sampling cutoff. Lower values keep the reply on the likeliest tokens.").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
@@ -1083,7 +1091,7 @@ func callSettingsFields(d defaultsPageVM) templ.Component {
 			var templ_7745c5c3_Var47 string
 			templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(s)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 231, Col: 10}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 236, Col: 10}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 			if templ_7745c5c3_Err != nil {
@@ -1096,7 +1104,7 @@ func callSettingsFields(d defaultsPageVM) templ.Component {
 			var templ_7745c5c3_Var48 string
 			templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.ResolveAttributeValue(s)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 232, Col: 49}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 237, Col: 49}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var48)
 			if templ_7745c5c3_Err != nil {
@@ -1109,7 +1117,7 @@ func callSettingsFields(d defaultsPageVM) templ.Component {
 			var templ_7745c5c3_Var49 string
 			templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.ResolveAttributeValue("Remove stop sequence " + s)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 233, Col: 86}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 238, Col: 86}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var49)
 			if templ_7745c5c3_Err != nil {
@@ -1204,7 +1212,7 @@ func defaultsScreen(n snavVM, d defaultsPageVM) templ.Component {
 			var templ_7745c5c3_Var52 templ.SafeURL
 			templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(d.Action))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 263, Col: 78}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 268, Col: 78}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var52))
 			if templ_7745c5c3_Err != nil {
@@ -1234,7 +1242,7 @@ func defaultsScreen(n snavVM, d defaultsPageVM) templ.Component {
 					var templ_7745c5c3_Var54 string
 					templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.JoinStringErrs(d.Error)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 268, Col: 76}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `server/web/seta_defaults.templ`, Line: 273, Col: 76}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var54))
 					if templ_7745c5c3_Err != nil {

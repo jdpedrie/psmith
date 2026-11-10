@@ -97,6 +97,9 @@ public enum SnapshotStubs {
         settingsResolvedProfile: PsmithProfile? = nil,
         loadError: String? = nil
     ) -> ConversationViewModel {
+        // Fixtures share conversation ids, and a mounted screen saves what
+        // a test types; a fixture starts with no draft of its own.
+        DraftStore.clear(conversationID: conversation.id)
         let c = client ?? makeClient()
         let hub = StreamHub(subscriber: c.streams)
         let vm = ConversationViewModel(

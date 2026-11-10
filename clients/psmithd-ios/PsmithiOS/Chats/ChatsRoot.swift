@@ -304,7 +304,15 @@ struct ChatsListScreen: View {
         if convos.isLoading && convos.conversations.isEmpty {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if isEmptyState {
-            ChatsEmptyState { open(.newConversation(UUID())) }
+            ChatsEmptyState(
+                archivedCount: archived.count,
+                archivedMore: archivedFixture == nil && convos.archivedNextPageToken != nil,
+                openArchive: { filter = .archived }
+            ) { open(.newConversation(UUID())) }
+            .task {
+                // The count needs the archive; it isn't loaded until asked for.
+                if archivedFixture == nil { await convos.loadArchived() }
+            }
         } else {
             List {
                 if offline {
@@ -933,9 +941,15 @@ struct ChatRowPreview: View {
     }
 }
 
-/// No conversations yet: one primary action.
+/// Boards ListEmpty and ListEmptyArchive. With conversations in the
+/// archive, the empty list says so and opens it, because the filter chips
+/// that normally reach the archive aren't drawn here.
 struct ChatsEmptyState: View {
+    var archivedCount = 0
+    var archivedMore = false
+    var openArchive: () -> Void = {}
     let newConversation: () -> Void
+    @Environment(\.theme) private var theme
     var body: some View {
         VStack(spacing: 0) {
             Image(systemName: "bubble.left.and.bubble.right")
@@ -943,10 +957,12 @@ struct ChatsEmptyState: View {
                 .foregroundStyle(IK.secondary)
                 .frame(width: 64, height: 64)
                 .background(Circle().fill(IK.wash(0.06)))
-            Text("No conversations yet")
+            Text(archivedCount > 0 ? "No active conversations" : "No conversations yet")
                 .font(.system(size: 20, weight: .semibold)).tracking(-0.3).foregroundStyle(IK.text)
                 .padding(.top, 18)
-            Text("Pick a profile and say hello. Everything you start shows up here.")
+            Text(archivedCount > 0
+                 ? "Archived ones stay out of the list. Start something new, or open the archive."
+                 : "Pick a profile and say hello. Everything you start shows up here.")
                 .font(.system(size: 15)).ikLineHeight(21, size: 15).foregroundStyle(IK.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -961,6 +977,23 @@ struct ChatsEmptyState: View {
             .ikWideButton()
             .fixedSize()
             .padding(.top, 26)
+            if archivedCount > 0 {
+                Button(action: openArchive) {
+                    HStack(spacing: 7) {
+                        Image(systemName: "archivebox").font(.system(size: 16, weight: .regular))
+                        Text("Archived").font(.system(size: 16, weight: .medium))
+                        Text("\(archivedCount)\(archivedMore ? "+" : "")")
+                            .font(.system(size: 16)).opacity(0.7)
+                    }
+                    .foregroundStyle(theme.accentInk)
+                    .padding(.horizontal, 16)
+                    .frame(height: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Archived, \(archivedCount) conversations")
+                .padding(.top, 10)
+            }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 32)

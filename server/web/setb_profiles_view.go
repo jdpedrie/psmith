@@ -41,10 +41,11 @@ func attachedNote(vm profilePluginsVM) string {
 	if len(vm.Attached) == 0 {
 		return "Attached plugins run in this order, after the inherited ones."
 	}
+	lead := "The arrows move a plugin up or down the order. Moves and removals take effect when you save. "
 	if vm.CredName != "" {
-		return "Remove takes effect when you save. Credentials like the " + vm.CredName + " key are set once in Plugins, for every profile."
+		return lead + "Credentials like the " + vm.CredName + " key are set once in Plugins, for every profile."
 	}
-	return "Remove takes effect when you save. Shared settings, like API keys, are set once in Plugins for every profile."
+	return lead + "Shared settings, like API keys, are set once in Plugins for every profile."
 }
 
 func chainLabel(vm profileShareVM) string {

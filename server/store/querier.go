@@ -156,6 +156,7 @@ type Querier interface {
 	// most one such message; APPEND-mode compression reads it to chain forward.
 	GetContextRoleMessageInContext(ctx context.Context, contextID uuid.UUID) (Message, error)
 	GetConversationByID(ctx context.Context, id uuid.UUID) (Conversation, error)
+	GetEnabledUserModel(ctx context.Context, arg GetEnabledUserModelParams) (UserModel, error)
 	GetExplicitCache(ctx context.Context, arg GetExplicitCacheParams) (ExplicitCach, error)
 	GetFile(ctx context.Context, id uuid.UUID) (File, error)
 	GetFileByUserAndSHA(ctx context.Context, arg GetFileByUserAndSHAParams) (File, error)
@@ -206,6 +207,9 @@ type Querier interface {
 	// a hard error so the GET RPC can return the default-disabled shape.
 	GetUserLangfuseConfig(ctx context.Context, userID uuid.UUID) (UserLangfuseConfig, error)
 	GetUserMCPServer(ctx context.Context, id uuid.UUID) (UserMcpServer, error)
+	// Returns the row whether or not it is enabled. Settings edits and cost
+	// accounting want a hand-added model that is off; anything that decides
+	// whether a model can be sent to uses GetEnabledUserModel.
 	GetUserModel(ctx context.Context, arg GetUserModelParams) (UserModel, error)
 	GetUserModelProvider(ctx context.Context, id uuid.UUID) (UserModelProvider, error)
 	// Returns the row for one (user, plugin) — caller decides what "missing"
@@ -225,6 +229,9 @@ type Querier interface {
 	// can land. Errored compression_summary rows are first-class history entries
 	// the user can review; they do not gate the conversation — the user retries
 	// by either deleting the failed summary or kicking off a fresh compaction.
+	// A summary that already started a new context (a context whose parent is
+	// this one) isn't pending: switching back to the old context must not hold
+	// it hostage to a review that's done.
 	HasCompressionSummaryInContext(ctx context.Context, contextID uuid.UUID) (bool, error)
 	// True iff the conversation has any stream_run with status='running'. Used by
 	// the conversation-lock helper that gates mutating RPCs while a stream is
@@ -435,6 +442,9 @@ type Querier interface {
 	ListUserLangfuseConfigs(ctx context.Context) ([]UserLangfuseConfig, error)
 	ListUserMCPServers(ctx context.Context, userID uuid.UUID) ([]UserMcpServer, error)
 	ListUserModelProvidersByUser(ctx context.Context, userID uuid.UUID) ([]UserModelProvider, error)
+	// Enabled and disabled rows both: the provider's settings page lists the
+	// disabled hand-added ones so they can be turned back on. Callers split on
+	// the enabled column.
 	ListUserModelsByProvider(ctx context.Context, userModelProviderID uuid.UUID) ([]UserModel, error)
 	ListUserModelsByUser(ctx context.Context, userID uuid.UUID) ([]UserModel, error)
 	// All globally-configured plugins for a user. Drives the "Plugin
@@ -442,6 +452,11 @@ type Querier interface {
 	// defaults-from-descriptor render at the UI layer.
 	ListUserPluginSettings(ctx context.Context, userID uuid.UUID) ([]UserPluginSetting, error)
 	ListUsers(ctx context.Context) ([]User, error)
+	// Serializes concurrent set-default calls for one user. Without it two
+	// transactions each clear the old default, then each mark their own, and
+	// the second trips profiles_one_default_per_user: under READ COMMITTED
+	// the second clear never sees the row the first one marked.
+	LockProfilesForDefault(ctx context.Context, userID uuid.UUID) error
 	MarkDefaultProfile(ctx context.Context, id uuid.UUID) error
 	// Called once on server boot. The upstream sockets died with the process and
 	// cannot be resumed; users see a partial assistant message + retry affordance.
@@ -471,6 +486,9 @@ type Querier interface {
 	// chunk rows pruned so the caller can log a trickle of housekeeping
 	// activity (or skip the log entirely on zero-row runs).
 	PruneFinalizedStreamChunks(ctx context.Context, retention pgtype.Interval) (int64, error)
+	RecordUserMCPServerTest(ctx context.Context, arg RecordUserMCPServerTestParams) error
+	RecordUserModelProviderDiscovery(ctx context.Context, arg RecordUserModelProviderDiscoveryParams) error
+	RecordUserModelProviderTest(ctx context.Context, arg RecordUserModelProviderTestParams) error
 	// Points children of a context about to be deleted at their
 	// grandparent, keeping compaction lineage connected. NULL parent is
 	// valid (the deleted context was a root).
@@ -526,6 +544,9 @@ type Querier interface {
 	// the diagnostics computed against the previous turn (NULL on the first
 	// turn for a context — no comparison possible).
 	SetStreamRunPrefixHashes(ctx context.Context, arg SetStreamRunPrefixHashesParams) error
+	// Upserts leave enabled alone (it is not in UpsertUserModel's update set), so
+	// this is the only way a row's enabled flag changes.
+	SetUserModelEnabled(ctx context.Context, arg SetUserModelEnabledParams) (UserModel, error)
 	SetUserModelFavorite(ctx context.Context, arg SetUserModelFavoriteParams) error
 	// Bump the coarse mutation stamp without changing any field. Message
 	// edits and deletes call this so clients' cheap staleness check

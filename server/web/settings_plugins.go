@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,6 +35,7 @@ type pluginOptVM struct {
 type sbTagVM struct {
 	Label string
 	Warn  bool
+	Href  string // where to fix what the tag says is missing
 }
 
 type inhPluginVM struct {
@@ -46,6 +48,7 @@ type inhPluginVM struct {
 
 type attPluginVM struct {
 	Index   int
+	Last    bool
 	Name    string
 	Display string
 	Desc    string
@@ -164,7 +167,7 @@ func pluginTags(t *psmithv1.PluginType, config, global []byte) []sbTagVM {
 		out = append(out, sbTagVM{Label: "MCP"})
 	}
 	if need := globalNeeds(t, global); need != "" {
-		out = append(out, sbTagVM{Label: need + " in Plugins", Warn: true})
+		out = append(out, sbTagVM{Label: need + " in Plugins", Warn: true, Href: "/settings/plugins/" + url.PathEscape(t.GetName())})
 	}
 	switch n := requiredMissing(t, config); n {
 	case 0:
@@ -256,6 +259,9 @@ func (h *Handler) pluginsTabVM(ctx context.Context, ix profileIndex, p *psmithv1
 			Form:    h.buildPluginForm(ctx, t, row.GetConfig(), models),
 		})
 	}
+	if n := len(vm.Attached); n > 0 {
+		vm.Attached[n-1].Last = true
+	}
 	for _, n := range h.inheritedPluginNames(ctx, ix, p) {
 		if attached[n] {
 			continue
@@ -306,18 +312,11 @@ func firstSentence(s string) string {
 	return s
 }
 
-// handlePluginsSave persists the Plugins tab: the attached rows in order
-// with their config, minus the ones marked removed, plus a disabled row for
-// each inherited plugin switched off.
-func (h *Handler) handlePluginsSave(w http.ResponseWriter, r *http.Request) {
-	ix, p, ok := h.loadProfilePage(w, r)
-	if !ok {
-		return
-	}
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
+// pluginsFromForm reads the Plugins tab as posted: the attached rows in
+// the order their positions (ppos_i) give, with their config, minus the
+// ones marked removed, then a disabled row for each inherited plugin
+// switched off. msg is set when the form can't be saved as it stands.
+func (h *Handler) pluginsFromForm(r *http.Request, p *psmithv1.Profile) (attached, off []*psmithv1.ProfilePlugin, msg string) {
 	catalog := h.pluginTypesByName(r.Context())
 	existing := map[string][]byte{}
 	keptOff := map[string]bool{}
@@ -327,7 +326,7 @@ func (h *Handler) handlePluginsSave(w http.ResponseWriter, r *http.Request) {
 			keptOff[row.GetPluginName()] = true
 		}
 	}
-	var plugins []*psmithv1.ProfilePlugin
+	pos := map[string]int{}
 	for i := 0; ; i++ {
 		name := r.PostFormValue(fmt.Sprintf("pname_%d", i))
 		if name == "" {
@@ -335,6 +334,10 @@ func (h *Handler) handlePluginsSave(w http.ResponseWriter, r *http.Request) {
 		}
 		if r.PostFormValue(fmt.Sprintf("premoved_%d", i)) == "true" {
 			continue
+		}
+		pos[name] = i
+		if n, err := strconv.Atoi(r.PostFormValue(fmt.Sprintf("ppos_%d", i))); err == nil {
+			pos[name] = n
 		}
 		t := catalog[name]
 		var cfg []byte
@@ -348,15 +351,15 @@ func (h *Handler) handlePluginsSave(w http.ResponseWriter, r *http.Request) {
 			if s == "" {
 				s = "{}"
 			} else if !json.Valid([]byte(s)) {
-				h.renderPluginsErr(w, r, ix, p, "The config for "+orName(displayName(t), name)+" is not valid JSON.")
-				return
+				return nil, nil, "The config for " + orName(displayName(t), name) + " is not valid JSON."
 			}
 			cfg = []byte(s)
 		} else {
 			cfg = existing[name]
 		}
-		plugins = append(plugins, &psmithv1.ProfilePlugin{PluginName: name, Config: cfg})
+		attached = append(attached, &psmithv1.ProfilePlugin{PluginName: name, Config: cfg})
 	}
+	sort.SliceStable(attached, func(a, b int) bool { return pos[attached[a].GetPluginName()] < pos[attached[b].GetPluginName()] })
 	for k := 0; ; k++ {
 		name := r.PostFormValue(fmt.Sprintf("inh_name_%d", k))
 		if name == "" {
@@ -364,18 +367,40 @@ func (h *Handler) handlePluginsSave(w http.ResponseWriter, r *http.Request) {
 		}
 		delete(keptOff, name)
 		if r.PostFormValue(fmt.Sprintf("inh_on_%d", k)) == "false" {
-			plugins = append(plugins, &psmithv1.ProfilePlugin{PluginName: name, Config: []byte("{}"), Disabled: true})
+			off = append(off, &psmithv1.ProfilePlugin{PluginName: name, Config: []byte("{}"), Disabled: true})
 		}
 	}
 	// Disabled rows for plugins no longer inherited still mean something if
 	// a parent brings them back, so they stay.
 	for _, n := range sortedKeys(keptOff) {
-		plugins = append(plugins, &psmithv1.ProfilePlugin{PluginName: n, Config: []byte("{}"), Disabled: true})
+		off = append(off, &psmithv1.ProfilePlugin{PluginName: n, Config: []byte("{}"), Disabled: true})
 	}
+	return attached, off, ""
+}
+
+func numbered(plugins []*psmithv1.ProfilePlugin) []*psmithv1.ProfilePlugin {
 	for i, pl := range plugins {
 		pl.Ordinal = int32(i)
 	}
-	if err := h.setPlugins(r, p.GetId(), plugins); err != nil {
+	return plugins
+}
+
+// handlePluginsSave persists the Plugins tab.
+func (h *Handler) handlePluginsSave(w http.ResponseWriter, r *http.Request) {
+	ix, p, ok := h.loadProfilePage(w, r)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	attached, off, msg := h.pluginsFromForm(r, p)
+	if msg != "" {
+		h.renderPluginsErr(w, r, ix, p, msg)
+		return
+	}
+	if err := h.setPlugins(r, p.GetId(), numbered(append(attached, off...))); err != nil {
 		h.renderPluginsErr(w, r, ix, p, errMessage(err))
 		return
 	}
@@ -385,12 +410,17 @@ func (h *Handler) handlePluginsSave(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) renderPluginsErr(w http.ResponseWriter, r *http.Request, ix profileIndex, p *psmithv1.Profile, msg string) {
 	vm := h.pluginsTabVM(r.Context(), ix, p)
 	vm.Error = msg
-	h.render(w, r, http.StatusBadRequest, profilePluginsScreen(h.loadSnav(r.Context(), r, "profiles"), vm))
+	h.showAfterPost(w, r, "/settings/profiles/"+p.GetId()+"/plugins", profilePluginsScreen(h.loadSnav(r.Context(), r, "profiles"), vm))
 }
 
-// handlePluginAdd appends a plugin to the pipeline with empty config.
+// handlePluginAdd appends a plugin with empty config. The Add buttons sit
+// on the tab's form, so the rest of what was posted is saved with it; a
+// request without the tab's fields adds to what is stored.
 func (h *Handler) handlePluginAdd(w http.ResponseWriter, r *http.Request) {
-	profileID := r.PathValue("id")
+	ix, p, ok := h.loadProfilePage(w, r)
+	if !ok {
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
@@ -400,49 +430,116 @@ func (h *Handler) handlePluginAdd(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "plugin_name required", http.StatusBadRequest)
 		return
 	}
-	var current []*psmithv1.ProfilePlugin
-	for _, p := range h.currentPlugins(r, profileID) {
-		if p.GetPluginName() == name && p.GetDisabled() {
-			continue
-		}
-		current = append(current, p)
-	}
-	current = append(current, &psmithv1.ProfilePlugin{PluginName: name, Config: []byte("{}")})
-	for i, p := range current {
-		p.Ordinal = int32(i)
-	}
-	if err := h.setPlugins(r, profileID, current); err != nil {
-		http.Error(w, errMessage(err), http.StatusBadRequest)
+	attached, off, msg := h.tabOrStored(r, p)
+	if msg != "" {
+		h.renderPluginsErr(w, r, ix, p, msg)
 		return
 	}
-	http.Redirect(w, r, "/settings/profiles/"+profileID+"/plugins?open="+name, http.StatusSeeOther)
+	attached = append(attached, &psmithv1.ProfilePlugin{PluginName: name, Config: []byte("{}")})
+	var keep []*psmithv1.ProfilePlugin
+	for _, o := range off {
+		if o.GetPluginName() != name {
+			keep = append(keep, o)
+		}
+	}
+	if err := h.setPlugins(r, p.GetId(), numbered(append(attached, keep...))); err != nil {
+		h.renderPluginsErr(w, r, ix, p, errMessage(err))
+		return
+	}
+	http.Redirect(w, r, "/settings/profiles/"+p.GetId()+"/plugins?open="+url.QueryEscape(name), http.StatusSeeOther)
 }
 
 // handlePluginRemove drops one attached plugin right away. The tab's remove
-// buttons post here without JS; with it they mark the row and the save
-// bar commits the removal with everything else.
+// buttons post here without JS, carrying the rest of the form; with it they
+// mark the row and the save bar commits the removal with everything else.
 func (h *Handler) handlePluginRemove(w http.ResponseWriter, r *http.Request) {
-	profileID := r.PathValue("id")
+	ix, p, ok := h.loadProfilePage(w, r)
+	if !ok {
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 	name := r.PostFormValue("remove")
-	var kept []*psmithv1.ProfilePlugin
-	for _, p := range h.currentPlugins(r, profileID) {
-		if p.GetPluginName() == name && !p.GetDisabled() {
-			continue
-		}
-		kept = append(kept, p)
-	}
-	for i, p := range kept {
-		p.Ordinal = int32(i)
-	}
-	if err := h.setPlugins(r, profileID, kept); err != nil {
-		http.Error(w, errMessage(err), http.StatusBadRequest)
+	attached, off, msg := h.tabOrStored(r, p)
+	if msg != "" {
+		h.renderPluginsErr(w, r, ix, p, msg)
 		return
 	}
-	http.Redirect(w, r, "/settings/profiles/"+profileID+"/plugins", http.StatusSeeOther)
+	var kept []*psmithv1.ProfilePlugin
+	for _, a := range attached {
+		if a.GetPluginName() != name {
+			kept = append(kept, a)
+		}
+	}
+	if err := h.setPlugins(r, p.GetId(), numbered(append(kept, off...))); err != nil {
+		h.renderPluginsErr(w, r, ix, p, errMessage(err))
+		return
+	}
+	http.Redirect(w, r, "/settings/profiles/"+p.GetId()+"/plugins", http.StatusSeeOther)
+}
+
+// handlePluginMove moves one attached plugin a place up or down and saves
+// the tab with it. The arrows post here without script, carrying the rest
+// of the form, as Remove does; with script they reorder the rows in place
+// and the save bar commits the order with everything else.
+func (h *Handler) handlePluginMove(w http.ResponseWriter, r *http.Request) {
+	ix, p, ok := h.loadProfilePage(w, r)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	dir, name, _ := strings.Cut(r.PostFormValue("move"), ":")
+	attached, off, msg := h.tabOrStored(r, p)
+	if msg != "" {
+		h.renderPluginsErr(w, r, ix, p, msg)
+		return
+	}
+	attached = movePlugin(attached, name, dir == "up")
+	if err := h.setPlugins(r, p.GetId(), numbered(append(attached, off...))); err != nil {
+		h.renderPluginsErr(w, r, ix, p, errMessage(err))
+		return
+	}
+	http.Redirect(w, r, "/settings/profiles/"+p.GetId()+"/plugins", http.StatusSeeOther)
+}
+
+// movePlugin swaps the named plugin with its neighbor above (up) or below.
+// At either end, or for a name that isn't there, the order stays.
+func movePlugin(plugins []*psmithv1.ProfilePlugin, name string, up bool) []*psmithv1.ProfilePlugin {
+	for i, pl := range plugins {
+		if pl.GetPluginName() != name {
+			continue
+		}
+		j := i + 1
+		if up {
+			j = i - 1
+		}
+		if j >= 0 && j < len(plugins) {
+			plugins[i], plugins[j] = plugins[j], plugins[i]
+		}
+		break
+	}
+	return plugins
+}
+
+// tabOrStored is the pipeline as the tab posted it, or as stored when the
+// request didn't come from the tab.
+func (h *Handler) tabOrStored(r *http.Request, p *psmithv1.Profile) (attached, off []*psmithv1.ProfilePlugin, msg string) {
+	if r.PostFormValue("pname_0") != "" || r.PostFormValue("inh_name_0") != "" {
+		return h.pluginsFromForm(r, p)
+	}
+	for _, row := range h.profilePlugins(r.Context(), p.GetId()) {
+		if row.GetDisabled() {
+			off = append(off, row)
+		} else {
+			attached = append(attached, row)
+		}
+	}
+	return attached, off, ""
 }
 
 func (h *Handler) currentPlugins(r *http.Request, profileID string) []*psmithv1.ProfilePlugin {

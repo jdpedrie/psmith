@@ -38,6 +38,9 @@ type setRowVM struct {
 	From        string       // where the inherited value comes from
 	Inherits    string       // the inherited value, as shown
 	Dirty       bool
+	// Locked says why the model fixes this setting ("Locked at 1.0 by
+	// GPT-5"); the row shows the fixed value and can't be edited.
+	Locked string
 }
 
 // Set reports whether the conversation sets this field itself.
@@ -45,6 +48,9 @@ func (r setRowVM) Set() bool { return r.Value != "" }
 
 // Sub is the line under the label.
 func (r setRowVM) Sub() string {
+	if r.Locked != "" {
+		return r.Locked
+	}
 	if !r.Set() && !r.Dirty {
 		return r.From
 	}
@@ -92,8 +98,10 @@ func (h *Handler) callSettings(ctx context.Context, conv *psmithv1.Conversation,
 
 	var provCS, modelCS *psmithv1.CallSettings
 	var provLabel, provType string
+	var limits *psmithv1.ModelConstraints
 	if pid, mid, ok := splitModelValue(model.Value); ok {
 		if e := h.findModel(ctx, pid, mid); e != nil {
+			limits = e.GetModel().GetConstraints()
 			provCS, modelCS = e.GetProvider().GetDefaultSettings(), e.GetModel().GetDefaultSettings()
 			provLabel = orName(e.GetProvider().GetLabel(), e.GetProvider().GetType())
 			provType = e.GetProvider().GetType()
@@ -106,6 +114,8 @@ func (h *Handler) callSettings(ctx context.Context, conv *psmithv1.Conversation,
 	}
 	own := conv.GetSettings().GetCallSettings()
 	vm.Rows, vm.ProviderRows, vm.ProviderTitle = buildSetRows(own, layers, conv.GetSettings(), prof.GetDefaultSettings(), profName, provType)
+	lockRows(vm.Rows, limits, model.Name)
+	lockRows(vm.ProviderRows, limits, model.Name)
 	if vm.ProviderTitle != "" {
 		vm.ProviderTitle = provLabel
 		vm.ProviderNote = "Applies while this conversation runs on " + provLabel + "."
@@ -307,4 +317,48 @@ func commaInt(s string) string {
 		return s
 	}
 	return commas(n)
+}
+
+// constraintRows maps the dotted CallSettings paths a model's constraints
+// name to the rows that edit them.
+var constraintRows = map[string]string{
+	"temperature":                "temperature",
+	"top_p":                      "top_p",
+	"max_output_tokens":          "max_output_tokens",
+	"stop_sequences":             "stop_sequences",
+	"top_k":                      "top_k",
+	"thinking":                   "thinking_effort",
+	"explicit_cache":             "explicit_cache",
+	"anthropic.cache_enabled":    "anth_cache_enabled",
+	"anthropic.cache_ttl":        "anth_cache_ttl",
+	"openai.seed":                "oai_seed",
+	"openai.frequency_penalty":   "oai_frequency_penalty",
+	"openai.presence_penalty":    "oai_presence_penalty",
+	"openai.parallel_tool_calls": "oai_parallel_tool_calls",
+	"google.candidate_count":     "goog_candidate_count",
+}
+
+// lockRows draws what the model fixes as fixed: a temperature it locks
+// shows that value, a setting it rejects shows that it isn't supported.
+// Neither posts, so a save clears any value the conversation held.
+func lockRows(rows []setRowVM, c *psmithv1.ModelConstraints, model string) {
+	if c == nil {
+		return
+	}
+	unsupported := map[string]bool{}
+	for _, p := range c.GetUnsupported() {
+		if name, ok := constraintRows[p]; ok {
+			unsupported[name] = true
+		}
+	}
+	for i := range rows {
+		r := &rows[i]
+		switch {
+		case unsupported[r.Name]:
+			r.Locked, r.Value, r.Placeholder, r.Dirty = "Not supported by "+model, "", "Off", false
+		case r.Name == "temperature" && c.GetTemperature().LockedAt != nil:
+			v := oneDecimal(strconv.FormatFloat(c.GetTemperature().GetLockedAt(), 'f', -1, 64))
+			r.Locked, r.Value, r.Dirty = "Locked at "+v+" by "+model, v, false
+		}
+	}
 }

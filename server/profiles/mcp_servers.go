@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 	"github.com/jdpedrie/psmith/pluginapi"
@@ -183,18 +185,20 @@ func (s *Service) TestMCPServer(ctx context.Context, req *connect.Request[psmith
 	testCtx, cancel := context.WithTimeout(ctx, mcpTestTimeout)
 	defer cancel()
 	names, err := mcp.TestMCPConnection(testCtx, cfg)
+	// Connection failure is the test's RESULT, not an RPC error, which
+	// mirrors the embedder/Langfuse test contract.
+	resp := &psmithv1.TestMCPServerResponse{Ok: err == nil, ToolNames: names}
 	if err != nil {
-		// Connection failure is the test's RESULT, not an RPC error —
-		// mirrors the embedder/Langfuse test contract.
-		return connect.NewResponse(&psmithv1.TestMCPServerResponse{
-			Ok:           false,
-			ErrorMessage: err.Error(),
-		}), nil
+		resp.ErrorMessage = err.Error()
 	}
-	return connect.NewResponse(&psmithv1.TestMCPServerResponse{
-		Ok:        true,
-		ToolNames: names,
-	}), nil
+	// Remembered for the Settings nav's failing count and the list's dots.
+	// The probe's own deadline may have passed; the write gets the request's.
+	if rerr := s.queries.RecordUserMCPServerTest(ctx, store.RecordUserMCPServerTestParams{
+		ID: id, LastTestOk: resp.Ok, LastTestMessage: resp.ErrorMessage, LastTestToolCount: int32(len(names)),
+	}); rerr != nil {
+		slog.Warn("record mcp server test", "server_id", id, "error", rerr)
+	}
+	return connect.NewResponse(resp), nil
 }
 
 // --- pseudo-plugin descriptors -------------------------------------------
@@ -273,5 +277,18 @@ func mcpServerToProto(row store.UserMcpServer, spec mcpreg.SpecConfig) *psmithv1
 		Url:        spec.URL,
 		HasHeaders: spec.Headers != "",
 		ToolPrefix: spec.ToolPrefix,
+		LastTest:   mcpTestToProto(row),
+	}
+}
+
+func mcpTestToProto(row store.UserMcpServer) *psmithv1.ConnectionTest {
+	if row.LastTestAt == nil {
+		return nil
+	}
+	return &psmithv1.ConnectionTest{
+		TestedAt:  timestamppb.New(*row.LastTestAt),
+		Ok:        row.LastTestOk,
+		Message:   row.LastTestMessage,
+		ToolCount: row.LastTestToolCount,
 	}
 }

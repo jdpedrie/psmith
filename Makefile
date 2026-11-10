@@ -1,4 +1,4 @@
-.PHONY: ios-e2e proto lint build run tidy migrate-up migrate-down sqlc test web-generate swift-build swift-test swift-test-l1 swift-test-l2 swift-test-l2-record mac-build mac-run mac-app mac-app-run ios-project ios-build ios-app-run logos-png app-icons
+.PHONY: ios-e2e mac-e2e proto lint build run tidy migrate-up migrate-down sqlc test web-generate swift-build swift-test swift-test-l1 swift-test-l2 swift-test-l2-record mac-build mac-run mac-app mac-app-run ios-project ios-build ios-app-run logos-png app-icons
 
 TEMPL_VERSION ?= v0.3.1020
 
@@ -211,6 +211,10 @@ ios-build: ios-project logos-png
 # End-to-end iOS tests against a real psmithd on a fresh database.
 ios-e2e: ios-project
 	scripts/ios-e2e.sh
+
+# The Mac app end to end: real psmithd, the fake model, offscreen windows.
+mac-e2e:
+	scripts/mac-e2e.sh
 
 ios-app-run: ios-build
 	xcrun simctl boot '$(IOS_SIMULATOR)' 2>/dev/null || true

@@ -236,11 +236,10 @@ struct ConversationListView: View {
                 deleteCard(c)
             } else {
                 rowView(c, generating: false, unseen: false, muted: true)
-                    .contextMenu {
-                        Button("Unarchive") { Task { await convos.unarchive(c.id) } }
-                        Divider()
-                        Button("Delete…", role: .destructive) { deletingID = c.id }
-                    }
+                    .contextMenu { archivedRowActions(c) }
+                    // Context menus aren't reachable through accessibility;
+                    // the same actions are, for VoiceOver and the keyboard.
+                    .accessibilityActions { archivedRowActions(c) }
             }
         }
         LoadMoreFooter(token: convos.archivedNextPageToken) { await convos.loadMoreArchived() }
@@ -256,14 +255,25 @@ struct ConversationListView: View {
             rowView(c,
                     generating: app.streamHub.activeConversationIDs.contains(c.id),
                     unseen: app.streamHub.unseenConversationIDs.contains(c.id))
-                .contextMenu {
-                    Button(c.pinnedAt == nil ? "Pin" : "Unpin") { Task { await convos.togglePin(c.id) } }
-                    Button("Rename") { startRename(c) }
-                    Button("Archive") { Task { await convos.archive(c.id) } }
-                    Divider()
-                    Button("Delete…", role: .destructive) { deletingID = c.id }
-                }
+                .contextMenu { rowActions(c) }
+                .accessibilityActions { rowActions(c) }
         }
+    }
+
+    @ViewBuilder
+    private func rowActions(_ c: PsmithConversation) -> some View {
+        Button(c.pinnedAt == nil ? "Pin" : "Unpin") { Task { await convos.togglePin(c.id) } }
+        Button("Rename") { startRename(c) }
+        Button("Archive") { Task { await convos.archive(c.id) } }
+        Divider()
+        Button("Delete…", role: .destructive) { deletingID = c.id }
+    }
+
+    @ViewBuilder
+    private func archivedRowActions(_ c: PsmithConversation) -> some View {
+        Button("Unarchive") { Task { await convos.unarchive(c.id) } }
+        Divider()
+        Button("Delete…", role: .destructive) { deletingID = c.id }
     }
 
     private func rowView(_ c: PsmithConversation, generating: Bool, unseen: Bool, muted: Bool = false) -> some View {
@@ -364,8 +374,25 @@ struct ConversationListView: View {
                 MKEmptyList(systemImage: "wifi.exclamationmark", title: "Can’t reach the server", detail: "No saved conversations to show.")
             } else if filter != .all {
                 MKEmptyList(systemImage: "line.3.horizontal.decrease", title: "No matches", detail: "No conversations fit this filter.")
+            } else if !convos.archivedConversations.isEmpty {
+                // Board AppListEmptyArchive: the filters (and the Archived
+                // row under them) only draw with rows, so the way in is here.
+                MKEmptyList(systemImage: "bubble.left.and.bubble.right", title: "No active conversations", detail: "Start one with ⌘N.") {
+                    Button { showingArchived = true } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "archivebox").font(.system(size: 11))
+                            Text("Archived")
+                            Text("\(convos.archivedConversations.count)\(convos.archivedNextPageToken != nil ? "+" : "")")
+                                .foregroundStyle(SK.secondary)
+                        }
+                    }
+                    .skButton(small: true)
+                    .accessibilityLabel("Archived, \(convos.archivedConversations.count)\(convos.archivedNextPageToken != nil ? " or more" : "")")
+                }
             } else {
                 MKEmptyList(systemImage: "bubble.left.and.bubble.right", title: "No conversations yet", detail: "Start one with ⌘N.")
+                    // The count needs the archive; it isn't loaded until asked for.
+                    .task { await convos.loadArchived() }
             }
         }
     }

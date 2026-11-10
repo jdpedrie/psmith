@@ -145,3 +145,23 @@ func TestRefIDAndRefName(t *testing.T) {
 		t.Error("malformed id must not parse as ref")
 	}
 }
+
+// The registered server's name rides along in the config, so the plugin can
+// say who is asking when one of its tools prompts the user.
+func TestResolve_CarriesTheServersName(t *testing.T) {
+	t.Parallel()
+	q, user, row := seed(t)
+	_, cfg, err := Resolve(context.Background(), q, crypto.Nop{}, user.ID, RefName(row.ID), nil, true)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	var got struct {
+		Label string `json:"label"`
+	}
+	if err := json.Unmarshal(cfg, &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Label != row.Name || got.Label == "" {
+		t.Errorf("label = %q want %q", got.Label, row.Name)
+	}
+}

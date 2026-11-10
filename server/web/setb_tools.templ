@@ -321,7 +321,10 @@ templ mcpFormScreen(n snavVM, vm mcpFormVM) {
 							<div class="grow sb-top">
 								<label for="ashead" class="lbl">HTTP headers</label>
 								<span class="sb-ctl">
-									<textarea id="ashead" name="headers" class="sb-ta mono sb-block" rows="2" placeholder={ secretPlaceholder(vm.Server.HasHeaders) }>{ vm.Headers }</textarea>
+									<textarea id="ashead" name="headers" class="sb-ta mono sb-block" rows="2" placeholder={ secretPlaceholder(vm.Server.HasHeaders, "Type new headers to replace the stored ones.") }>{ vm.Headers }</textarea>
+									if vm.Server.HasHeaders {
+										@secretClear("clear_headers", "The stored headers clear when you save.", "Keep them", vm.ClearHeaders)
+									}
 									<span class="sb-hint">KEY: VALUE per line, usually the auth header. Stored encrypted and never shown again.</span>
 								</span>
 							</div>
@@ -347,7 +350,10 @@ templ mcpFormScreen(n snavVM, vm mcpFormVM) {
 							<div class="grow sb-top">
 								<label for="asenv" class="lbl">Environment</label>
 								<span class="sb-ctl">
-									<textarea id="asenv" name="env" class="sb-ta mono sb-block" rows="2" placeholder={ secretPlaceholder(vm.Server.HasEnv) }></textarea>
+									<textarea id="asenv" name="env" class="sb-ta mono sb-block" rows="2" placeholder={ secretPlaceholder(vm.Server.HasEnv, "Type a new environment to replace the stored one.") }>{ vm.Env }</textarea>
+									if vm.Server.HasEnv {
+										@secretClear("clear_env", "The stored environment clears when you save.", "Keep it", vm.ClearEnv)
+									}
 									<span class="sb-hint">KEY=VALUE per line. Stored encrypted and never shown again.</span>
 								</span>
 							</div>
@@ -386,4 +392,18 @@ templ mcpFormScreen(n snavVM, vm mcpFormVM) {
 			}
 		</form>
 	}
+}
+
+// secretClear marks a stored write-only value to be removed on save. The
+// toggle is a checkbox in a button's clothes, so it posts without script
+// and the line beside it follows it in CSS.
+templ secretClear(name, note, keep string, on bool) {
+	<span class="sb-secretstate">
+		<span class="sb-lock">
+			@sbIcon("lock")
+			Stored encrypted
+		</span>
+		<span class="sb-clearnote">{ note }</span>
+		<label class="btn h32 sb-n sb-clearbtn"><input class="sr-only" type="checkbox" name={ name } value="true" checked?={ on }/><span class="off">Clear</span><span class="on">{ keep }</span></label>
+	</span>
 }

@@ -69,37 +69,206 @@
 		countSelected();
 	});
 
-	// --- search results ---------------------------------------------------------
-	// After a title search the rows are the results: the arrows move through
-	// them, Enter opens one, Esc goes back to the whole list.
-	var search = $("#search");
-	var list = $("#list");
-	if (search && list) {
-		var key = $("[data-search-key]");
-		search.addEventListener("input", function () {
-			if (key) key.textContent = (search.value.trim() || list.hasAttribute("data-search")) ? "Esc" : "/";
-		});
-		search.addEventListener("keydown", function (e) {
-			if (!list.hasAttribute("data-search") || $("#command-results")) return;
-			var rows = $$("#rows .row");
-			var cur = rows.findIndex(function (r) { return r.classList.contains("kbd"); });
-			if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-				if (!rows.length) return;
-				e.preventDefault();
-				var n = Math.max(0, Math.min(rows.length - 1, cur + (e.key === "ArrowDown" ? 1 : -1)));
-				rows.forEach(function (r, i) { r.classList.toggle("kbd", i === n); });
-				rows[n].scrollIntoView({ block: "nearest" });
-			} else if (e.key === "Enter" && cur >= 0) {
-				e.preventDefault();
-				rows[cur].click();
-			} else if (e.key === "Escape") {
+	// --- search as a command line -------------------------------------------------
+	// Typing in search asks the server for matching commands, conversations
+	// and settings and shows them in place of the rows. After a submitted
+	// title search the rows are the results: the arrows move through them,
+	// Enter opens one, Esc goes back to the whole list. The column is swapped
+	// whole on every refresh, so all of this is delegated and looks its
+	// elements up each time.
+	var cmdTimer = null;
+	function showResults(html) {
+		var body = $("#list-body");
+		if (!body) return;
+		var results = $("#command-results");
+		if (!results) {
+			results = document.createElement("div");
+			results.id = "command-results";
+			body.parentNode.insertBefore(results, body);
+		}
+		results.innerHTML = html;
+		body.hidden = true;
+	}
+	function clearResults() {
+		var results = $("#command-results");
+		if (results) results.remove();
+		var body = $("#list-body");
+		if (body) body.hidden = false;
+		catchUp();
+	}
+	document.addEventListener("input", function (e) {
+		if (e.target.id !== "search") return;
+		var search = e.target, list = $("#list"), key = $("[data-search-key]");
+		if (key) key.textContent = (search.value.trim() || (list && list.hasAttribute("data-search"))) ? "Esc" : "/";
+		clearTimeout(cmdTimer);
+		var q = search.value.trim();
+		if (!q) { clearResults(); return; }
+		cmdTimer = setTimeout(function () {
+			var conv = $("#main") ? $("#main").getAttribute("data-conv") || "" : "";
+			fetch("/partials/command?q=" + encodeURIComponent(q) + "&conv=" + encodeURIComponent(conv), { credentials: "same-origin" })
+				.then(function (r) { return r.ok ? r.text() : ""; })
+				.then(function (html) {
+					var s = $("#search");
+					if (s && s.value.trim() === q) showResults(html);
+				});
+		}, 120);
+	});
+	document.addEventListener("keydown", function (e) {
+		if (e.target.id !== "search" || e.isComposing) return;
+		var search = e.target, list = $("#list"), results = $("#command-results");
+		var searched = list && list.hasAttribute("data-search");
+		if (e.key === "Escape") {
+			clearTimeout(cmdTimer);
+			if (searched) {
 				var u = new URL(location.href);
 				u.searchParams.delete("q");
 				u.searchParams.delete("arch");
 				location.href = u.pathname + u.search;
+				return;
+			}
+			search.value = "";
+			var key = $("[data-search-key]");
+			if (key) key.textContent = "/";
+			clearResults();
+			search.blur();
+			return;
+		}
+		var opts = results ? $$('[role="option"]', results) : searched ? $$("#rows .row") : [];
+		var on = results ? function (o) { return o.getAttribute("aria-selected") === "true"; } : function (o) { return o.classList.contains("kbd"); };
+		var cur = opts.findIndex(on);
+		if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+			if (!opts.length) return;
+			e.preventDefault();
+			var n = Math.max(0, Math.min(opts.length - 1, cur + (e.key === "ArrowDown" ? 1 : -1)));
+			opts.forEach(function (o, i) {
+				if (results) o.setAttribute("aria-selected", String(i === n));
+				else o.classList.toggle("kbd", i === n);
+			});
+			opts[n].scrollIntoView({ block: "nearest" });
+		} else if (e.key === "Enter" && opts.length && (results || cur >= 0)) {
+			e.preventDefault();
+			opts[cur < 0 ? 0 : cur].click();
+		}
+	});
+
+	// --- refreshes ---------------------------------------------------------------
+	// The column refreshes by swapping itself whole. It keeps its scroll, and
+	// a refresh skipped while something in it was held (a rename, a confirm,
+	// an open menu, typed search results) runs once the hold lets go, so the
+	// list doesn't stay stale.
+	var keptScroll = null, missed = false;
+	function held() {
+		return !!document.querySelector("#list [data-hold], #list details[open], #command-results");
+	}
+	function catchUp() {
+		var list = $("#list");
+		if (!missed || held() || !list || !window.htmx) return;
+		missed = false;
+		htmx.trigger(list, "sse:conversation-changed");
+	}
+	document.addEventListener("htmx:sseMessage", function (e) {
+		if (e.target.id === "list" && held()) missed = true;
+	}, true);
+	document.addEventListener("htmx:beforeSwap", function (e) {
+		var t = e.detail && e.detail.target;
+		if (t && t.id === "list") {
+			var rows = $("#rows");
+			keptScroll = rows ? rows.scrollTop : null;
+		}
+	}, true);
+	document.addEventListener("htmx:afterSwap", function () {
+		var rows = $("#rows");
+		if (rows && keptScroll !== null) rows.scrollTop = keptScroll;
+		keptScroll = null;
+		showDrafts();
+		markFinished();
+		setTimeout(catchUp);
+	}, true);
+	document.addEventListener("toggle", function (e) {
+		if (e.target.matches && e.target.matches("#list details[data-menu]") && !e.target.open) setTimeout(catchUp);
+	}, true);
+
+	// --- drafts --------------------------------------------------------------------
+	// Rows show this browser's unsent drafts.
+	function draftOf(id) {
+		try { return localStorage.getItem("psmith.draft." + id); } catch (e) { return null; }
+	}
+	function showDrafts() {
+		$$("#rows .row[data-id]").forEach(function (r) {
+			var d = draftOf(r.getAttribute("data-id"));
+			var sub = $(".row-sub", r);
+			if (d && sub && !sub.classList.contains("live")) {
+				sub.innerHTML = '<span class="draft">Draft:</span> ';
+				sub.appendChild(document.createTextNode(d));
 			}
 		});
 	}
+	showDrafts();
+
+	// --- unread replies ------------------------------------------------------------
+	// A reply that finishes while its conversation isn't open here marks the
+	// row until it's opened, as the apps' unseen dot does. The server doesn't
+	// track what each device has seen, so like the apps this browser keeps
+	// the marks itself. A row's data-at is its newest message's time, so a
+	// reply landing moves it between two refreshes of the column. Watching
+	// data-live instead missed most replies: the refresh for the user's
+	// message lands before the run is registered, and the next one after it
+	// ends, so the row was never seen live.
+	var UNSEEN = "psmith.unseen", seenAt = {};
+	function unseenIDs() {
+		try {
+			var v = JSON.parse(localStorage.getItem(UNSEEN) || "[]");
+			return Array.isArray(v) ? v : [];
+		} catch (e) { return []; }
+	}
+	function saveUnseen(ids) {
+		try { localStorage.setItem(UNSEEN, JSON.stringify(ids)); } catch (e) { /* storage refused */ }
+	}
+	function openConv() {
+		var m = $("#main");
+		return m ? m.getAttribute("data-conv") || "" : "";
+	}
+	function showUnseen() {
+		var ids = unseenIDs(), open = openConv();
+		if (open && ids.indexOf(open) >= 0) {
+			ids = ids.filter(function (id) { return id !== open; });
+			saveUnseen(ids);
+		}
+		$$("#rows a.row[data-id]").forEach(function (r) {
+			var on = ids.indexOf(r.getAttribute("data-id")) >= 0 && !r.hasAttribute("data-live");
+			var time = $(".row-time", r), dot = time && $(".unread", time);
+			r.classList.toggle("unseen", on);
+			if (on && time && !dot) {
+				dot = document.createElement("span");
+				dot.className = "unread";
+				dot.setAttribute("role", "img");
+				dot.setAttribute("aria-label", "Unread reply");
+				time.insertBefore(dot, time.firstChild);
+			} else if (!on && dot) {
+				time.removeChild(dot);
+			}
+			seenAt[r.getAttribute("data-id")] = r.getAttribute("data-at");
+		});
+	}
+	function markFinished() {
+		var open = openConv(), ids = unseenIDs(), changed = false;
+		$$("#rows a.row[data-id]").forEach(function (r) {
+			var id = r.getAttribute("data-id"), was = seenAt[id];
+			if (was !== undefined && was !== r.getAttribute("data-at") && id !== open && ids.indexOf(id) < 0) {
+				ids.push(id);
+				changed = true;
+			}
+		});
+		if (changed) saveUnseen(ids);
+		showUnseen();
+	}
+	window.addEventListener("storage", function (e) { if (e.key === UNSEEN) showUnseen(); });
+	showUnseen();
+
+	// The open conversation's row is in view when the page loads, wherever
+	// it sits in the list.
+	var current = $("#rows .row[aria-current]");
+	if (current) current.scrollIntoView({ block: "nearest" });
 
 	// --- offline -----------------------------------------------------------------
 	// sse.js retries the account stream after min(2^n, 128) × 0.5s; the banner

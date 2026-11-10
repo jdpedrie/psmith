@@ -9,6 +9,36 @@
 
 	function changed(el) { el.dispatchEvent(new Event("input", { bubbles: true })); }
 
+	// placeRows numbers the plugin rows in list as they now sit, ends the
+	// arrows at each end and, when record is set, writes each row's
+	// position into the form.
+	function placeRows(list, record) {
+		var rows = $$("[data-setb-row]", list);
+		rows.forEach(function (row, i) {
+			var num = $(".sb-num", row);
+			if (num) num.textContent = String(i + 1);
+			var upB = $('[data-setb-move="up"]', row), downB = $('[data-setb-move="down"]', row);
+			if (upB) upB.disabled = i === 0;
+			if (downB) downB.disabled = i === rows.length - 1;
+			var pos = $('input[name^="ppos_"]', row);
+			if (record && pos && pos.value !== String(i)) { pos.value = String(i); changed(pos); }
+		});
+	}
+
+	// Send traces stays off-limits until there is a public key and a
+	// secret, saved or typed, as on the apps; a switch already on can
+	// always be turned off.
+	function syncLangfuse(form) {
+		var row = form && $("[data-lf-switch]", form);
+		if (!row) return;
+		var sw = $("[role=switch]", row), pk = $("#lfpk", form), sk = $("#lfsk", form);
+		var keys = pk && pk.value.trim() !== "" && (row.getAttribute("data-secret-set") === "true" || (sk && sk.value !== ""));
+		var locked = !keys && sw.getAttribute("aria-checked") !== "true";
+		sw.disabled = locked;
+		var subs = $$(".sb-sub", row);
+		if (subs.length === 2) { subs[0].hidden = locked; subs[1].hidden = !locked; }
+	}
+
 	document.addEventListener("click", function (e) {
 		var b = e.target.closest("[data-setb-clear]");
 		if (b) {
@@ -39,6 +69,19 @@
 			row.toggleAttribute("data-removed", removed);
 			b.setAttribute("aria-pressed", String(removed));
 			changed(mark);
+			return;
+		}
+		// The arrows move a row in place; the save bar commits the order.
+		b = e.target.closest("[data-setb-move]");
+		if (b) {
+			e.preventDefault();
+			var group = b.closest("[data-setb-row]");
+			var up = b.getAttribute("data-setb-move") === "up";
+			var other = up ? group.previousElementSibling : group.nextElementSibling;
+			if (!other || !other.hasAttribute("data-setb-row")) return;
+			group.parentElement.insertBefore(up ? group : other, up ? other : group);
+			placeRows(group.parentElement, true);
+			(b.disabled ? $('[data-setb-move="' + (up ? "down" : "up") + '"]', group) : b).focus();
 			return;
 		}
 		b = e.target.closest("[data-setb-reveal]");
@@ -89,6 +132,7 @@
 			$$('[data-changed-for="' + t.id + '"]').forEach(function (h) { h.hidden = !dirty; });
 		}
 		syncNeedsSaved(t.form);
+		syncLangfuse(t.form);
 	});
 	document.addEventListener("change", function (e) { syncNeedsSaved(e.target.form); });
 	document.addEventListener("reset", function (e) {
@@ -100,7 +144,16 @@
 			// Hidden inputs keep script-set values through a reset.
 			$$("[data-setb-row][data-removed]", e.target).forEach(function (r) { r.removeAttribute("data-removed"); });
 			$$('input[name^="premoved_"]', e.target).forEach(function (m) { m.value = ""; });
-			syncNeedsSaved(e.target);
+			var moved = $$("[data-setb-row][data-index]", e.target);
+			if (moved.length) {
+				var list = moved[0].parentElement;
+				moved.sort(function (a, b) { return a.getAttribute("data-index") - b.getAttribute("data-index"); })
+					.forEach(function (row) { list.appendChild(row); });
+				placeRows(list, false);
+			}
+			// app.js hides the bar in its own reset timeout, queued after
+			// this one; the tests read the bar, so wait for it.
+			setTimeout(function () { syncNeedsSaved(e.target); syncLangfuse(e.target); });
 		});
 	}, true);
 

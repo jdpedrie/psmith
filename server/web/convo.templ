@@ -126,7 +126,11 @@ templ renameHead(c convVM) {
 				Generate title
 			</button>
 			<span class="spacer"></span>
-			<span class="head-rename-hint"><kbd>Enter</kbd> saves · <kbd>Esc</kbd> cancels</span>
+			if c.RenameError != "" {
+				<span class="head-rename-hint err" role="alert">{ c.RenameError }</span>
+			} else {
+				<span class="head-rename-hint"><kbd>Enter</kbd> saves · <kbd>Esc</kbd> cancels</span>
+			}
 			<a class="rename-cancel" href={ templ.SafeURL("/c/" + c.ID) } hx-get={ "/c/" + c.ID + "/head" } hx-target="#conv-head" hx-swap="outerHTML">Cancel</a>
 			<button class="rename-save" type="submit">Save</button>
 		</form>
@@ -156,16 +160,34 @@ func inspLabel(open bool) string {
 
 // transcript is the scrolling transcript in a frame that doesn't scroll, so
 // the drop overlay covers the visible area wherever the reader is.
+//
+// #messages-sync refreshes #messages on the conversation's account event, and
+// the composer's send and Continue sync on it (hx-sync, queue all).
+// It sits beside #messages, never inside it: a refresh replaces #messages,
+// and a trigger or queue living there went with it, so an event landing next
+// to a swap was lost and a finished reply stayed missing until a reload. In
+// turn, htmx resolves a target when a request starts, so a refresh in the
+// middle of a send or a regenerate left their response aimed at an element
+// that was gone; waiting their turn on #messages-sync keeps them apart. A
+// refresh waits while a row is being edited, confirmed or has its menu open,
+// or while a row's own request is out (conv.js): it would close the row
+// under the reader, or take the row a response was aimed at.
 templ transcript(c convVM) {
 	<div class="transcript-frame">
 		<section class="transcript" id="transcript" aria-label="Transcript">
 			<div
-				class="transcript-inner"
-				id="messages"
+				id="messages-sync"
+				hidden
 				hx-get={ "/c/" + c.ID + "/partials/messages" }
-				hx-trigger={ "sse:conversation-changed-" + c.ID }
+				hx-trigger={ "sse:conversation-changed-" + c.ID + "[!window.psmithHoldTranscript || !psmithHoldTranscript()]" }
+				hx-target="#messages"
 				hx-select="#messages"
 				hx-swap="outerHTML"
+				hx-sync="this:queue all"
+			></div>
+			<div
+				class="transcript-inner"
+				id="messages"
 			>
 				for _, m := range c.Items {
 					@msgRow(m)
@@ -173,6 +195,18 @@ templ transcript(c convVM) {
 				if c.RunID != "" {
 					@liveReply(c.ID, c.RunID, c.Live)
 				}
+				if c.SendFailed {
+					<p class="reply-error" role="alert">Your message didn't send. It's back in the composer.</p>
+				}
+				if c.ActionError != "" {
+					<p class="reply-error" role="alert">{ c.ActionError }</p>
+				}
+				<div class={ "conn-lost", templ.KV("on", c.Offline) } role="status" data-conn-lost>
+					<i class="rule"></i>
+					<span class="dot"></span>
+					<span data-lost-text>{ "Lost the connection at " + c.LostAt + ". New replies show up here when it's back." }</span>
+					<i class="rule"></i>
+				</div>
 			</div>
 		</section>
 		if c.Harness == nil || !c.Harness.NoAttachments {
@@ -206,7 +240,7 @@ templ msgRow(m msgItem) {
 			@startStrip(m)
 		case m.Role == "harness":
 			@harnessStrip(m)
-		case m.State == "delete":
+		case m.State == "delete" || m.State == "deletefrom":
 			@deleteConfirm(m)
 		case m.State == "edit":
 			@editForm(m)
@@ -365,8 +399,9 @@ templ userRow(m msgItem) {
 		if m.Branch != nil {
 			@branchNav(m, false)
 		}
-		if len(m.Images) > 0 || len(m.Files) > 0 {
+		if len(m.Images) > 0 || len(m.Files) > 0 || showsTurnHead(ctx, m) {
 			<div class="user-col">
+				@turnHead(m)
 				@attachments(m)
 				@userBubble(m)
 			</div>
@@ -556,6 +591,7 @@ templ replyBody(m msgItem) {
 
 templ reply(m msgItem) {
 	<article class="reply" id={ "m-" + m.ID } aria-label="Reply" data-text={ m.Text }>
+		@turnHead(m)
 		@replyChips(m)
 		@replyBody(m)
 		if !m.HideActions {
@@ -606,7 +642,7 @@ templ replyActions(m msgItem) {
 		<button class="icon-btn" type="button" aria-label="Copy reply" data-copy>
 			@icon("copy")
 		</button>
-		if m.ParentID != "" {
+		if m.ParentID != "" && m.Role != "summary" {
 			<form method="post" action={ templ.SafeURL("/c/" + m.ConvID + "/regenerate") } class="inline" hx-post={ "/c/" + m.ConvID + "/regenerate" } hx-target="#messages" hx-select="#messages" hx-swap="outerHTML">
 				<input type="hidden" name="parent_message_id" value={ m.ParentID }/>
 				<button class="icon-btn" type="submit" aria-label="Regenerate">
@@ -641,7 +677,11 @@ templ replyActions(m msgItem) {
 		if m.Usage != nil {
 			<button class="usage-btn" type="button" aria-expanded={ strconv.FormatBool(m.Usage.Open) } aria-controls={ "usage-" + m.ID } data-disclose>
 				<span class="u-long">{ m.Usage.Model }</span>
-				<span class="u-long">{ m.Usage.Tokens }</span>
+				if prefsOf(ctx).TurnDetails && m.Usage.Split != "" {
+					<span class="u-long tnum">{ m.Usage.Split }</span>
+				} else {
+					<span class="u-long">{ m.Usage.Tokens }</span>
+				}
 				if m.Usage.Cached != "" {
 					<span class="cached u-long"><span class="dot"></span>{ m.Usage.Cached }</span>
 				}
@@ -698,7 +738,7 @@ templ moreMenu(m msgItem) {
 			</span>
 			<span class="mi-label">Copy text</span>
 		</button>
-		if m.ParentID != "" {
+		if m.ParentID != "" && m.Role != "summary" {
 			<a
 				role="menuitem"
 				class={ templ.KV("on", m.State == "regen") }
@@ -725,6 +765,14 @@ templ moreMenu(m msgItem) {
 			</span>
 			<span class="mi-label">Delete</span>
 		</a>
+		if m.HasAfter {
+			<a role="menuitem" class="danger" href={ pageStateURL(m, "deletefrom") } hx-get={ msgURL(m, "deletefrom") } hx-target={ "#m-" + m.ID } hx-swap="outerHTML">
+				<span class="mi-icon">
+					@icon("trash")
+				</span>
+				<span class="mi-label">Delete from here</span>
+			</a>
+		}
 		if m.State == "regen" {
 			<form
 				class="msg-menu sub"
@@ -852,7 +900,16 @@ templ failedReply(m msgItem) {
 				@templ.Raw(m.HTML)
 			</div>
 		}
-		if m.ParentID != "" {
+		if m.Role == "summary" {
+			<!-- A failed compression retries as a compression, from the compress card; regenerate would rerun it as a chat turn. -->
+			<div class="fail-foot">
+				<span>Retry opens the compression again. The failed one stays.</span>
+				<a class="retry-btn" href={ templ.SafeURL("/c/" + m.ConvID + "/compact") }>
+					@convIcon("retry")
+					Retry
+				</a>
+			</div>
+		} else if m.ParentID != "" {
 			<div class="fail-foot">
 				<span>Retry runs this turn again as a new branch. The failed one stays.</span>
 				<form method="post" action={ templ.SafeURL("/c/" + m.ConvID + "/regenerate") } class="inline" hx-post={ "/c/" + m.ConvID + "/regenerate" } hx-target="#messages" hx-select="#messages" hx-swap="outerHTML">
@@ -877,16 +934,33 @@ templ deleteConfirm(m msgItem) {
 		hx-target="#messages"
 		hx-select="#messages"
 		hx-swap="outerHTML"
-		aria-label="Delete this message"
+		aria-label={ deleteLabel(m) }
+		hx-disinherit="*"
 		data-escape={ msgURL(m, "") }
 	>
-		<p class="dc-title">Delete this message?</p>
-		<p class="dc-text">{ "“" + snippet(m.Text, 48) + "” goes. Its replies attach to the message before it." }</p>
+		if m.State == "deletefrom" {
+			<input type="hidden" name="cascade" value="1"/>
+			<p class="dc-title">Delete from here?</p>
+			<p class="dc-text">{ "“" + snippet(m.Text, 48) + "” and every message after it go, on every branch." }</p>
+		} else {
+			<p class="dc-title">Delete this message?</p>
+			<p class="dc-text">{ "“" + snippet(m.Text, 48) + "” goes. Its replies attach to the message before it." }</p>
+		}
 		<div class="dc-btns">
 			<a class="btn-flat" href={ pageStateURL(m, "") } hx-get={ msgURL(m, "") } hx-target={ "#m-" + m.ID } hx-swap="outerHTML">Cancel</a>
+			if m.State == "delete" && m.HasAfter {
+				<button class="btn-destructive-quiet" type="submit" name="cascade" value="1">Delete from here</button>
+			}
 			<button class="btn-destructive" type="submit">Delete</button>
 		</div>
 	</form>
+}
+
+func deleteLabel(m msgItem) string {
+	if m.State == "deletefrom" {
+		return "Delete from this message on"
+	}
+	return "Delete this message"
 }
 
 func snippet(s string, n int) string {
@@ -909,6 +983,7 @@ templ editForm(m msgItem) {
 		hx-select="#messages"
 		hx-swap="outerHTML"
 		aria-label={ editLabel(m) }
+		hx-disinherit="*"
 		data-escape={ msgURL(m, "") }
 	>
 		<div class="conv-seg" role="radiogroup" aria-label="Role">
@@ -943,10 +1018,15 @@ func editTextLabel(m msgItem) string {
 templ liveChips(chips []liveChipVM) {
 	for _, c := range chips {
 		if c.Thinking && c.Live {
-			<button class="rchip live think" type="button" aria-expanded="false" aria-label={ "Thinking, " + c.Secs + " so far" }>
+			<button class="rchip live think" type="button" aria-expanded="false" aria-controls={ c.Panel } data-disclose aria-label={ "Thinking, " + c.Secs + " so far" }>
 				@icon("disclose")
 				Thinking
 				<span class="tnum" data-since={ c.Since }>{ c.Secs }</span>
+			</button>
+		} else if c.Thinking && c.Panel != "" {
+			<button class="rchip" type="button" aria-expanded="false" aria-controls={ c.Panel } data-disclose>
+				@discloseIcon()
+				{ c.Label }
 			</button>
 		} else if c.Live {
 			<span class="rchip live">
@@ -980,8 +1060,15 @@ templ liveReply(convID, runID string, init liveInit) {
 		ancestors, and #messages declares outerHTML for its own refresh. An
 		inherited outerHTML replaced the body element with the first chunk,
 		leaving later chunks no target.
+
+		hx-preserve with an id per run: a transcript refresh mid-reply (the
+		account event that the user's message was stored) keeps this row and
+		its open stream instead of drawing a new row that opens a second one.
+		A refresh without the run's row, once it has ended, removes it.
 	-->
 	<article
+		id={ "live-" + runID }
+		hx-preserve="true"
 		class="reply live"
 		aria-label="Reply in progress"
 		aria-busy="true"
@@ -993,6 +1080,7 @@ templ liveReply(convID, runID string, init liveInit) {
 		<div class="reply-chips" sse-swap="chips" hx-swap="innerHTML">
 			@liveChips(init.Chips)
 		</div>
+		<div class="think-panel md" id={ livePanelID(runID) } hidden sse-swap="thinking" hx-swap="innerHTML"></div>
 		<div class="md" sse-swap="message" hx-swap="innerHTML">
 			if init.HTML != "" {
 				@templ.Raw(init.HTML)
@@ -1007,7 +1095,7 @@ templ liveReply(convID, runID string, init liveInit) {
 templ composer2(c convVM) {
 	if c.ContinueID != "" && c.RunID == "" {
 		<div class="council-next">
-			<form method="post" action={ templ.SafeURL("/c/" + c.ID + "/continue") } hx-post={ "/c/" + c.ID + "/continue" } hx-target="#messages" hx-select="#messages" hx-swap="outerHTML">
+			<form method="post" action={ templ.SafeURL("/c/" + c.ID + "/continue") } hx-post={ "/c/" + c.ID + "/continue" } hx-target="#messages" hx-select="#messages" hx-swap="outerHTML" hx-sync="#messages-sync:queue all">
 				<input type="hidden" name="parent_message_id" value={ c.ContinueID }/>
 				<button class="continue-btn" type="submit">
 					@convIcon("continue")
@@ -1025,8 +1113,10 @@ templ composer2(c convVM) {
 		hx-post={ "/c/" + c.ID + "/send" }
 		hx-target="#messages"
 		hx-swap="beforeend"
+		hx-sync="#messages-sync:queue all"
 		hx-encoding="multipart/form-data"
 		data-live?={ c.RunID != "" }
+		data-offline?={ c.Offline }
 		data-uploading?={ c.Uploading > 0 }
 		data-upload={ "/c/" + c.ID + "/upload" }
 	>
@@ -1061,10 +1151,12 @@ templ composer2(c convVM) {
 					<span class="h-idle"><kbd>Enter</kbd> sends · <kbd>Shift</kbd> <kbd>Enter</kbd> new line</span>
 					<span class="h-live"><kbd>Shift</kbd> <kbd>Enter</kbd> new line · <kbd>Esc</kbd> stops</span>
 				}
+				<span class="h-off">{ "Not connected. We hold it and send when " + orDefault(c.Host, "the server") + " is back." }</span>
 			</span>
 			<button class="stop-btn" type="button" data-stop={ "/c/" + c.ID + "/stop" } aria-label="Stop reply"><i></i><span>Stop</span></button>
 			<button class="send-btn csend" type="submit" aria-label="Send">
 				<span class="lbl">Send</span>
+				<span class="lbl-off">Send when back</span>
 				@icon("send")
 			</button>
 		</div>
@@ -1116,4 +1208,20 @@ func isImageKind(k string) bool {
 		return true
 	}
 	return false
+}
+
+// turnHead names who spoke and when, above every turn, while "Show turn
+// details" is on (board TurnDetails).
+templ turnHead(m msgItem) {
+	if showsTurnHead(ctx, m) {
+		<div class="turn-head">
+			if m.Role == "user" {
+				<b>You</b>
+				{ " · " + m.When }
+			} else {
+				<b>{ turnModel(m) }</b>
+				{ turnMeta(m) }
+			}
+		</div>
+	}
 }

@@ -891,4 +891,33 @@ struct ConversationsRepositoryTests {
         #expect(updated.content == "now an assistant")
     }
 
+    // MARK: - get after delete
+
+    @Test("get of a conversation deleted here throws instead of serving the cache")
+    func getAfterDeleteThrows() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "conv-del-cache", withCache: true)
+        let seeded = try await Fixtures.seedReadyToChat(client: client)
+        let conv = try await client.conversations.create(profileID: seeded.profile.id, title: "doomed")
+        _ = try await client.conversations.get(id: conv.id)  // cached now
+        try await client.conversations.delete(id: conv.id)
+        await #expect(throws: PsmithError.self) { try await client.conversations.get(id: conv.id) }
+        #expect(await client.conversations.cachedGet(id: conv.id).map { $0.0.id } == nil, "delete left the cached snapshot")
+    }
+
+    @Test("get of a conversation deleted on another device throws and drops the stale snapshot")
+    func getAfterRemoteDeleteThrows() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "conv-del-remote", withCache: true)
+        let seeded = try await Fixtures.seedReadyToChat(client: client)
+        let conv = try await client.conversations.create(profileID: seeded.profile.id, title: "doomed elsewhere")
+        let (cachedConv, cachedCtx) = try await client.conversations.get(id: conv.id)
+        try await client.conversations.delete(id: conv.id)
+        // This device still holds the snapshot it cached before the other
+        // device deleted the conversation.
+        let cache = try #require(client.cache)
+        try await cache.set(cachedConv, kind: "conversation", id: conv.id, capBytes: 1 << 30)
+        try await cache.set(cachedCtx, kind: "activeContext", id: conv.id, capBytes: 1 << 30)
+
+        await #expect(throws: PsmithError.self) { try await client.conversations.get(id: conv.id) }
+        #expect(await client.conversations.cachedGet(id: conv.id).map { $0.0.id } == nil, "the stale snapshot survived the server's NotFound")
+    }
 }

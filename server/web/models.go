@@ -253,10 +253,14 @@ type pickerVM struct {
 	Query        string
 	ProfileModel string // "Demo uses Claude Opus 4.7"
 	UsingProfile bool   // the conversation sets no model of its own
-	Favorites    []pickerModelVM
-	Groups       []providerGroupVM
-	Notice       string
-	Foot         string
+	// NoProfileModel: the profile names no model, so "Use the profile's
+	// model" has nothing to use and the next send runs on the model the
+	// header shows.
+	NoProfileModel bool
+	Favorites      []pickerModelVM
+	Groups         []providerGroupVM
+	Notice         string
+	Foot           string
 }
 
 // badges are a model's capability chips, in the order the picker shows them.
@@ -356,6 +360,7 @@ func (h *Handler) handleModelPicker(w http.ResponseWriter, r *http.Request) {
 		p.ProfileModel = vm.Profile + " uses " + h.modelName(r.Context(), d.GetDefaultProviderId(), d.GetDefaultModelId())
 	} else {
 		p.ProfileModel = vm.Profile + " sets no model"
+		p.NoProfileModel, p.UsingProfile = true, false
 	}
 	vm.Inspector.View, vm.Inspector.Picker, vm.ShowInsp, vm.Inspector.Page = "model", p, true, true
 	h.renderConversation(w, r, vm)

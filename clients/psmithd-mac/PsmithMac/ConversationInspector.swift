@@ -345,6 +345,12 @@ private struct ContextInspector: View {
                 Button("Delete Context…", role: .destructive) { deletingContextID = ctx.id }
                     .disabled(active)
             }
+            // The context menu is pointer-only; VoiceOver reaches delete here.
+            .accessibilityActions {
+                if !active {
+                    Button("Delete Context…") { deletingContextID = ctx.id }
+                }
+            }
         }
     }
 }

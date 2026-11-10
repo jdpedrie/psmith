@@ -206,9 +206,9 @@ func (h *Handler) handleProfileModelsSave(w http.ResponseWriter, r *http.Request
 		_, err = h.profiles.UpdateProfile(r.Context(), connect.NewRequest(req))
 	}
 	if err != nil {
-		vm := h.modelsVM(r.Context(), ix, p)
+		vm := postedModels(h.modelsVM(r.Context(), ix, p), r.PostFormValue)
 		vm.Error = errMessage(err)
-		h.render(w, r, http.StatusBadRequest, profileModelsScreen(h.loadSnav(r.Context(), r, "profiles"), vm))
+		h.showAfterPost(w, r, "/settings/profiles/"+p.GetId()+"/models", profileModelsScreen(h.loadSnav(r.Context(), r, "profiles"), vm))
 		return
 	}
 	http.Redirect(w, r, "/settings/profiles/"+p.GetId()+"/models", http.StatusSeeOther)
@@ -313,4 +313,47 @@ func modelsUpdate(p *psmithv1.Profile, get func(string) string) (*psmithv1.Updat
 	}
 	req.ClearFields = clear
 	return req, nil
+}
+
+// postedModels puts what was posted back on the Models tab after a refused
+// save, with the save bar up, so nothing typed is lost.
+func postedModels(vm profileModelsVM, get func(string) string) profileModelsVM {
+	n := 0
+	pick := func(opts []sbOpt, v string) []sbOpt {
+		if selectedValue(opts) != v {
+			n++
+		}
+		out := make([]sbOpt, len(opts))
+		for i, o := range opts {
+			o.Selected = o.Group == "" && o.Value == v
+			if o.Group != "" {
+				items := make([]sbOpt, len(o.Items))
+				for j, it := range o.Items {
+					it.Selected = it.Value == v
+					items[j] = it
+				}
+				o.Items = items
+			}
+			out[i] = o
+		}
+		return out
+	}
+	text := func(cur *string, v string) {
+		if *cur != v {
+			n++
+		}
+		*cur = v
+	}
+	vm.ReplyOpts = pick(vm.ReplyOpts, get("reply_model"))
+	vm.CompOpts = pick(vm.CompOpts, get("compression_model"))
+	vm.TitleOpts = pick(vm.TitleOpts, get("title_model"))
+	vm.EffortOpts = pick(vm.EffortOpts, get("thinking_effort"))
+	vm.CacheOpts = pick(vm.CacheOpts, get("prompt_caching"))
+	text(&vm.Mode, get("compression_mode"))
+	text(&vm.CompGuide, get("compression_guide"))
+	text(&vm.TitleGuide, get("title_guide"))
+	text(&vm.Temp, get("temperature"))
+	text(&vm.MaxTokens, get("max_output_tokens"))
+	vm.Dirty = max(n, 1)
+	return vm
 }

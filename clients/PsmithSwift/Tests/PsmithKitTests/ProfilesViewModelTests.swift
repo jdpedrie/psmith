@@ -52,6 +52,35 @@ struct ProfilesViewModelTests {
         #expect(vm.profiles.count == all.count)
     }
 
+    @Test("fetch finds a profile past the loaded pages, with its parents, and nil for a gone one")
+    func fetchPastLoadedPages() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "pvm-fetch")
+        let parent = try await client.profiles.create(Fixtures.minimalProfilePatch(name: "zz-parent"))
+        let child = try await client.profiles.create(PsmithProfilePatch(name: "zz-child", parentProfileID: parent.id))
+
+        let vm = ProfilesViewModel(client: client)
+        vm.pageSize = 1
+        await vm.load()
+        #expect(vm.hasMore)
+        #expect(!vm.profiles.contains { $0.id == child.id })
+        #expect(vm.profile(id: child.id) == nil)
+
+        let got = try await vm.fetch(id: child.id)
+        #expect(got?.id == child.id)
+        #expect(vm.profile(id: child.id)?.name == "zz-child")
+        #expect(vm.profile(id: parent.id)?.name == "zz-parent")
+        // The list itself still pages in order.
+        #expect(vm.profiles.count == 1)
+        #expect(Set(vm.known.map(\.id)).isSuperset(of: [child.id, parent.id]))
+
+        // Paging over a fetched profile doesn't list it twice.
+        while vm.hasMore { await vm.loadMore() }
+        #expect(vm.known.filter { $0.id == child.id }.count == 1)
+
+        let gone = try await vm.fetch(id: UUID().uuidString.lowercased())
+        #expect(gone == nil)
+    }
+
     @Test("setDefault marks exactly one profile; switching moves it; nil clears")
     func setDefaultFlow() async throws {
         let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "pvm-def")

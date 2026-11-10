@@ -16,7 +16,7 @@ templ pickerView(c convVM, p *pickerVM) {
 		if p.Notice != "" {
 			<p class="pick-notice">{ p.Notice }</p>
 		}
-		<button type="submit" name="model" value="" class="pick-row" if p.UsingProfile { aria-current="true" }>
+		<button type="submit" name="model" value="" class="pick-row" if p.UsingProfile { aria-current="true" } disabled?={ p.NoProfileModel }>
 			<span class="pick-main"><span class="pick-name">Use the profile's model</span><span class="pick-sub">{ p.ProfileModel }</span></span>
 			if p.UsingProfile {
 				<span class="pick-check">
@@ -80,9 +80,15 @@ templ infoView(in *infoVM) {
 		<section>
 			<form method="post" action={ templ.SafeURL("/c/" + in.ConvID + "/title") }>
 				<label for="info-title" class="info-lbl">Title</label>
-				<input id="info-title" name="title" value={ in.Title } placeholder="Untitled" autocomplete="off" class="info-title"/>
-				<button type="submit" class="btn info-gen" formaction={ templ.SafeURL("/c/" + in.ConvID + "/info/title/generate") }>Generate title</button>
+				if in.TitleError != "" {
+					<input id="info-title" name="title" value={ in.Title } placeholder="Untitled" autocomplete="off" class="info-title bad" aria-invalid="true" aria-describedby="info-title-err"/>
+					<p id="info-title-err" class="info-err" role="alert">{ in.TitleError }</p>
+				} else {
+					<input id="info-title" name="title" value={ in.Title } placeholder="Untitled" autocomplete="off" class="info-title"/>
+				}
+				<button type="submit" class="btn info-gen" form="info-gen">Generate title</button>
 			</form>
+			<form id="info-gen" method="post" action={ templ.SafeURL("/c/" + in.ConvID + "/info/title/generate") } hidden></form>
 		</section>
 		<section>
 			<h2 class="h2-gap">Details</h2>
@@ -154,7 +160,14 @@ templ panelView(p *panelVM) {
 
 // panelBody is what an action re-renders.
 templ panelBody(p panelVM) {
-	<div class="panel-parts" id="panel-parts">
+	<div
+		class="panel-parts"
+		id="panel-parts"
+		hx-get={ "/c/" + p.ConvID + "/panel/" + p.Plugin }
+		hx-trigger={ "sse:conversation-changed-" + p.ConvID }
+		hx-select="#panel-parts"
+		hx-swap="outerHTML"
+	>
 		if p.Error != "" {
 			<p class="panel-err" role="alert">{ p.Error }</p>
 		}
@@ -229,36 +242,17 @@ func badgeTone(c panelCardVM) string {
 
 templ configView(cfg *pluginConfigVM) {
 	<form class="insp-body sub" method="post" action={ templ.SafeURL("/c/" + cfg.ConvID + "/plugin/" + cfg.Name) }>
-		<section class="cfg">
-			if cfg.Form.HasForm {
-				for _, f := range cfg.Form.Fields {
-					<label class="cfg-row">
-						<span class="info-lbl">
-							{ f.Display }
-							if f.Required {
-								<span class="muted">{ " · required" }</span>
-							}
-						</span>
-						switch f.Type {
-							case "boolean":
-								<input type="hidden" name={ "cfg_" + f.Name } value="false"/>
-								<input type="checkbox" name={ "cfg_" + f.Name } value="true" checked?={ f.Checked }/>
-							case "textarea":
-								<textarea class="info-title area" name={ "cfg_" + f.Name } rows="4">{ f.Value }</textarea>
-							case "select", "model":
-								<select class="info-title" name={ "cfg_" + f.Name }>
-									<option value="">None</option>
-									for _, o := range f.Options {
-										<option value={ o.Value } selected?={ o.Value == f.Value }>{ o.Label }</option>
-									}
-								</select>
-							default:
-								<input class="info-title" name={ "cfg_" + f.Name } value={ f.Value } type={ cfgInputType(f.Type) }/>
-						}
-						if f.Description != "" {
-							<span class="insp-note">{ f.Description }</span>
-						}
-					</label>
+		// Enter in a field submits with the form's first button; without
+		// this one that would be the first row's Delete.
+		<button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">Save</button>
+		<div class="cfg">
+			if len(cfg.Items) > 0 {
+				for _, it := range cfg.Items {
+					if it.List != nil {
+						@cfgList(it.List)
+					} else {
+						@cfgField(*it.Field, "cfg_"+it.Field.Name)
+					}
 				}
 			} else {
 				<label class="cfg-row">
@@ -266,9 +260,109 @@ templ configView(cfg *pluginConfigVM) {
 					<textarea class="info-title area mono" name="config" rows="10">{ cfg.Form.RawJSON }</textarea>
 				</label>
 			}
-			<button type="submit" class="btn primary h32">Save</button>
-		</section>
+			<div><button type="submit" class="btn primary h32">Save</button></div>
+		</div>
 	</form>
+}
+
+// cfgField is one setting. name is its form field.
+templ cfgField(f configFieldVM, name string) {
+	if f.Type == "boolean" {
+		<div class="cfg-row cfg-switch">
+			<span class="cfg-switch-text">
+				<span id={ name + "-l" } class="cfg-switch-lbl">{ f.Display }</span>
+				if f.Description != "" {
+					<span class="insp-note">{ f.Description }</span>
+				}
+			</span>
+			<input type="hidden" name={ name } value={ boolStr(f.Checked) }/>
+			<button type="button" class="switch" role="switch" data-switch={ name } aria-checked={ boolStr(f.Checked) } aria-labelledby={ name + "-l" }></button>
+		</div>
+	} else {
+		<label class="cfg-row">
+			<span class="info-lbl">
+				{ f.Display }
+				if f.Required {
+					<span class="muted">{ " · required" }</span>
+				}
+			</span>
+			switch f.Type {
+				case "textarea":
+					<textarea class="info-title area" name={ name } rows="4">{ f.Value }</textarea>
+				case "select", "model":
+					<select class="info-title" name={ name }>
+						<option value="">None</option>
+						for _, o := range f.Options {
+							if o.Value != "" {
+								<option value={ o.Value } selected?={ o.Value == f.Value }>{ o.Label }</option>
+							}
+						}
+					</select>
+				default:
+					<input class="info-title" name={ name } value={ f.Value } type={ cfgInputType(f.Type) }/>
+			}
+			if f.Description != "" {
+				<span class="insp-note">{ f.Description }</span>
+			}
+		</label>
+	}
+}
+
+// cfgList is a list setting: a row per record, each opening to its fields.
+// Add, Delete and Replace rows post the form, which saves what's typed.
+templ cfgList(l *listFieldVM) {
+	<section class="cfg-list" aria-labelledby={ "lst-" + l.Name }>
+		<div class="sec-head"><h3 id={ "lst-" + l.Name }>{ l.Display }</h3><span class="muted">{ strconv.Itoa(len(l.Rows)) }</span></div>
+		if l.Description != "" {
+			<p class="insp-intro">{ l.Description }</p>
+		}
+		<input type="hidden" name={ "lst_" + l.Name + "_n" } value={ strconv.Itoa(len(l.Rows)) }/>
+		if len(l.Rows) == 0 {
+			<p class="lrow-none">None yet.</p>
+		}
+		<div class="lrows">
+			for _, row := range l.Rows {
+				<div class="lrow">
+					if row.IDField != "" {
+						<input type="hidden" name={ listInputName(l.Name, row.N, row.IDField) } value={ row.ID }/>
+					}
+					<details open?={ row.Open }>
+						<summary>
+							<span class="lrow-chev">
+								@ii("chev")
+							</span>
+							<b>{ row.Title }</b>
+						</summary>
+						<div class="lrow-fields">
+							for _, f := range row.Fields {
+								@cfgField(f, f.Name)
+							}
+						</div>
+					</details>
+					<button type="submit" class="ibtn lrow-del" name="del" value={ l.Name + "." + strconv.Itoa(row.N) } aria-label={ "Delete " + row.Title }>
+						@ii("trash14")
+					</button>
+				</div>
+			}
+		</div>
+		<div class="lrow-acts">
+			<button type="submit" class="btn lbtn" name="add_row" value={ l.Name }>
+				@ii("plus13")
+				Add
+			</button>
+			<details class="lpaste" open?={ l.PasteError != "" }>
+				<summary class="btn lbtn">Paste JSON</summary>
+				<div class="lpaste-box">
+					<label for={ "paste-" + l.Name } class="insp-note">An array of rows. Replaces everything above.</label>
+					<textarea id={ "paste-" + l.Name } name={ "paste_" + l.Name } rows="4" class="info-title area mono">{ l.Paste }</textarea>
+					if l.PasteError != "" {
+						<p class="panel-err" role="alert">{ l.PasteError }</p>
+					}
+					<button type="submit" class="btn lbtn" name="paste" value={ l.Name }>Replace rows</button>
+				</div>
+			</details>
+		</div>
+	</section>
 }
 
 func cfgInputType(t string) string {
@@ -377,7 +471,7 @@ templ contextViewScreen(l listVM, c convVM, v ctxViewVM) {
 						<dl class="stats">
 							<dt>Cost</dt><dd class="tnum">{ v.Cost }</dd>
 							<dt>Turns</dt><dd>{ strconv.Itoa(v.Turns) }</dd>
-							<dt>Cache, last reply</dt><dd class="good">{ v.Cache }</dd>
+							<dt>Cache, last reply</dt><dd class={ templ.KV("good", cacheGood(v.Cache)) }>{ v.Cache }</dd>
 							<dt>Model changes</dt><dd>{ strconv.Itoa(v.Changes) }</dd>
 						</dl>
 					</section>
